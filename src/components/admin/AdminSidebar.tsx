@@ -9,8 +9,6 @@ import {
   Clock,
   Calendar,
   Mail,
-  Eye,
-  BookOpen,
   BarChart3,
   UserCog,
   ChevronRight,
@@ -55,27 +53,6 @@ const navItems = [
     ],
   },
   {
-    title: 'Cross-Exposure Program',
-    icon: Eye,
-    children: [
-      {
-        title: 'Host Offerings',
-        href: '/admin/cross-exposure/offerings',
-        icon: BookOpen,
-      },
-      {
-        title: 'Bookings',
-        href: '/admin/cross-exposure/bookings',
-        icon: Calendar,
-      },
-      {
-        title: 'Analytics',
-        href: '/admin/cross-exposure/analytics',
-        icon: BarChart3,
-      },
-    ],
-  },
-  {
     title: 'People & Analytics',
     icon: UserCog,
     children: [
@@ -105,7 +82,6 @@ export function AdminSidebar() {
   const { toast } = useToast()
   const [expandedSections, setExpandedSections] = useState<string[]>([
     'Mentoring Program',
-    'Cross-Exposure Program',
     'People & Analytics'
   ])
 

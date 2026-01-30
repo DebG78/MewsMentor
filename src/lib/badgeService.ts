@@ -78,12 +78,12 @@ export async function initializeBadges(): Promise<void> {
     // Engagement Badges
     {
       name: 'Active Learner',
-      description: 'Participated in 10 learning activities',
+      description: 'Participated in 10 mentoring sessions',
       icon: '📚',
       badge_type: 'engagement',
       criteria: {
-        type: 'total_events',
-        event_types: ['mentoring_session', 'cross_exposure_shadow'],
+        type: 'event_count',
+        event_type: 'mentoring_session',
         min_count: 10,
       },
     },
@@ -118,17 +118,6 @@ export async function initializeBadges(): Promise<void> {
         type: 'mentoring_sessions',
         min_count: 5,
         min_rating: 4,
-      },
-    },
-    {
-      name: 'Generous Host',
-      description: 'Hosted 10 job shadowing experiences',
-      icon: '🎁',
-      badge_type: 'impact',
-      criteria: {
-        type: 'event_count',
-        event_type: 'cross_exposure_host',
-        min_count: 10,
       },
     },
   ]

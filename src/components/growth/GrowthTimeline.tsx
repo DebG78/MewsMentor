@@ -8,12 +8,11 @@ interface GrowthTimelineProps {
   isLoading?: boolean
 }
 
-type FilterType = 'all' | 'mentoring' | 'cross-exposure' | 'badges' | 'reflections'
+type FilterType = 'all' | 'mentoring' | 'badges' | 'reflections'
 
 const FILTER_LABELS: Record<FilterType, string> = {
   all: 'All Events',
   mentoring: 'Mentoring',
-  'cross-exposure': 'Cross-Exposure',
   badges: 'Badges',
   reflections: 'Reflections',
 }
@@ -24,8 +23,6 @@ export function GrowthTimeline({ events, isLoading }: GrowthTimelineProps) {
   const filteredEvents = events.filter((event) => {
     if (filter === 'all') return true
     if (filter === 'mentoring') return event.event_type === 'mentoring_session'
-    if (filter === 'cross-exposure')
-      return event.event_type.startsWith('cross_exposure')
     if (filter === 'badges') return event.event_type === 'badge_earned'
     if (filter === 'reflections') return event.event_type === 'reflection'
     return true
@@ -49,7 +46,6 @@ export function GrowthTimeline({ events, isLoading }: GrowthTimelineProps) {
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="mentoring">Mentoring</TabsTrigger>
-            <TabsTrigger value="cross-exposure">Cross-Exposure</TabsTrigger>
             <TabsTrigger value="badges">Badges</TabsTrigger>
             <TabsTrigger value="reflections">Reflections</TabsTrigger>
           </TabsList>

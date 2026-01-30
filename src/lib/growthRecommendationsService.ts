@@ -21,12 +21,10 @@ export interface GrowthRecommendation {
  */
 export async function initializeRecommendationsForUser(
   userId: string,
-  programType: 'mentoring' | 'cross_exposure',
+  programType: 'mentoring',
   cohortId?: string
 ): Promise<GrowthRecommendation[]> {
-  const templates = programType === 'mentoring'
-    ? getMentoringRecommendationTemplates()
-    : getCrossExposureRecommendationTemplates()
+  const templates = getMentoringRecommendationTemplates()
 
   const recommendations = templates.map((template) => ({
     user_id: userId,
@@ -245,58 +243,3 @@ function getMentoringRecommendationTemplates(): RecommendationTemplate[] {
   ]
 }
 
-/**
- * Cross-exposure program recommendation templates
- */
-function getCrossExposureRecommendationTemplates(): RecommendationTemplate[] {
-  return [
-    {
-      key: 'browse_opportunities',
-      title: 'Browse shadowing opportunities',
-      description: 'Explore available hosts and experiences',
-      icon: 'Search',
-      stage: 'getting_started',
-      order: 1,
-    },
-    {
-      key: 'book_first_shadow',
-      title: 'Book your first shadow experience',
-      description: 'Choose an opportunity and make a booking',
-      icon: 'Calendar',
-      stage: 'getting_started',
-      order: 2,
-    },
-    {
-      key: 'set_learning_goals',
-      title: 'Set your learning goals',
-      description: 'Define what you want to learn from shadowing',
-      icon: 'Target',
-      stage: 'getting_started',
-      order: 3,
-    },
-    {
-      key: 'complete_shadow_experience',
-      title: 'Complete your shadow experience',
-      description: 'Attend your scheduled shadowing session',
-      icon: 'CheckCircle',
-      stage: 'active',
-      order: 1,
-    },
-    {
-      key: 'add_shadow_reflection',
-      title: 'Add your reflection',
-      description: 'Share what you learned from the experience',
-      icon: 'PenTool',
-      stage: 'active',
-      order: 2,
-    },
-    {
-      key: 'explore_other_departments',
-      title: 'Explore other departments',
-      description: 'Shadow someone from a different team',
-      icon: 'Users',
-      stage: 'active',
-      order: 3,
-    },
-  ]
-}

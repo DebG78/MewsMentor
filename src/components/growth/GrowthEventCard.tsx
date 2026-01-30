@@ -28,8 +28,6 @@ interface GrowthEventCardProps {
 
 const EVENT_ICONS: Record<string, string> = {
   mentoring_session: '🤝',
-  cross_exposure_shadow: '👀',
-  cross_exposure_host: '🎓',
   badge_earned: '🏆',
   skill_milestone: '⚡',
   reflection: '💭',
@@ -40,8 +38,6 @@ const EVENT_ICONS: Record<string, string> = {
 
 const EVENT_COLORS: Record<string, string> = {
   mentoring_session: 'bg-blue-100 text-blue-800',
-  cross_exposure_shadow: 'bg-purple-100 text-purple-800',
-  cross_exposure_host: 'bg-green-100 text-green-800',
   badge_earned: 'bg-yellow-100 text-yellow-800',
   skill_milestone: 'bg-orange-100 text-orange-800',
   reflection: 'bg-gray-100 text-gray-800',

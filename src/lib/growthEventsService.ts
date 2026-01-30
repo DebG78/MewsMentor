@@ -2,8 +2,6 @@ import { supabase } from './supabase'
 
 export type GrowthEventType =
   | 'mentoring_session'
-  | 'cross_exposure_shadow'
-  | 'cross_exposure_host'
   | 'badge_earned'
   | 'skill_milestone'
   | 'reflection'
@@ -355,7 +353,7 @@ export async function getEventsNeedingReflection(userId: string): Promise<Growth
     .from('growth_events')
     .select('*')
     .eq('user_id', userId)
-    .in('event_type', ['mentoring_session', 'cross_exposure_shadow'])
+    .eq('event_type', 'mentoring_session')
     .is('reflection', null)
     .order('event_date', { ascending: false })
     .limit(10)
