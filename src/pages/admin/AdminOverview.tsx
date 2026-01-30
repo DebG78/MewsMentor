@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Target, Eye, UserCog } from "lucide-react";
+import { Target, UserCog } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function AdminOverview() {
@@ -8,7 +8,7 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -38,39 +38,6 @@ export default function AdminOverview() {
               onClick={() => navigate("/admin/mentoring/cohorts")}
             >
               Manage Mentoring
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Eye className="w-5 h-5 text-green-600" />
-              Cross-Exposure Program
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Active Offerings</span>
-                <span className="font-semibold">--</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Total Bookings</span>
-                <span className="font-semibold">--</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Active Hosts</span>
-                <span className="font-semibold">--</span>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full mt-4"
-              onClick={() => navigate("/admin/cross-exposure/offerings")}
-            >
-              Manage Cross-Exposure
             </Button>
           </CardContent>
         </Card>

@@ -6,7 +6,6 @@ import {
   BookOpen,
   User,
   Users,
-  Eye,
   Target,
   Award,
 } from 'lucide-react'
@@ -34,11 +33,6 @@ const navItems = [
         title: 'Mentoring',
         href: '/programs/mentoring',
         icon: Target,
-      },
-      {
-        title: 'Cross-Exposure',
-        href: '/programs/cross-exposure',
-        icon: Eye,
       },
     ],
   },

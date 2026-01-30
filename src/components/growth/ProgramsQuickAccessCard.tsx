@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Users, Eye } from 'lucide-react'
+import { ArrowRight, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 interface ProgramParticipation {
@@ -19,13 +19,10 @@ interface ProgramsQuickAccessCardProps {
 const ROLE_COLORS: Record<string, string> = {
   mentee: 'bg-blue-100 text-blue-800',
   mentor: 'bg-green-100 text-green-800',
-  host: 'bg-purple-100 text-purple-800',
-  shadow: 'bg-orange-100 text-orange-800',
 }
 
 const PROGRAM_ICONS: Record<string, any> = {
   mentoring: Users,
-  'cross-exposure': Eye,
 }
 
 export function ProgramsQuickAccessCard({ programs }: ProgramsQuickAccessCardProps) {

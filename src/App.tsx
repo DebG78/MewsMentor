@@ -9,11 +9,6 @@ import GrowthJourneyHome from "./pages/GrowthJourneyHome";
 import SkillsPortfolioPage from "./pages/SkillsPortfolioPage";
 import UnifiedProfilePage from "./pages/UnifiedProfilePage";
 import MentoringProgramPage from "./pages/MentoringProgramPage";
-import CrossExposureProgramPage from "./pages/CrossExposureProgramPage";
-import CreateHostOffering from "./pages/cross-exposure/CreateHostOffering";
-import ShadowMarketplace from "./pages/cross-exposure/ShadowMarketplace";
-import OfferingDetail from "./pages/cross-exposure/OfferingDetail";
-import MyShadowSessions from "./pages/cross-exposure/MyShadowSessions";
 import Skills from "./pages/Skills";
 import Sprints from "./pages/Sprints";
 import Settings from "./pages/Settings";
@@ -25,9 +20,6 @@ import CohortDetail from "./pages/admin/CohortDetail";
 import MentoringUnassigned from "./pages/admin/MentoringUnassigned";
 import MentoringSessions from "./pages/admin/MentoringSessions";
 import MentoringMessages from "./pages/admin/MentoringMessages";
-import CrossExposureOfferings from "./pages/admin/CrossExposureOfferings";
-import CrossExposureBookings from "./pages/admin/CrossExposureBookings";
-import CrossExposureAnalytics from "./pages/admin/CrossExposureAnalytics";
 import PeopleProfiles from "./pages/admin/PeopleProfiles";
 import PeopleAnalytics from "./pages/admin/PeopleAnalytics";
 import Login from "./pages/Login";
@@ -133,56 +125,6 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <MentoringProgramPage />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/programs/cross-exposure"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <CrossExposureProgramPage />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cross-exposure/create"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <CreateHostOffering />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cross-exposure/marketplace"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <ShadowMarketplace />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cross-exposure/offering/:offeringId"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <OfferingDetail />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/cross-exposure/my-sessions"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <MyShadowSessions />
                   </Layout>
                 </ProtectedRoute>
               }
@@ -295,38 +237,6 @@ const App = () => (
                 <ProtectedRoute>
                   <AdminLayout>
                     <MentoringMessages />
-                  </AdminLayout>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Cross-Exposure Program Admin Routes */}
-            <Route
-              path="/admin/cross-exposure/offerings"
-              element={
-                <ProtectedRoute>
-                  <AdminLayout>
-                    <CrossExposureOfferings />
-                  </AdminLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/cross-exposure/bookings"
-              element={
-                <ProtectedRoute>
-                  <AdminLayout>
-                    <CrossExposureBookings />
-                  </AdminLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/cross-exposure/analytics"
-              element={
-                <ProtectedRoute>
-                  <AdminLayout>
-                    <CrossExposureAnalytics />
                   </AdminLayout>
                 </ProtectedRoute>
               }

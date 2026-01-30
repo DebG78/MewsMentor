@@ -8,8 +8,6 @@ export interface GrowthAnalytics {
   crossDepartmentConnections: number
   programBreakdown: {
     mentoring: number
-    crossExposure: number
-    both: number
   }
 }
 
@@ -26,13 +24,6 @@ export interface ProgramParticipationStats {
     completionRate: number
     avgRating: number
   }
-  crossExposure: {
-    totalBookings: number
-    hoursCompleted: number
-    activeHosts: number
-    avgRating: number
-  }
-  programOverlap: number // Users in both programs
 }
 
 export interface CrossDepartmentConnection {
@@ -103,16 +94,7 @@ export async function getGrowthAnalytics(
       .eq('program_cohorts.programs.type', 'mentoring')
       .eq('status', 'active')
 
-    const { data: crossExposureParticipants } = await supabase
-      .from('program_participants')
-      .select('user_id, program_cohorts!inner(programs!inner(type))')
-      .eq('program_cohorts.programs.type', 'cross_exposure')
-      .eq('status', 'active')
-
     const mentoringUserIds = new Set(mentoringParticipants?.map((p) => p.user_id) || [])
-    const crossExposureUserIds = new Set(crossExposureParticipants?.map((p) => p.user_id) || [])
-
-    const bothPrograms = [...mentoringUserIds].filter((id) => crossExposureUserIds.has(id)).length
 
     return {
       totalParticipants: totalParticipants || 0,
@@ -122,8 +104,6 @@ export async function getGrowthAnalytics(
       crossDepartmentConnections,
       programBreakdown: {
         mentoring: mentoringUserIds.size,
-        crossExposure: crossExposureUserIds.size,
-        both: bothPrograms,
       },
     }
   } catch (error) {
@@ -134,7 +114,7 @@ export async function getGrowthAnalytics(
       totalGrowthEvents: 0,
       uniqueSkillsDeveloped: 0,
       crossDepartmentConnections: 0,
-      programBreakdown: { mentoring: 0, crossExposure: 0, both: 0 },
+      programBreakdown: { mentoring: 0 },
     }
   }
 }
@@ -256,55 +236,6 @@ export async function getProgramParticipationStats(
         ? ratedSessions.reduce((sum, e) => sum + (e.rating || 0), 0) / ratedSessions.length
         : 0
 
-    // Cross-exposure stats
-    let bookingsQuery = supabase
-      .from('shadow_bookings')
-      .select('duration_hours, shadow_rating, host_rating')
-      .in('status', ['confirmed', 'completed'])
-
-    if (dateRange) {
-      bookingsQuery = bookingsQuery
-        .gte('start_datetime', dateRange.startDate)
-        .lte('start_datetime', dateRange.endDate)
-    }
-
-    const { data: bookings } = await bookingsQuery
-
-    const totalBookings = bookings?.length || 0
-    const hoursCompleted =
-      bookings?.reduce((sum, b) => sum + (b.duration_hours || 0), 0) || 0
-
-    const ratedBookings = bookings?.filter((b) => b.shadow_rating !== null) || []
-    const avgCrossExposureRating =
-      ratedBookings.length > 0
-        ? ratedBookings.reduce((sum, b) => sum + (b.shadow_rating || 0), 0) / ratedBookings.length
-        : 0
-
-    // Active hosts
-    const { data: activeHosts } = await supabase
-      .from('host_offerings')
-      .select('host_user_id')
-      .eq('is_active', true)
-
-    const activeHostsCount = new Set(activeHosts?.map((h) => h.host_user_id)).size
-
-    // Program overlap
-    const { data: mentoringUsers } = await supabase
-      .from('program_participants')
-      .select('user_id, program_cohorts!inner(programs!inner(type))')
-      .eq('program_cohorts.programs.type', 'mentoring')
-      .eq('status', 'active')
-
-    const { data: crossExposureUsers } = await supabase
-      .from('program_participants')
-      .select('user_id, program_cohorts!inner(programs!inner(type))')
-      .eq('program_cohorts.programs.type', 'cross_exposure')
-      .eq('status', 'active')
-
-    const mentoringUserIds = new Set(mentoringUsers?.map((u) => u.user_id) || [])
-    const crossExposureUserIds = new Set(crossExposureUsers?.map((u) => u.user_id) || [])
-    const programOverlap = [...mentoringUserIds].filter((id) => crossExposureUserIds.has(id)).length
-
     return {
       mentoring: {
         activePairs: 0, // Would need to query matches from cohorts
@@ -312,20 +243,11 @@ export async function getProgramParticipationStats(
         completionRate: 0, // Would need to calculate based on expected sessions
         avgRating: avgMentoringRating,
       },
-      crossExposure: {
-        totalBookings,
-        hoursCompleted,
-        activeHosts: activeHostsCount,
-        avgRating: avgCrossExposureRating,
-      },
-      programOverlap,
     }
   } catch (error) {
     console.error('Error fetching program participation stats:', error)
     return {
       mentoring: { activePairs: 0, totalSessions: 0, completionRate: 0, avgRating: 0 },
-      crossExposure: { totalBookings: 0, hoursCompleted: 0, activeHosts: 0, avgRating: 0 },
-      programOverlap: 0,
     }
   }
 }
@@ -396,9 +318,7 @@ Total Participants,${data.totalParticipants}
 Total Growth Events,${data.totalGrowthEvents}
 Unique Skills Developed,${data.uniqueSkillsDeveloped}
 Cross-Department Connections,${data.crossDepartmentConnections}
-Mentoring Program Users,${data.programBreakdown.mentoring}
-Cross-Exposure Program Users,${data.programBreakdown.crossExposure}
-Both Programs Users,${data.programBreakdown.both}`
+Mentoring Program Users,${data.programBreakdown.mentoring}`
       }
 
       case 'skills': {

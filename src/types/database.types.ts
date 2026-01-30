@@ -76,7 +76,7 @@ export interface NewDatabase {
         Row: {
           id: string
           name: string
-          type: 'mentoring' | 'cross_exposure' | 'other'
+          type: 'mentoring' | 'other'
           description: string | null
           status: 'active' | 'inactive' | 'archived'
           program_config: Json | null
@@ -86,7 +86,7 @@ export interface NewDatabase {
         Insert: {
           id?: string
           name: string
-          type: 'mentoring' | 'cross_exposure' | 'other'
+          type: 'mentoring' | 'other'
           description?: string | null
           status?: 'active' | 'inactive' | 'archived'
           program_config?: Json | null
@@ -96,7 +96,7 @@ export interface NewDatabase {
         Update: {
           id?: string
           name?: string
-          type?: 'mentoring' | 'cross_exposure' | 'other'
+          type?: 'mentoring' | 'other'
           description?: string | null
           status?: 'active' | 'inactive' | 'archived'
           program_config?: Json | null
@@ -162,7 +162,7 @@ export interface NewDatabase {
           id: string
           user_id: string
           program_cohort_id: string
-          role_in_program: 'mentee' | 'mentor' | 'host' | 'shadow' | 'admin'
+          role_in_program: 'mentee' | 'mentor' | 'admin'
           role_data: Json | null
           status: 'active' | 'inactive' | 'completed' | 'dropped'
           joined_at: string
@@ -174,7 +174,7 @@ export interface NewDatabase {
           id?: string
           user_id: string
           program_cohort_id: string
-          role_in_program: 'mentee' | 'mentor' | 'host' | 'shadow' | 'admin'
+          role_in_program: 'mentee' | 'mentor' | 'admin'
           role_data?: Json | null
           status?: 'active' | 'inactive' | 'completed' | 'dropped'
           joined_at?: string
@@ -186,7 +186,7 @@ export interface NewDatabase {
           id?: string
           user_id?: string
           program_cohort_id?: string
-          role_in_program?: 'mentee' | 'mentor' | 'host' | 'shadow' | 'admin'
+          role_in_program?: 'mentee' | 'mentor' | 'admin'
           role_data?: Json | null
           status?: 'active' | 'inactive' | 'completed' | 'dropped'
           joined_at?: string
@@ -200,7 +200,7 @@ export interface NewDatabase {
           id: string
           user_id: string
           program_cohort_id: string | null
-          event_type: 'mentoring_session' | 'cross_exposure_shadow' | 'cross_exposure_host' | 'badge_earned' | 'skill_milestone' | 'reflection' | 'goal_completed' | 'program_joined' | 'program_completed'
+          event_type: 'mentoring_session' | 'badge_earned' | 'skill_milestone' | 'reflection' | 'goal_completed' | 'program_joined' | 'program_completed'
           title: string
           description: string | null
           event_data: Json | null
@@ -217,7 +217,7 @@ export interface NewDatabase {
           id?: string
           user_id: string
           program_cohort_id?: string | null
-          event_type: 'mentoring_session' | 'cross_exposure_shadow' | 'cross_exposure_host' | 'badge_earned' | 'skill_milestone' | 'reflection' | 'goal_completed' | 'program_joined' | 'program_completed'
+          event_type: 'mentoring_session' | 'badge_earned' | 'skill_milestone' | 'reflection' | 'goal_completed' | 'program_joined' | 'program_completed'
           title: string
           description?: string | null
           event_data?: Json | null
@@ -234,7 +234,7 @@ export interface NewDatabase {
           id?: string
           user_id?: string
           program_cohort_id?: string | null
-          event_type?: 'mentoring_session' | 'cross_exposure_shadow' | 'cross_exposure_host' | 'badge_earned' | 'skill_milestone' | 'reflection' | 'goal_completed' | 'program_joined' | 'program_completed'
+          event_type?: 'mentoring_session' | 'badge_earned' | 'skill_milestone' | 'reflection' | 'goal_completed' | 'program_joined' | 'program_completed'
           title?: string
           description?: string | null
           event_data?: Json | null
@@ -362,174 +362,6 @@ export interface NewDatabase {
           earned_at?: string
           evidence_event_id?: string | null
           created_at?: string
-        }
-      }
-      host_offerings: {
-        Row: {
-          id: string
-          host_user_id: string
-          title: string
-          description: string
-          skills_offered: string[] | null
-          topics_covered: string[] | null
-          what_shadow_will_do: string | null
-          availability: Json | null
-          max_concurrent_shadows: number | null
-          slots_per_week: number | null
-          is_active: boolean
-          is_accepting_bookings: boolean
-          allowed_shadow_departments: string[] | null
-          allowed_shadow_levels: string[] | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          host_user_id: string
-          title: string
-          description: string
-          skills_offered?: string[] | null
-          topics_covered?: string[] | null
-          what_shadow_will_do?: string | null
-          availability?: Json | null
-          max_concurrent_shadows?: number | null
-          slots_per_week?: number | null
-          is_active?: boolean
-          is_accepting_bookings?: boolean
-          allowed_shadow_departments?: string[] | null
-          allowed_shadow_levels?: string[] | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          host_user_id?: string
-          title?: string
-          description?: string
-          skills_offered?: string[] | null
-          topics_covered?: string[] | null
-          what_shadow_will_do?: string | null
-          availability?: Json | null
-          max_concurrent_shadows?: number | null
-          slots_per_week?: number | null
-          is_active?: boolean
-          is_accepting_bookings?: boolean
-          allowed_shadow_departments?: string[] | null
-          allowed_shadow_levels?: string[] | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      shadow_bookings: {
-        Row: {
-          id: string
-          host_offering_id: string
-          host_user_id: string
-          shadow_user_id: string
-          booking_type: 'single' | 'recurring'
-          start_datetime: string
-          end_datetime: string
-          duration_hours: number
-          learning_goals: string | null
-          skills_to_develop: string[] | null
-          status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
-          booking_source: string | null
-          shadow_rating: number | null
-          shadow_reflection: string | null
-          host_rating: number | null
-          host_feedback: string | null
-          skills_developed: string[] | null
-          admin_notes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          host_offering_id: string
-          host_user_id: string
-          shadow_user_id: string
-          booking_type?: 'single' | 'recurring'
-          start_datetime: string
-          end_datetime: string
-          duration_hours: number
-          learning_goals?: string | null
-          skills_to_develop?: string[] | null
-          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
-          booking_source?: string | null
-          shadow_rating?: number | null
-          shadow_reflection?: string | null
-          host_rating?: number | null
-          host_feedback?: string | null
-          skills_developed?: string[] | null
-          admin_notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          host_offering_id?: string
-          host_user_id?: string
-          shadow_user_id?: string
-          booking_type?: 'single' | 'recurring'
-          start_datetime?: string
-          end_datetime?: string
-          duration_hours?: number
-          learning_goals?: string | null
-          skills_to_develop?: string[] | null
-          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
-          booking_source?: string | null
-          shadow_rating?: number | null
-          shadow_reflection?: string | null
-          host_rating?: number | null
-          host_feedback?: string | null
-          skills_developed?: string[] | null
-          admin_notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      host_availability_blocks: {
-        Row: {
-          id: string
-          host_offering_id: string
-          host_user_id: string
-          date: string
-          start_time: string
-          end_time: string
-          is_available: boolean
-          is_booked: boolean
-          booking_id: string | null
-          notes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          host_offering_id: string
-          host_user_id: string
-          date: string
-          start_time: string
-          end_time: string
-          is_available?: boolean
-          is_booked?: boolean
-          booking_id?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          host_offering_id?: string
-          host_user_id?: string
-          date?: string
-          start_time?: string
-          end_time?: string
-          is_available?: boolean
-          is_booked?: boolean
-          booking_id?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
         }
       }
       growth_recommendations: {
