@@ -15,7 +15,6 @@ import { DataImport } from "@/components/DataImport";
 import { MentorProfile } from "@/components/MentorProfile";
 import { MenteeProfile } from "@/components/MenteeProfile";
 import { ProfileEditForm } from "@/components/ProfileEditForm";
-import { CohortSurveyAssignment } from "@/components/CohortSurveyAssignment";
 import { MatchingResults } from "@/components/MatchingResults";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,8 +50,7 @@ import {
   Play,
   Pause,
   Square,
-  Eye,
-  FileText
+  Eye
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -454,30 +452,6 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
             </CardContent>
           </Card>
         </div>
-
-        {/* Survey Assignment */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Survey Assignment
-            </CardTitle>
-            <CardDescription>
-              Configure which survey templates will be used for mentor and mentee signup in this cohort
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CohortSurveyAssignment
-              cohort={cohort}
-              onUpdate={async (updates) => {
-                const updatedCohort = await updateCohort(cohort.id, updates);
-                if (updatedCohort) {
-                  setCohorts(cohorts.map(c => c.id === cohort.id ? updatedCohort : c));
-                }
-              }}
-            />
-          </CardContent>
-        </Card>
 
         {/* Matching Readiness */}
         {!validation.isReady && (
