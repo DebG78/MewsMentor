@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
   redirectTo?: string;
 }
 
-export function ProtectedRoute({ children, redirectTo = "/" }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, redirectTo = "/admin/login" }: ProtectedRouteProps) {
   const { isLoading, isAuthenticated } = useUser();
 
   if (isLoading) {

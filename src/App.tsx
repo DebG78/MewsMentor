@@ -34,8 +34,8 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              {/* Root redirects to admin */}
-              <Route path="/" element={<Navigate to="/admin" replace />} />
+              {/* Root redirects to admin login */}
+              <Route path="/" element={<Navigate to="/admin/login" replace />} />
 
               {/* Admin login */}
               <Route
