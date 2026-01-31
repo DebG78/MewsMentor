@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Target, ArrowLeft } from "lucide-react";
+import { Target } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 
 const AdminLogin = () => {
@@ -51,12 +51,8 @@ const AdminLogin = () => {
             <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
               <Target className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-foreground">SkillPoint Admin</h1>
+            <h1 className="text-xl font-bold text-foreground">MewsMentor</h1>
           </div>
-          <Button variant="ghost" onClick={() => navigate('/')}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Home
-          </Button>
         </div>
       </header>
 
