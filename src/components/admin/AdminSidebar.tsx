@@ -8,13 +8,18 @@ import {
   Users,
   Clock,
   Calendar,
-  Mail,
   BarChart3,
   UserCog,
   ChevronRight,
   ChevronDown,
   LogOut,
-  Settings
+  Settings,
+  Settings2,
+  ClipboardCheck,
+  BookOpen,
+  TrendingUp,
+  Gauge,
+  Crown,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useUser } from '@/contexts/UserContext'
@@ -36,6 +41,11 @@ const navItems = [
         icon: Users,
       },
       {
+        title: 'Matching Models',
+        href: '/admin/mentoring/matching-models',
+        icon: Settings2,
+      },
+      {
         title: 'Unassigned',
         href: '/admin/mentoring/unassigned',
         icon: Clock,
@@ -46,25 +56,46 @@ const navItems = [
         icon: Calendar,
       },
       {
-        title: 'Messages',
-        href: '/admin/mentoring/messages',
-        icon: Mail,
+        title: 'Check-ins',
+        href: '/admin/mentoring/check-ins',
+        icon: ClipboardCheck,
+      },
+      {
+        title: 'Runbook',
+        href: '/admin/mentoring/runbook',
+        icon: BookOpen,
       },
     ],
   },
   {
-    title: 'People & Analytics',
+    title: 'Analytics',
+    icon: TrendingUp,
+    children: [
+      {
+        title: 'Success Metrics',
+        href: '/admin/analytics/metrics',
+        icon: Gauge,
+      },
+      {
+        title: 'VIP Management',
+        href: '/admin/analytics/vip',
+        icon: Crown,
+      },
+      {
+        title: 'People Analytics',
+        href: '/admin/people/analytics',
+        icon: BarChart3,
+      },
+    ],
+  },
+  {
+    title: 'People',
     icon: UserCog,
     children: [
       {
         title: 'All Profiles',
         href: '/admin/people/profiles',
         icon: Users,
-      },
-      {
-        title: 'Growth Analytics',
-        href: '/admin/people/analytics',
-        icon: BarChart3,
       },
     ],
   },
@@ -82,7 +113,8 @@ export function AdminSidebar() {
   const { toast } = useToast()
   const [expandedSections, setExpandedSections] = useState<string[]>([
     'Mentoring Program',
-    'People & Analytics'
+    'Analytics',
+    'People'
   ])
 
   const handleLogout = () => {
