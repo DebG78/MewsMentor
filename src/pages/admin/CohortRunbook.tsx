@@ -1,0 +1,772 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Loader2,
+  Settings,
+  Upload,
+  Shuffle,
+  Eye,
+  Rocket,
+  Activity,
+  Flag,
+  BarChart,
+  CheckCircle2,
+  Circle,
+  Clock,
+  AlertTriangle,
+  Plus,
+  Trash2,
+  Link as LinkIcon,
+  FileText,
+  ExternalLink,
+  ArrowLeft,
+  Play,
+  Pause,
+  RotateCcw,
+} from 'lucide-react';
+import type { CohortStage, StageStatus, StageType, ChecklistItem, DocumentLink } from '@/types/runbook';
+import { STAGE_METADATA } from '@/types/runbook';
+import {
+  getCohortStages,
+  initializeCohortStages,
+  updateCohortStage,
+  startStage,
+  completeStage,
+  blockStage,
+  resetStage,
+  toggleChecklistItem,
+  addChecklistItem,
+  removeChecklistItem,
+  addDocument,
+  removeDocument,
+  getRunbookProgress,
+} from '@/lib/runbookService';
+import { getAllCohorts } from '@/lib/supabaseService';
+import { cn } from '@/lib/utils';
+
+// Icon mapping for stage types
+const stageIcons: Record<StageType, React.ComponentType<{ className?: string }>> = {
+  setup: Settings,
+  import: Upload,
+  matching: Shuffle,
+  review: Eye,
+  launch: Rocket,
+  midpoint: Activity,
+  closure: Flag,
+  reporting: BarChart,
+};
+
+// Status colors and icons
+const statusConfig: Record<StageStatus, { color: string; icon: React.ComponentType<{ className?: string }> }> = {
+  pending: { color: 'bg-gray-400', icon: Circle },
+  in_progress: { color: 'bg-blue-500', icon: Clock },
+  completed: { color: 'bg-green-500', icon: CheckCircle2 },
+  blocked: { color: 'bg-red-500', icon: AlertTriangle },
+};
+
+export default function CohortRunbook() {
+  const { cohortId } = useParams<{ cohortId: string }>();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCohort, setSelectedCohort] = useState<string>(cohortId || '');
+  const [stages, setStages] = useState<CohortStage[]>([]);
+  const [progress, setProgress] = useState({ total: 0, completed: 0, percentComplete: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [expandedStages, setExpandedStages] = useState<string[]>([]);
+
+  // Dialog states
+  const [isAddDocDialogOpen, setIsAddDocDialogOpen] = useState(false);
+  const [selectedStageForDoc, setSelectedStageForDoc] = useState<string | null>(null);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocUrl, setNewDocUrl] = useState('');
+  const [newDocType, setNewDocType] = useState<'doc' | 'sheet' | 'pdf' | 'link'>('link');
+
+  const [isAddChecklistDialogOpen, setIsAddChecklistDialogOpen] = useState(false);
+  const [selectedStageForChecklist, setSelectedStageForChecklist] = useState<string | null>(null);
+  const [newChecklistText, setNewChecklistText] = useState('');
+
+  useEffect(() => {
+    loadCohorts();
+  }, []);
+
+  useEffect(() => {
+    if (selectedCohort) {
+      loadStages();
+    }
+  }, [selectedCohort]);
+
+  const loadCohorts = async () => {
+    try {
+      const data = await getAllCohorts();
+      setCohorts(data.map(c => ({ id: c.id, name: c.name })));
+      if (!selectedCohort && data.length > 0) {
+        setSelectedCohort(data[0].id);
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load cohorts',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const loadStages = async () => {
+    if (!selectedCohort) return;
+
+    setIsLoading(true);
+    try {
+      const [stagesData, progressData] = await Promise.all([
+        getCohortStages(selectedCohort),
+        getRunbookProgress(selectedCohort),
+      ]);
+      setStages(stagesData);
+      setProgress(progressData);
+
+      // Expand in-progress stages by default
+      const inProgressIds = stagesData
+        .filter(s => s.status === 'in_progress')
+        .map(s => s.id);
+      setExpandedStages(inProgressIds);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load runbook stages',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInitializeRunbook = async () => {
+    if (!selectedCohort) return;
+
+    try {
+      await initializeCohortStages(selectedCohort);
+      toast({
+        title: 'Success',
+        description: 'Runbook initialized with default stages',
+      });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to initialize runbook',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleStartStage = async (stageId: string) => {
+    try {
+      await startStage(stageId);
+      toast({ title: 'Stage started' });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to start stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCompleteStage = async (stageId: string) => {
+    try {
+      await completeStage(stageId);
+      toast({ title: 'Stage completed' });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to complete stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleBlockStage = async (stageId: string) => {
+    try {
+      await blockStage(stageId);
+      toast({ title: 'Stage marked as blocked' });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to block stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleResetStage = async (stageId: string) => {
+    try {
+      await resetStage(stageId);
+      toast({ title: 'Stage reset to pending' });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to reset stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleToggleChecklistItem = async (stageId: string, itemId: string) => {
+    try {
+      await toggleChecklistItem(stageId, itemId);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update checklist',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleAddChecklistItem = async () => {
+    if (!selectedStageForChecklist || !newChecklistText.trim()) return;
+
+    try {
+      await addChecklistItem(selectedStageForChecklist, newChecklistText.trim());
+      toast({ title: 'Checklist item added' });
+      setIsAddChecklistDialogOpen(false);
+      setNewChecklistText('');
+      setSelectedStageForChecklist(null);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add checklist item',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleRemoveChecklistItem = async (stageId: string, itemId: string) => {
+    try {
+      await removeChecklistItem(stageId, itemId);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to remove checklist item',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleAddDocument = async () => {
+    if (!selectedStageForDoc || !newDocName.trim() || !newDocUrl.trim()) return;
+
+    try {
+      await addDocument(selectedStageForDoc, {
+        name: newDocName.trim(),
+        url: newDocUrl.trim(),
+        type: newDocType,
+      });
+      toast({ title: 'Document added' });
+      setIsAddDocDialogOpen(false);
+      setNewDocName('');
+      setNewDocUrl('');
+      setSelectedStageForDoc(null);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add document',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleRemoveDocument = async (stageId: string, docId: string) => {
+    try {
+      await removeDocument(stageId, docId);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to remove document',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUpdateNotes = async (stageId: string, notes: string) => {
+    try {
+      await updateCohortStage(stageId, { notes });
+    } catch (error) {
+      console.error('Failed to update notes:', error);
+    }
+  };
+
+  const handleUpdateOwner = async (stageId: string, owner: string) => {
+    try {
+      await updateCohortStage(stageId, { owner });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update owner',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUpdateDueDate = async (stageId: string, dueDate: string) => {
+    try {
+      await updateCohortStage(stageId, { due_date: dueDate || undefined });
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update due date',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const getStatusBadge = (status: StageStatus) => {
+    const config = statusConfig[status];
+    const Icon = config.icon;
+    return (
+      <Badge className={cn(config.color, 'text-white')}>
+        <Icon className="w-3 h-3 mr-1" />
+        {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+      </Badge>
+    );
+  };
+
+  if (isLoading && cohorts.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">Cohort Runbook</h1>
+          <p className="text-muted-foreground">
+            Track program stages and manage checklists
+          </p>
+        </div>
+      </div>
+
+      {/* Cohort Selector and Progress */}
+      <div className="flex gap-4 items-start">
+        <div className="w-64">
+          <Label>Select Cohort</Label>
+          <Select value={selectedCohort} onValueChange={setSelectedCohort}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select cohort" />
+            </SelectTrigger>
+            <SelectContent>
+              {cohorts.map(cohort => (
+                <SelectItem key={cohort.id} value={cohort.id}>
+                  {cohort.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {stages.length > 0 && (
+          <Card className="flex-1">
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium">Overall Progress</span>
+                    <span className="text-sm text-muted-foreground">
+                      {progress.completed} of {progress.total} stages
+                    </span>
+                  </div>
+                  <Progress value={progress.percentComplete} className="h-2" />
+                </div>
+                <div className="text-2xl font-bold">{progress.percentComplete}%</div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Runbook Content */}
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </div>
+      ) : stages.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Flag className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-medium mb-2">No Runbook Stages</h3>
+            <p className="text-muted-foreground mb-4">
+              Initialize the runbook with default stages to get started
+            </p>
+            <Button onClick={handleInitializeRunbook}>
+              <Plus className="w-4 h-4 mr-2" />
+              Initialize Runbook
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {/* Timeline visualization */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Stage Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                {stages.map((stage, index) => {
+                  const Icon = stageIcons[stage.stage_type];
+                  const statusCfg = statusConfig[stage.status];
+                  return (
+                    <div key={stage.id} className="flex items-center">
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={cn(
+                            'w-10 h-10 rounded-full flex items-center justify-center',
+                            statusCfg.color,
+                            'text-white'
+                          )}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs mt-1 text-center max-w-[80px] truncate">
+                          {stage.stage_name.split(' ')[0]}
+                        </span>
+                      </div>
+                      {index < stages.length - 1 && (
+                        <div
+                          className={cn(
+                            'h-1 w-12 mx-1',
+                            stage.status === 'completed' ? 'bg-green-500' : 'bg-gray-200'
+                          )}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stage Cards */}
+          <Accordion
+            type="multiple"
+            value={expandedStages}
+            onValueChange={setExpandedStages}
+            className="space-y-2"
+          >
+            {stages.map(stage => {
+              const Icon = stageIcons[stage.stage_type];
+              const metadata = STAGE_METADATA[stage.stage_type];
+              const completedItems = stage.checklist.filter(i => i.completed).length;
+              const totalItems = stage.checklist.length;
+
+              return (
+                <AccordionItem
+                  key={stage.id}
+                  value={stage.id}
+                  className="border rounded-lg px-4"
+                >
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className={cn('w-8 h-8 rounded-full flex items-center justify-center', metadata.color, 'text-white')}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{stage.stage_name}</span>
+                          {getStatusBadge(stage.status)}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{metadata.description}</p>
+                      </div>
+                      <div className="text-right text-sm text-muted-foreground">
+                        {totalItems > 0 && (
+                          <span>{completedItems}/{totalItems} tasks</span>
+                        )}
+                        {stage.due_date && (
+                          <div className={cn(
+                            stage.due_date < new Date().toISOString().split('T')[0] && stage.status !== 'completed'
+                              ? 'text-red-500'
+                              : ''
+                          )}>
+                            Due: {new Date(stage.due_date).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4 pt-4">
+                      {/* Status Actions */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Actions:</span>
+                        {stage.status === 'pending' && (
+                          <Button size="sm" onClick={() => handleStartStage(stage.id)}>
+                            <Play className="w-3 h-3 mr-1" /> Start
+                          </Button>
+                        )}
+                        {stage.status === 'in_progress' && (
+                          <>
+                            <Button size="sm" onClick={() => handleCompleteStage(stage.id)}>
+                              <CheckCircle2 className="w-3 h-3 mr-1" /> Complete
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleBlockStage(stage.id)}>
+                              <Pause className="w-3 h-3 mr-1" /> Block
+                            </Button>
+                          </>
+                        )}
+                        {(stage.status === 'completed' || stage.status === 'blocked') && (
+                          <Button size="sm" variant="outline" onClick={() => handleResetStage(stage.id)}>
+                            <RotateCcw className="w-3 h-3 mr-1" /> Reset
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Owner and Due Date */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs">Owner</Label>
+                          <Input
+                            placeholder="Assign owner..."
+                            value={stage.owner || ''}
+                            onChange={(e) => handleUpdateOwner(stage.id, e.target.value)}
+                            className="h-8"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Due Date</Label>
+                          <Input
+                            type="date"
+                            value={stage.due_date || ''}
+                            onChange={(e) => handleUpdateDueDate(stage.id, e.target.value)}
+                            className="h-8"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Checklist */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <Label className="text-xs">Checklist</Label>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedStageForChecklist(stage.id);
+                              setIsAddChecklistDialogOpen(true);
+                            }}
+                          >
+                            <Plus className="w-3 h-3 mr-1" /> Add Item
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {stage.checklist.map(item => (
+                            <div key={item.id} className="flex items-center gap-2 group">
+                              <Checkbox
+                                checked={item.completed}
+                                onCheckedChange={() => handleToggleChecklistItem(stage.id, item.id)}
+                              />
+                              <span className={cn('flex-1 text-sm', item.completed && 'line-through text-muted-foreground')}>
+                                {item.text}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                                onClick={() => handleRemoveChecklistItem(stage.id, item.id)}
+                              >
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Documents */}
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <Label className="text-xs">Documents</Label>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedStageForDoc(stage.id);
+                              setIsAddDocDialogOpen(true);
+                            }}
+                          >
+                            <Plus className="w-3 h-3 mr-1" /> Add Link
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {stage.documents.map(doc => (
+                            <div
+                              key={doc.id}
+                              className="flex items-center gap-1 bg-muted px-2 py-1 rounded text-sm group"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:underline"
+                              >
+                                {doc.name}
+                              </a>
+                              <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="opacity-0 group-hover:opacity-100 h-5 w-5 p-0 ml-1"
+                                onClick={() => handleRemoveDocument(stage.id, doc.id)}
+                              >
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                          {stage.documents.length === 0 && (
+                            <span className="text-sm text-muted-foreground">No documents linked</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      <div>
+                        <Label className="text-xs">Notes</Label>
+                        <Textarea
+                          placeholder="Add notes..."
+                          value={stage.notes || ''}
+                          onChange={(e) => handleUpdateNotes(stage.id, e.target.value)}
+                          onBlur={(e) => handleUpdateNotes(stage.id, e.target.value)}
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
+        </div>
+      )}
+
+      {/* Add Checklist Item Dialog */}
+      <Dialog open={isAddChecklistDialogOpen} onOpenChange={setIsAddChecklistDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Checklist Item</DialogTitle>
+            <DialogDescription>Add a new task to the checklist</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Task Description</Label>
+              <Input
+                value={newChecklistText}
+                onChange={(e) => setNewChecklistText(e.target.value)}
+                placeholder="Enter task description..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddChecklistDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddChecklistItem}>Add Item</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Document Dialog */}
+      <Dialog open={isAddDocDialogOpen} onOpenChange={setIsAddDocDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Document Link</DialogTitle>
+            <DialogDescription>Link a document or resource to this stage</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Document Name</Label>
+              <Input
+                value={newDocName}
+                onChange={(e) => setNewDocName(e.target.value)}
+                placeholder="e.g., Program Guidelines"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>URL</Label>
+              <Input
+                value={newDocUrl}
+                onChange={(e) => setNewDocUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={newDocType} onValueChange={(v) => setNewDocType(v as typeof newDocType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="doc">Document</SelectItem>
+                  <SelectItem value="sheet">Spreadsheet</SelectItem>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="link">External Link</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDocDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddDocument}>Add Document</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

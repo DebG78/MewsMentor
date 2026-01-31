@@ -9,6 +9,15 @@ import {
   MatchingStats,
   SENIORITY_SCORES
 } from "@/types/mentoring";
+import type {
+  MatchingModel,
+  MatchingWeights,
+  EnhancedMatchScore,
+  ScoreBreakdown,
+  AlternativeMentor,
+  ConstraintViolation,
+  MatchingRule,
+} from "@/types/matching";
 
 // Hard filters implementation
 export function applyHardFilters(
@@ -367,4 +376,344 @@ export function performTop3Matching(
     stats,
     results
   };
+}
+
+// ============================================================================
+// ENHANCED MATCHING WITH CONFIGURABLE MODELS
+// ============================================================================
+
+/**
+ * Calculate match score using a configurable matching model
+ */
+export function calculateMatchScoreWithModel(
+  mentee: MenteeData,
+  mentor: MentorData,
+  model: MatchingModel
+): EnhancedMatchScore {
+  const features = calculateFeatures(mentee, mentor);
+  const weights = model.weights;
+
+  // Calculate individual weighted scores
+  const scoreBreakdown: ScoreBreakdown[] = [
+    {
+      criterion: 'topics',
+      criterion_name: 'Topics Match',
+      raw_score: features.topics_overlap,
+      max_possible: 1,
+      weight: weights.topics,
+      weighted_score: features.topics_overlap * weights.topics,
+    },
+    {
+      criterion: 'semantic',
+      criterion_name: 'Semantic Similarity',
+      raw_score: features.semantic_similarity,
+      max_possible: 1,
+      weight: weights.semantic,
+      weighted_score: features.semantic_similarity * weights.semantic,
+    },
+    {
+      criterion: 'industry',
+      criterion_name: 'Industry Match',
+      raw_score: features.industry_overlap,
+      max_possible: 1,
+      weight: weights.industry,
+      weighted_score: features.industry_overlap * weights.industry,
+    },
+    {
+      criterion: 'seniority',
+      criterion_name: 'Seniority Fit',
+      raw_score: features.role_seniority_fit,
+      max_possible: 1,
+      weight: weights.seniority,
+      weighted_score: features.role_seniority_fit * weights.seniority,
+    },
+    {
+      criterion: 'timezone',
+      criterion_name: 'Timezone Bonus',
+      raw_score: features.tz_overlap_bonus,
+      max_possible: 1,
+      weight: weights.timezone,
+      weighted_score: features.tz_overlap_bonus * weights.timezone,
+    },
+    {
+      criterion: 'language',
+      criterion_name: 'Language Bonus',
+      raw_score: features.language_bonus,
+      max_possible: 1,
+      weight: weights.language,
+      weighted_score: features.language_bonus * weights.language,
+    },
+  ];
+
+  // Calculate total score
+  const positiveScore = scoreBreakdown.reduce((sum, item) => sum + item.weighted_score, 0);
+  const capacityPenalty = features.capacity_penalty * weights.capacity_penalty;
+  const totalScore = Math.max(0, Math.min(100, positiveScore - capacityPenalty));
+
+  // Add capacity penalty to breakdown
+  scoreBreakdown.push({
+    criterion: 'capacity_penalty',
+    criterion_name: 'Capacity Penalty',
+    raw_score: features.capacity_penalty,
+    max_possible: 1,
+    weight: -weights.capacity_penalty,
+    weighted_score: -capacityPenalty,
+  });
+
+  // Check for constraint violations (placeholder for rule evaluation)
+  const constraintViolations: ConstraintViolation[] = [];
+  let needsApproval = false;
+  let approvalReason: string | undefined;
+
+  // Example violation checks
+  if (mentor.capacity_remaining <= 0) {
+    constraintViolations.push({
+      rule_id: 'capacity_zero',
+      rule_name: 'No Capacity',
+      severity: 'error',
+      description: 'Mentor has no remaining capacity',
+    });
+    needsApproval = true;
+    approvalReason = 'Mentor at capacity';
+  }
+
+  if (features.topics_overlap === 0) {
+    constraintViolations.push({
+      rule_id: 'no_topics',
+      rule_name: 'No Topic Overlap',
+      severity: 'warning',
+      description: 'No shared development topics',
+    });
+  }
+
+  return {
+    total_score: totalScore,
+    score_breakdown: scoreBreakdown,
+    alternative_mentors: [], // Will be populated by findAlternatives
+    constraint_violations: constraintViolations,
+    needs_approval: needsApproval,
+    approval_reason: approvalReason,
+  };
+}
+
+/**
+ * Find alternative mentors (2nd, 3rd best) for a mentee
+ */
+export function findAlternativeMentors(
+  mentee: MenteeData,
+  mentors: MentorData[],
+  excludeMentorId: string,
+  model: MatchingModel,
+  count: number = 2
+): AlternativeMentor[] {
+  const filters = model.filters;
+
+  const alternatives = mentors
+    .filter(mentor => mentor.id !== excludeMentorId)
+    .filter(mentor => applyHardFilters(mentee, mentor, filters))
+    .map(mentor => ({
+      mentor,
+      score: calculateMatchScoreWithModel(mentee, mentor, model),
+    }))
+    .sort((a, b) => b.score.total_score - a.score.total_score)
+    .slice(0, count);
+
+  return alternatives.map((alt, index) => ({
+    mentor_id: alt.mentor.id,
+    mentor_name: alt.mentor.id,
+    score: alt.score.total_score,
+    rank: index + 2, // 2 = second best, 3 = third best
+  }));
+}
+
+/**
+ * Perform matching using a configurable matching model
+ */
+export function performMatchingWithModel(
+  mentees: MenteeData[],
+  mentors: MentorData[],
+  model: MatchingModel,
+  mode: 'batch' | 'top3' = 'batch'
+): {
+  mode: string;
+  model_id: string;
+  model_version: number;
+  stats: MatchingStats;
+  results: Array<{
+    mentee_id: string;
+    mentee_name: string;
+    recommendations: Array<{
+      mentor_id: string;
+      mentor_name: string;
+      score: EnhancedMatchScore;
+    }>;
+    proposed_assignment?: {
+      mentor_id: string | null;
+      mentor_name?: string | null;
+    };
+  }>;
+  flagged_for_approval: Array<{
+    mentee_id: string;
+    mentor_id: string;
+    reason: string;
+  }>;
+} {
+  const filters = model.filters;
+  const flaggedForApproval: Array<{ mentee_id: string; mentor_id: string; reason: string }> = [];
+
+  const stats: MatchingStats = {
+    mentees_total: mentees.length,
+    mentors_total: mentors.length,
+    pairs_evaluated: 0,
+    after_filters: 0,
+  };
+
+  // Track mentor capacity during batch assignment
+  const mentorCapacity = new Map<string, number>();
+  mentors.forEach(mentor => {
+    mentorCapacity.set(mentor.id, mentor.capacity_remaining);
+  });
+
+  const results = mentees.map(mentee => {
+    // Get available mentors
+    const availableMentors = mode === 'batch'
+      ? mentors.filter(mentor => (mentorCapacity.get(mentor.id) || 0) > 0)
+      : mentors;
+
+    stats.pairs_evaluated += availableMentors.length;
+
+    // Filter and score all mentors
+    const scoredMentors = availableMentors
+      .filter(mentor => applyHardFilters(mentee, mentor, filters))
+      .map(mentor => {
+        const score = calculateMatchScoreWithModel(mentee, mentor, model);
+        // Add alternatives to the score
+        score.alternative_mentors = findAlternativeMentors(
+          mentee,
+          availableMentors,
+          mentor.id,
+          model,
+          2
+        );
+        return { mentor, score };
+      })
+      .sort((a, b) => b.score.total_score - a.score.total_score);
+
+    stats.after_filters += scoredMentors.length;
+
+    // Get top 3 recommendations
+    const recommendations = scoredMentors.slice(0, 3).map(match => ({
+      mentor_id: match.mentor.id,
+      mentor_name: match.mentor.id,
+      score: match.score,
+    }));
+
+    // Handle batch assignment
+    let proposedAssignment: { mentor_id: string | null; mentor_name?: string | null } | undefined;
+
+    if (mode === 'batch' && recommendations.length > 0) {
+      const bestMatch = recommendations[0];
+      proposedAssignment = {
+        mentor_id: bestMatch.mentor_id,
+        mentor_name: bestMatch.mentor_name,
+      };
+
+      // Track flagged matches
+      if (bestMatch.score.needs_approval) {
+        flaggedForApproval.push({
+          mentee_id: mentee.id,
+          mentor_id: bestMatch.mentor_id,
+          reason: bestMatch.score.approval_reason || 'Manual review required',
+        });
+      }
+
+      // Decrease mentor capacity
+      const currentCapacity = mentorCapacity.get(bestMatch.mentor_id) || 0;
+      mentorCapacity.set(bestMatch.mentor_id, currentCapacity - 1);
+    }
+
+    return {
+      mentee_id: mentee.id,
+      mentee_name: mentee.id,
+      recommendations,
+      proposed_assignment: proposedAssignment,
+    };
+  });
+
+  return {
+    mode: mode === 'batch' ? 'batch_with_model' : 'top3_with_model',
+    model_id: model.id,
+    model_version: model.version,
+    stats,
+    results,
+    flagged_for_approval: flaggedForApproval,
+  };
+}
+
+/**
+ * Evaluate matching rules against a mentee-mentor pair
+ */
+export function evaluateMatchingRules(
+  mentee: MenteeData,
+  mentor: MentorData,
+  rules: MatchingRule[]
+): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+
+  for (const rule of rules) {
+    if (!rule.is_active) continue;
+
+    const condition = rule.condition;
+    let conditionMet = false;
+
+    // Get the value to check based on field
+    let value: unknown;
+    if (condition.field.startsWith('mentee.')) {
+      const field = condition.field.replace('mentee.', '') as keyof MenteeData;
+      value = mentee[field];
+    } else if (condition.field.startsWith('mentor.')) {
+      const field = condition.field.replace('mentor.', '') as keyof MentorData;
+      value = mentor[field];
+    }
+
+    // Evaluate condition
+    switch (condition.operator) {
+      case '=':
+        conditionMet = value === condition.value;
+        break;
+      case '!=':
+        conditionMet = value !== condition.value;
+        break;
+      case '>':
+        conditionMet = (value as number) > (condition.value as number);
+        break;
+      case '<':
+        conditionMet = (value as number) < (condition.value as number);
+        break;
+      case '>=':
+        conditionMet = (value as number) >= (condition.value as number);
+        break;
+      case '<=':
+        conditionMet = (value as number) <= (condition.value as number);
+        break;
+      case 'contains':
+        conditionMet = Array.isArray(value) && value.includes(condition.value);
+        break;
+      case 'not_contains':
+        conditionMet = Array.isArray(value) && !value.includes(condition.value);
+        break;
+    }
+
+    // If condition is met and it's an exclusion/must_have rule, add violation
+    if (conditionMet && (rule.rule_type === 'exclusion' || rule.rule_type === 'must_have')) {
+      violations.push({
+        rule_id: rule.id,
+        rule_name: rule.name,
+        severity: rule.rule_type === 'exclusion' ? 'error' : 'warning',
+        description: rule.description || `Rule "${rule.name}" triggered`,
+      });
+    }
+  }
+
+  return violations;
 }
