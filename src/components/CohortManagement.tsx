@@ -225,11 +225,11 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
     }
   };
 
-  const handleDeleteCohort = (cohortId: string) => {
+  const handleDeleteCohort = async (cohortId: string) => {
     try {
-      const success = deleteCohort(cohortId);
+      const success = await deleteCohort(cohortId);
       if (success) {
-        refreshCohorts();
+        await refreshCohorts();
         if (selectedCohort?.id === cohortId) {
           setSelectedCohort(null);
           onCohortSelected?.(null as any);
