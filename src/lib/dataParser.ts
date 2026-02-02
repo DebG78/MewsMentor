@@ -6,6 +6,7 @@ import {
   DEVELOPMENT_TOPICS,
   EXPERIENCE_MAPPING
 } from "@/types/mentoring";
+import * as XLSX from 'xlsx';
 
 // CSV parsing utility
 export function parseCSV(csvText: string): Record<string, string>[] {
@@ -62,10 +63,50 @@ function parseCSVLine(line: string): string[] {
 }
 
 // Identify if a row represents a mentee or mentor
-export function identifyRowType(row: Record<string, string>): 'mentee' | 'mentor' | 'unknown' {
+// Returns 'mentee', 'mentor', 'both', or 'unknown'
+export function identifyRowType(row: Record<string, string>): 'mentee' | 'mentor' | 'both' | 'unknown' {
   const keys = Object.keys(row);
 
-  // Check for mentee indicators based on actual CSV headers
+  // FIRST: Check for explicit "Role Type" column (most reliable)
+  const roleTypeKey = keys.find(key => key.toLowerCase().trim() === 'role type');
+  if (roleTypeKey) {
+    const roleValue = (row[roleTypeKey] || '').toLowerCase().trim();
+    console.log('identifyRowType - found Role Type column:', roleValue);
+
+    if (roleValue === 'mentor') {
+      return 'mentor';
+    } else if (roleValue === 'mentee') {
+      return 'mentee';
+    } else if (roleValue === 'both') {
+      return 'both';
+    }
+    // If Role Type column exists but has unexpected value, log warning and continue with fallback detection
+    console.log('identifyRowType - Role Type value not recognized:', roleValue, '- falling back to header detection');
+  }
+
+  // FALLBACK: Header-based detection for files without Role Type column
+  console.log('identifyRowType - no Role Type column, checking headers:', keys.slice(0, 10));
+
+  // Check for STRONG mentor indicators first (these are very specific to mentor files)
+  const hasStrongMentorFields = keys.some(key => {
+    const lowerKey = key.toLowerCase();
+    return lowerKey.includes('have you mentored before') ||
+           lowerKey.includes('what do you hope to gain from being a mentor') ||
+           lowerKey.includes('how often would you ideally like to meet with a mentee') ||
+           lowerKey.includes('what type of meeting style do you usually prefer') ||
+           lowerKey.includes('what\'s your feedback style') ||
+           lowerKey.includes('topics you would prefer not to mentor') ||
+           (lowerKey === 'early-career') ||
+           (lowerKey === 'mid-level') ||
+           (lowerKey === 'senior stretch role');
+  });
+
+  if (hasStrongMentorFields) {
+    console.log('identifyRowType - detected as MENTOR (strong indicators)');
+    return 'mentor';
+  }
+
+  // Check for mentee indicators
   const hasMenteeFields = keys.some(key => {
     const lowerKey = key.toLowerCase();
     return lowerKey.includes('what\'s the main reason you\'d like a mentor') ||
@@ -76,70 +117,34 @@ export function identifyRowType(row: Record<string, string>): 'mentee' | 'mentor
            lowerKey.includes('how often would you ideally like to meet with a mentor') ||
            lowerKey.includes('why would you like to join the mentorship program') ||
            lowerKey.includes('🤝 mentoring style preferences') ||
-           lowerKey.includes('mentorship program') ||
-           lowerKey.includes('mentee');
+           lowerKey.includes('what qualities would you like in a mentor');
   });
 
-  // Check for mentor indicators based on actual CSV headers
+  // Check for weaker mentor indicators
   const hasMentorFields = keys.some(key => {
     const lowerKey = key.toLowerCase();
-    return lowerKey.includes('have you mentored before') ||
-           lowerKey.includes('your mentoring style') ||
-           lowerKey.includes('what do you hope to gain from being a mentor') ||
-           lowerKey.includes('early-career') ||
-           lowerKey.includes('mid-level') ||
-           lowerKey.includes('senior stretch role') ||
-           lowerKey.includes('what type of meeting style') ||
-           lowerKey.includes('how would you describe your energy as a mentor') ||
-           lowerKey.includes('mentor') && !lowerKey.includes('mentee');
+    return lowerKey.includes('your mentoring style') ||
+           lowerKey.includes('how would you describe your energy as a mentor');
   });
 
-  // If we don't find specific indicators, check the data content patterns
-  if (!hasMenteeFields && !hasMentorFields) {
-    // Look for role column with flexible matching
-    const hasRoleColumn = keys.some(key => {
-      const lowerKey = key.toLowerCase();
-      return lowerKey.includes('current role') ||
-             lowerKey.includes('role at') ||
-             lowerKey.includes('your role') ||
-             lowerKey.includes('position');
-    });
-
-    // Look for mentee content patterns - someone who wants to learn
-    const hasLearningContent = Object.values(row).some(value => {
-      if (!value) return false;
-      const lowerValue = value.toLowerCase();
-      return lowerValue.includes('learn') ||
-             lowerValue.includes('guidance') ||
-             lowerValue.includes('development') ||
-             lowerValue.includes('skill') ||
-             lowerValue.includes('grow') ||
-             lowerValue.includes('improve');
-    });
-
-    // Look for motivation/development fields
-    const hasMotivationField = keys.some(key => {
-      const lowerKey = key.toLowerCase();
-      return lowerKey.includes('motivation') ||
-             lowerKey.includes('why') ||
-             lowerKey.includes('goal') ||
-             lowerKey.includes('development');
-    });
-
-    // If we have a role column and learning/motivation content, assume mentee
-    if (hasRoleColumn && (hasLearningContent || hasMotivationField)) {
-      return 'mentee';
-    }
-
-    // If we can't determine from structure, default to mentee if row has substantial data
-    const hasSubstantialData = Object.values(row).filter(v => v && v.trim().length > 0).length >= 3;
-    if (hasSubstantialData) {
-      return 'mentee';
-    }
+  if (hasMenteeFields) {
+    console.log('identifyRowType - detected as MENTEE');
+    return 'mentee';
   }
 
-  if (hasMenteeFields) return 'mentee';
-  if (hasMentorFields) return 'mentor';
+  if (hasMentorFields) {
+    console.log('identifyRowType - detected as MENTOR (weak indicators)');
+    return 'mentor';
+  }
+
+  // Last resort fallback
+  const hasSubstantialData = Object.values(row).filter(v => v && v.trim().length > 0).length >= 3;
+  if (hasSubstantialData) {
+    console.log('identifyRowType - detected as MENTEE (fallback - no clear indicators)');
+    return 'mentee';
+  }
+
+  console.log('identifyRowType - UNKNOWN');
   return 'unknown';
 }
 
@@ -471,6 +476,36 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
   };
 }
 
+// Parse Excel file to array of row objects
+async function parseExcelFile(file: File): Promise<Record<string, string>[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+  // Get the first sheet
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+
+  // Convert to JSON with header row
+  const jsonData = XLSX.utils.sheet_to_json<Record<string, string>>(worksheet, {
+    raw: false,  // Convert all values to strings
+    defval: ''   // Default value for empty cells
+  });
+
+  return jsonData;
+}
+
+// Check if file is an Excel format
+function isExcelFile(file: File): boolean {
+  const excelTypes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
+  ];
+  const excelExtensions = ['.xlsx', '.xls'];
+
+  return excelTypes.includes(file.type) ||
+         excelExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+}
+
 // Main data import function
 export async function importMentoringData(file: File): Promise<ImportResult> {
   const errors: string[] = [];
@@ -479,8 +514,19 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
   const mentors: MentorData[] = [];
 
   try {
-    const text = await file.text();
-    const rows = parseCSV(text);
+    let rows: Record<string, string>[];
+
+    // Handle Excel files differently from CSV
+    if (isExcelFile(file)) {
+      console.log('Parsing Excel file...');
+      rows = await parseExcelFile(file);
+    } else {
+      console.log('Parsing CSV file...');
+      const text = await file.text();
+      rows = parseCSV(text);
+    }
+
+    console.log('Parsed rows:', rows.length, 'First row keys:', rows[0] ? Object.keys(rows[0]).slice(0, 5) : 'none');
 
     if (rows.length === 0) {
       errors.push("No data found in file");
@@ -491,7 +537,7 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
     rows.forEach((row, index) => {
       const rowType = identifyRowType(row);
 
-      if (rowType === 'mentee') {
+      if (rowType === 'mentee' || rowType === 'both') {
         const mentee = parseMenteeRow(row);
         if (mentee) {
           // Validate required fields
@@ -505,7 +551,9 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
         } else {
           warnings.push(`Row ${index + 2}: Could not parse mentee data`);
         }
-      } else if (rowType === 'mentor') {
+      }
+
+      if (rowType === 'mentor' || rowType === 'both') {
         const mentor = parseMentorRow(row);
         if (mentor) {
           // Validate required fields
@@ -519,7 +567,9 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
         } else {
           warnings.push(`Row ${index + 2}: Could not parse mentor data`);
         }
-      } else {
+      }
+
+      if (rowType === 'unknown') {
         warnings.push(`Row ${index + 2}: Could not identify as mentor or mentee`);
       }
     });
