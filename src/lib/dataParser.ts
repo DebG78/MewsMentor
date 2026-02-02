@@ -445,8 +445,8 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
     career_change: !!row["Career change or industry switch"],
     health_challenges: !!row["Managing health challenges (physical or mental)"],
     stepping_into_leadership: !!row["Stepping into leadership for the first time"],
-    promotions: !!row["Promotions"],
-    internal_moves: !!row["Internal moves"],
+    promotions: !!row["Promotions"] || !!row["Working towards a promotion"],
+    internal_moves: !!row["Internal moves"] || !!row["Thinking about an internal move"],
     other_experience: row["You picked Other - we'd love to hear more. What experience would you add?_1"],
 
     topics_to_mentor: topicsToMentor,
