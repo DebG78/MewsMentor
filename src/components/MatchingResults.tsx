@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { MatchingOutput, MatchingResult, ImportResult, MatchingHistoryEntry, Cohort } from "@/types/mentoring";
 import { performBatchMatching, performTop3Matching } from "@/lib/matchingEngine";
+import { getActiveMatchingModels, getDefaultMatchingModel } from "@/lib/matchingModelService";
+import type { MatchingModel } from "@/types/matching";
 import { saveMatchesToCohort } from "@/lib/cohortManager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,12 +12,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users,
   Target,
   CheckCircle,
   AlertTriangle,
-  ArrowRight,
   Clock,
   Globe,
   MessageCircle,
@@ -40,6 +42,42 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
+  // Model selection state
+  const [activeModels, setActiveModels] = useState<MatchingModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState<MatchingModel | null>(null);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  // Fetch active matching models on mount
+  useEffect(() => {
+    const loadModels = async () => {
+      setIsLoadingModels(true);
+      try {
+        const [models, defaultModel] = await Promise.all([
+          getActiveMatchingModels(),
+          getDefaultMatchingModel()
+        ]);
+        setActiveModels(models);
+
+        // Pre-select default model if exists, otherwise first active model
+        if (defaultModel && defaultModel.status === 'active') {
+          setSelectedModel(defaultModel);
+        } else if (models.length > 0) {
+          setSelectedModel(models[0]);
+        }
+      } catch (error) {
+        console.error("Error loading matching models:", error);
+        toast({
+          variant: "destructive",
+          title: "Failed to load matching models",
+          description: "Please try again or contact support",
+        });
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+    loadModels();
+  }, [toast]);
+
   const runMatching = async (mode: "batch" | "top3_per_mentee") => {
     setIsMatching(true);
     setSelectedMode(mode);
@@ -55,11 +93,13 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
       // Add timestamp to the result
       result.timestamp = new Date().toISOString();
 
+      const modelInfo = selectedModel ? ` using "${selectedModel.name}"` : "";
+
       if (mode === "top3_per_mentee") {
         // For Top 3 mode, pass results to parent and close dialog
         toast({
           title: "Matching complete",
-          description: `Generated ${result.results.length} match recommendations`,
+          description: `Generated ${result.results.length} match recommendations${modelInfo}`,
         });
         onTop3ResultsReady?.(result);
       } else {
@@ -67,7 +107,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
         setMatchingOutput(result);
         toast({
           title: "Matching complete",
-          description: `Generated ${result.results.length} match recommendations (not saved yet)`,
+          description: `Generated ${result.results.length} match recommendations${modelInfo} (not saved yet)`,
         });
       }
     } catch (error) {
@@ -136,12 +176,53 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
               AI Matching Engine
             </CardTitle>
             <CardDescription>
-              Run the matching algorithm to find optimal mentor-mentee pairs based on your criteria.
+              Run the matching algorithm to find optimal mentor-mentee pairs.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Model Selection Dropdown */}
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium whitespace-nowrap">Matching Model:</label>
+              {isLoadingModels ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                  <span className="text-sm text-muted-foreground">Loading...</span>
+                </div>
+              ) : activeModels.length === 0 ? (
+                <Alert variant="destructive" className="py-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    No active models.{" "}
+                    <a href="/admin/mentoring/matching-models" className="underline font-medium">
+                      Configure one
+                    </a>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Select
+                  value={selectedModel?.id || ""}
+                  onValueChange={(value) => {
+                    const model = activeModels.find(m => m.id === value);
+                    if (model) setSelectedModel(model);
+                  }}
+                >
+                  <SelectTrigger className="w-[280px]">
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name} v{model.version}
+                        {model.is_default && " (Default)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
             {/* Statistics */}
-            <div className="grid md:grid-cols-4 gap-4">
+                <div className="grid md:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
@@ -217,7 +298,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                     <Button
                       onClick={() => runMatching("batch")}
                       className="w-full"
-                      disabled={isMatching}
+                      disabled={isMatching || !selectedModel}
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Run Batch Assignment
@@ -243,7 +324,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                       onClick={() => runMatching("top3_per_mentee")}
                       className="w-full"
                       variant="outline"
-                      disabled={isMatching}
+                      disabled={isMatching || !selectedModel}
                     >
                       <Target className="h-4 w-4 mr-2" />
                       Show Top 3 Options
