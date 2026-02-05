@@ -177,6 +177,9 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
         await refreshCohorts();
         setSelectedCohort(updatedCohort);
         onCohortSelected?.(updatedCohort);
+
+        // Clear the import state before closing the dialog
+        setPendingImportResult(null);
         setIsImportDialogOpen(false);
 
         toast({
@@ -328,7 +331,13 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
           <div className="flex items-center gap-2">
             <Dialog
               open={isImportDialogOpen}
-              onOpenChange={setIsImportDialogOpen}
+              onOpenChange={(open) => {
+                setIsImportDialogOpen(open);
+                // Clear import state when dialog is closed
+                if (!open) {
+                  setPendingImportResult(null);
+                }
+              }}
             >
               <DialogTrigger asChild>
                 <Button>

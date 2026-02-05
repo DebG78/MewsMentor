@@ -32,6 +32,7 @@ import { Cohort } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
 import { ManualMatchSelection } from "@/components/ManualMatchSelection";
+import { MentorCentricMatchSelection } from "@/components/MentorCentricMatchSelection";
 import { saveMatchesToCohort } from "@/lib/cohortManager";
 
 export default function CohortDetail() {
@@ -45,6 +46,7 @@ export default function CohortDetail() {
   const [matchingKey, setMatchingKey] = useState(0);
   const [pendingTop3Results, setPendingTop3Results] = useState<any | null>(null);
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
+  const [matchViewMode, setMatchViewMode] = useState<'mentee-centric' | 'mentor-centric'>('mentor-centric');
 
   useEffect(() => {
     loadCohort();
@@ -480,11 +482,46 @@ export default function CohortDetail() {
         {(pendingTop3Results || (cohort.matches && cohort.matches.results && cohort.matches.results.length > 0)) && (
           <TabsContent value="matches">
             {pendingTop3Results ? (
-              <ManualMatchSelection
-                matchingOutput={pendingTop3Results}
-                onSelectionsApproved={handleManualSelectionsApproved}
-                onCancel={handleCancelManualSelection}
-              />
+              <div className="space-y-4">
+                {/* View Mode Toggle */}
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Choose how to view and assign matches
+                  </p>
+                  <div className="flex gap-1 p-1 bg-muted rounded-lg">
+                    <Button
+                      size="sm"
+                      variant={matchViewMode === 'mentor-centric' ? 'default' : 'ghost'}
+                      onClick={() => setMatchViewMode('mentor-centric')}
+                    >
+                      By Mentor
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={matchViewMode === 'mentee-centric' ? 'default' : 'ghost'}
+                      onClick={() => setMatchViewMode('mentee-centric')}
+                    >
+                      By Mentee
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Render based on view mode */}
+                {matchViewMode === 'mentor-centric' ? (
+                  <MentorCentricMatchSelection
+                    matchingOutput={pendingTop3Results}
+                    mentors={cohort.mentors}
+                    onSelectionsApproved={handleManualSelectionsApproved}
+                    onCancel={handleCancelManualSelection}
+                  />
+                ) : (
+                  <ManualMatchSelection
+                    matchingOutput={pendingTop3Results}
+                    onSelectionsApproved={handleManualSelectionsApproved}
+                    onCancel={handleCancelManualSelection}
+                  />
+                )}
+              </div>
             ) : (
               <div className="space-y-6">
                 {/* Approved Matches Section */}
