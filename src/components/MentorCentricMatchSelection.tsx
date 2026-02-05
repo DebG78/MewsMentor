@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Collapsible,
   CollapsibleContent,
@@ -23,6 +24,7 @@ import {
   AlertTriangle,
   MapPin,
   User,
+  MessageSquare,
 } from "lucide-react";
 import { MatchingOutput, MentorData } from "@/types/mentoring";
 import {
@@ -42,7 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 interface MentorCentricMatchSelectionProps {
   matchingOutput: MatchingOutput;
   mentors: MentorData[];
-  onSelectionsApproved: (selections: Record<string, string>) => void;
+  onSelectionsApproved: (selections: Record<string, string>, comments?: Record<string, string>) => void;
   onCancel: () => void;
 }
 
@@ -76,6 +78,9 @@ export function MentorCentricMatchSelection({
     mentor: MentorCentricMatch;
     mentee: PotentialMentee;
   } | null>(null);
+
+  // Track comments: key is `${mentorId}_${menteeId}`, value is comment text
+  const [comments, setComments] = useState<Map<string, string>>(() => new Map());
 
   // Build capacity map
   const mentorCapacities = useMemo(() => {
@@ -172,6 +177,23 @@ export function MentorCentricMatchSelection({
     setDetailDialogOpen(true);
   };
 
+  const handleCommentChange = (mentorId: string, menteeId: string, comment: string) => {
+    const key = `${mentorId}_${menteeId}`;
+    setComments((prev) => {
+      const next = new Map(prev);
+      if (comment.trim()) {
+        next.set(key, comment);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  };
+
+  const getComment = (mentorId: string, menteeId: string): string => {
+    return comments.get(`${mentorId}_${menteeId}`) || "";
+  };
+
   const handleApprove = () => {
     if (!validation.isValid) {
       toast({
@@ -193,13 +215,20 @@ export function MentorCentricMatchSelection({
 
     // Convert Map<mentorId, Set<menteeId>> to Record<menteeId, mentorId>
     const result: Record<string, string> = {};
+    const matchComments: Record<string, string> = {};
+
     selections.forEach((menteeSet, mentorId) => {
       menteeSet.forEach((menteeId) => {
         result[menteeId] = mentorId;
+        // Include comment if one exists
+        const comment = getComment(mentorId, menteeId);
+        if (comment) {
+          matchComments[menteeId] = comment;
+        }
       });
     });
 
-    onSelectionsApproved(result);
+    onSelectionsApproved(result, Object.keys(matchComments).length > 0 ? matchComments : undefined);
   };
 
   return (
@@ -302,6 +331,8 @@ export function MentorCentricMatchSelection({
                     handleToggleMentee(mentor.mentor_id, menteeId)
                   }
                   onShowDetails={(mentee) => handleShowDetails(mentor, mentee)}
+                  getComment={(menteeId) => getComment(mentor.mentor_id, menteeId)}
+                  onCommentChange={(menteeId, comment) => handleCommentChange(mentor.mentor_id, menteeId, comment)}
                 />
               ))}
             </div>
@@ -370,6 +401,8 @@ interface MentorCardProps {
   isOverCapacity: boolean;
   onToggleMentee: (menteeId: string) => void;
   onShowDetails: (mentee: PotentialMentee) => void;
+  getComment: (menteeId: string) => string;
+  onCommentChange: (menteeId: string, comment: string) => void;
 }
 
 function MentorCard({
@@ -382,6 +415,8 @@ function MentorCard({
   isOverCapacity,
   onToggleMentee,
   onShowDetails,
+  getComment,
+  onCommentChange,
 }: MentorCardProps) {
   const selectedCount = selectedMentees.size;
   const capacityUsed = selectedCount;
@@ -489,34 +524,52 @@ function MentorCard({
                           className="mt-1"
                         />
 
-                        <div
-                          className="flex-1 cursor-pointer"
-                          onClick={() => onShowDetails(mentee)}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium">
-                              {mentee.mentee_name}
-                            </span>
-                            <ScoreBadge score={mentee.score.total_score} size="sm" />
-                            <RankBadge rank={mentee.rank_for_this_mentee} />
-                            {isSelectedElsewhere && (
-                              <Badge variant="outline" className="text-xs">
-                                Assigned elsewhere
-                              </Badge>
-                            )}
-                            {hasConflict && (
-                              <Badge variant="destructive" className="text-xs">
-                                Conflict
-                              </Badge>
-                            )}
+                        <div className="flex-1">
+                          <div
+                            className="cursor-pointer"
+                            onClick={() => onShowDetails(mentee)}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium">
+                                {mentee.mentee_name}
+                              </span>
+                              <ScoreBadge score={mentee.score.total_score} size="sm" />
+                              <RankBadge rank={mentee.rank_for_this_mentee} />
+                              {isSelectedElsewhere && (
+                                <Badge variant="outline" className="text-xs">
+                                  Assigned elsewhere
+                                </Badge>
+                              )}
+                              {hasConflict && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Conflict
+                                </Badge>
+                              )}
+                            </div>
+
+                            <ScoreBreakdownVisual
+                              score={mentee.score}
+                              variant="compact"
+                              showReasons
+                              showRisks
+                            />
                           </div>
 
-                          <ScoreBreakdownVisual
-                            score={mentee.score}
-                            variant="compact"
-                            showReasons
-                            showRisks
-                          />
+                          {/* Comment input - shown when selected */}
+                          {isSelected && (
+                            <div className="mt-3 pt-3 border-t border-green-200">
+                              <div className="flex items-start gap-2">
+                                <MessageSquare className="w-4 h-4 text-muted-foreground mt-2 flex-shrink-0" />
+                                <Textarea
+                                  placeholder="Add a note about this match (optional)..."
+                                  value={getComment(mentee.mentee_id)}
+                                  onChange={(e) => onCommentChange(mentee.mentee_id, e.target.value)}
+                                  className="min-h-[60px] text-sm resize-none"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

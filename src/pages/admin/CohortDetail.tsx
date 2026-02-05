@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -26,14 +27,44 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ArrowLeft, MoreHorizontal, Eye, Edit, CheckCircle, Users, UserCheck, Target } from "lucide-react";
-import { getCohortById, calculateCohortStats, validateCohortForMatching } from "@/lib/cohortManager";
-import { Cohort } from "@/types/mentoring";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  ArrowLeft,
+  MoreHorizontal,
+  Eye,
+  Edit,
+  CheckCircle,
+  Users,
+  UserCheck,
+  Target,
+  Upload,
+  Play,
+  Pause,
+  Square,
+  Trash2,
+  AlertTriangle,
+  UserPlus,
+} from "lucide-react";
+import {
+  getCohortById,
+  calculateCohortStats,
+  validateCohortForMatching,
+  updateCohort,
+  deleteCohort,
+  getCohortStatusInfo,
+  addImportDataToCohort,
+  saveMatchesToCohort,
+} from "@/lib/cohortManager";
+import { updateMenteeProfile, updateMentorProfile } from "@/lib/supabaseService";
+import { Cohort, ImportResult } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
 import { ManualMatchSelection } from "@/components/ManualMatchSelection";
 import { MentorCentricMatchSelection } from "@/components/MentorCentricMatchSelection";
-import { saveMatchesToCohort } from "@/lib/cohortManager";
+import { DataImport } from "@/components/DataImport";
+import { ProfileModal } from "@/components/ProfileModal";
+import { ProfileEditForm } from "@/components/ProfileEditForm";
+import { MenteeData, MentorData } from "@/types/mentoring";
 
 export default function CohortDetail() {
   const { cohortId, tab } = useParams<{ cohortId: string; tab?: string }>();
@@ -47,6 +78,10 @@ export default function CohortDetail() {
   const [pendingTop3Results, setPendingTop3Results] = useState<any | null>(null);
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
   const [matchViewMode, setMatchViewMode] = useState<'mentee-centric' | 'mentor-centric'>('mentor-centric');
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [pendingImportResult, setPendingImportResult] = useState<ImportResult | null>(null);
+  const [viewingProfile, setViewingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
+  const [editingProfile, setEditingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
 
   useEffect(() => {
     loadCohort();
@@ -94,6 +129,84 @@ export default function CohortDetail() {
     }
   };
 
+  const handleDataImported = async (importData: ImportResult) => {
+    if (!cohort) return;
+
+    try {
+      const updatedCohort = await addImportDataToCohort(cohort.id, importData);
+      if (updatedCohort) {
+        setCohort(updatedCohort);
+        setPendingImportResult(null);
+        setIsImportDialogOpen(false);
+
+        toast({
+          title: "Data added to cohort",
+          description: `Added ${importData.mentees.length} mentees and ${importData.mentors.length} mentors`,
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to add data",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+      });
+    }
+  };
+
+  const handleStatusChange = async (newStatus: Cohort['status']) => {
+    if (!cohort) return;
+
+    try {
+      const updatedCohort = await updateCohort(cohort.id, { status: newStatus });
+      if (updatedCohort) {
+        setCohort(updatedCohort);
+
+        if (newStatus === 'completed') {
+          toast({
+            title: "Cohort completed",
+            description: "All mentees and mentors have been moved to the unassigned area.",
+          });
+        } else {
+          toast({
+            title: "Status updated",
+            description: `Cohort status changed to ${newStatus}`,
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update status",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+      });
+    }
+  };
+
+  const handleDeleteCohort = async () => {
+    if (!cohort) return;
+
+    if (!window.confirm(`Are you sure you want to delete "${cohort.name}"? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const success = await deleteCohort(cohort.id);
+      if (success) {
+        toast({
+          title: "Cohort deleted",
+          description: "Cohort has been removed successfully",
+        });
+        navigate("/admin/mentoring/cohorts");
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to delete cohort",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+      });
+    }
+  };
+
   const handleTop3ResultsReady = (results: any) => {
     setPendingTop3Results(results);
     setManualSelections({});
@@ -101,7 +214,7 @@ export default function CohortDetail() {
     setActiveTab("matches");
   };
 
-  const handleManualSelectionsApproved = async (selections: Record<string, string>) => {
+  const handleManualSelectionsApproved = async (selections: Record<string, string>, comments?: Record<string, string>) => {
     if (!pendingTop3Results || !cohort) return;
 
     // Create a modified matching output with user's selections
@@ -118,7 +231,9 @@ export default function CohortDetail() {
               ...result,
               proposed_assignment: {
                 mentor_id: selectedRecommendation.mentor_id,
-                mentor_name: selectedRecommendation.mentor_name
+                mentor_name: selectedRecommendation.mentor_name,
+                // Include comment if provided
+                ...(comments?.[result.mentee_id] && { comment: comments[result.mentee_id] })
               }
             };
           }
@@ -199,6 +314,60 @@ export default function CohortDetail() {
     setActiveTab("matches");
   };
 
+  const handleSaveProfile = async (updatedProfile: MenteeData | MentorData) => {
+    if (!cohort || !editingProfile) return;
+
+    try {
+      let result: { success: boolean; error?: string };
+
+      if (editingProfile.type === 'mentee') {
+        const menteeProfile = updatedProfile as MenteeData;
+        result = await updateMenteeProfile(menteeProfile.id, {
+          role: menteeProfile.role,
+          experience_years: menteeProfile.experience_years,
+          location_timezone: menteeProfile.location_timezone,
+          topics_to_learn: menteeProfile.topics_to_learn,
+          meeting_frequency: menteeProfile.meeting_frequency,
+          languages: menteeProfile.languages,
+          industry: menteeProfile.industry,
+        });
+      } else {
+        const mentorProfile = updatedProfile as MentorData;
+        result = await updateMentorProfile(mentorProfile.id, {
+          role: mentorProfile.role,
+          experience_years: mentorProfile.experience_years,
+          location_timezone: mentorProfile.location_timezone,
+          topics_to_mentor: mentorProfile.topics_to_mentor,
+          capacity_remaining: mentorProfile.capacity_remaining,
+          meeting_frequency: mentorProfile.meeting_frequency,
+          languages: mentorProfile.languages,
+          industry: mentorProfile.industry,
+        });
+      }
+
+      if (result.success) {
+        // Reload cohort to get updated data
+        const refreshedCohort = await getCohortById(cohort.id);
+        if (refreshedCohort) {
+          setCohort(refreshedCohort);
+        }
+        setEditingProfile(null);
+        toast({
+          title: "Profile updated",
+          description: `${editingProfile.type === 'mentee' ? 'Mentee' : 'Mentor'} profile has been updated`,
+        });
+      } else {
+        throw new Error(result.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update profile",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -217,6 +386,8 @@ export default function CohortDetail() {
 
   const stats = calculateCohortStats(cohort);
   const validation = validateCohortForMatching(cohort);
+  const statusInfo = getCohortStatusInfo(cohort.status);
+  const isEmpty = cohort.mentees.length === 0 && cohort.mentors.length === 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -226,105 +397,176 @@ export default function CohortDetail() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate(`/admin/mentoring/cohorts/${cohortId}`)}
+            onClick={() => navigate("/admin/mentoring/cohorts")}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Cohort
+            Back to Cohorts
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{cohort.name}</h1>
-            <p className="text-muted-foreground">{cohort.description}</p>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">{cohort.name}</h1>
+              <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
+            </div>
+            {cohort.description && (
+              <p className="text-muted-foreground text-sm">{cohort.description}</p>
+            )}
           </div>
         </div>
-        {validation.isReady && (
-          <Dialog open={isMatchingDialogOpen} onOpenChange={handleDialogOpenChange}>
+
+        <div className="flex items-center gap-2">
+          {/* Add Data Button */}
+          <Dialog
+            open={isImportDialogOpen}
+            onOpenChange={(open) => {
+              setIsImportDialogOpen(open);
+              if (!open) setPendingImportResult(null);
+            }}
+          >
             <DialogTrigger asChild>
-              <Button>
-                <Target className="h-4 w-4 mr-2" />
-                Start Matching
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Add Data
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col" onInteractOutside={(e) => e.preventDefault()}>
               <DialogHeader>
-                <DialogTitle>Run Matching Algorithm</DialogTitle>
+                <DialogTitle>Add Data to "{cohort.name}"</DialogTitle>
                 <DialogDescription>
-                  Generate match recommendations for "{cohort.name}"
+                  Upload mentor and mentee data to add to this cohort.
                 </DialogDescription>
               </DialogHeader>
-              <MatchingResults
-                key={matchingKey}
-                importedData={{ mentees: cohort.mentees, mentors: cohort.mentors, errors: [], warnings: [] }}
-                cohort={cohort}
-                onCohortUpdated={(updated) => {
-                  setCohort(updated);
-                }}
-                onMatchesApproved={(matches) => {
-                  toast({
-                    title: "Matches approved",
-                    description: "The matches have been approved and saved",
-                  });
-                  setIsMatchingDialogOpen(false);
-                }}
-                onTop3ResultsReady={handleTop3ResultsReady}
-              />
+              <div className="flex-1 overflow-y-auto">
+                <DataImport
+                  onDataImported={handleDataImported}
+                  importResult={pendingImportResult}
+                  onImportResultChange={setPendingImportResult}
+                />
+              </div>
             </DialogContent>
           </Dialog>
-        )}
+
+          {/* Start Matching Button */}
+          {validation.isReady && (
+            <Dialog open={isMatchingDialogOpen} onOpenChange={handleDialogOpenChange}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Target className="h-4 w-4 mr-2" />
+                  Start Matching
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Run Matching Algorithm</DialogTitle>
+                  <DialogDescription>
+                    Generate match recommendations for "{cohort.name}"
+                  </DialogDescription>
+                </DialogHeader>
+                <MatchingResults
+                  key={matchingKey}
+                  importedData={{ mentees: cohort.mentees, mentors: cohort.mentors, errors: [], warnings: [] }}
+                  cohort={cohort}
+                  onCohortUpdated={(updated) => {
+                    setCohort(updated);
+                  }}
+                  onMatchesApproved={(matches) => {
+                    toast({
+                      title: "Matches approved",
+                      description: "The matches have been approved and saved",
+                    });
+                    setIsMatchingDialogOpen(false);
+                  }}
+                  onTop3ResultsReady={handleTop3ResultsReady}
+                />
+              </DialogContent>
+            </Dialog>
+          )}
+
+          {/* Actions Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleStatusChange('active')}>
+                <Play className="h-4 w-4 mr-2" />
+                Mark Active
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleStatusChange('paused')}>
+                <Pause className="h-4 w-4 mr-2" />
+                Pause
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                if (window.confirm('Mark as completed? All participants will be moved to unassigned.')) {
+                  handleStatusChange('completed');
+                }
+              }}>
+                <Square className="h-4 w-4 mr-2" />
+                Mark Completed
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleDeleteCohort} className="text-destructive">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Cohort
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {/* Stats Summary */}
-      <div className="grid md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-600" />
-              <div>
-                <p className="text-2xl font-bold">{stats.total_mentees}</p>
-                <p className="text-sm text-muted-foreground">Mentees</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <UserCheck className="h-4 w-4 text-green-600" />
-              <div>
-                <p className="text-2xl font-bold">{stats.total_mentors}</p>
-                <p className="text-sm text-muted-foreground">Mentors</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-purple-600" />
-              <div>
-                <p className="text-2xl font-bold">{stats.total_capacity}</p>
-                <p className="text-sm text-muted-foreground">Capacity</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-indigo-600" />
-              <div>
-                <p className="text-2xl font-bold">{stats.matches_approved}</p>
-                <p className="text-sm text-muted-foreground">Approved Matches</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Compact Stats Row */}
+      <div className="flex items-center gap-6 px-4 py-3 bg-muted/50 rounded-lg text-sm">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-blue-600" />
+          <span className="font-semibold">{stats.total_mentees}</span>
+          <span className="text-muted-foreground">mentees</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <UserCheck className="h-4 w-4 text-green-600" />
+          <span className="font-semibold">{stats.total_mentors}</span>
+          <span className="text-muted-foreground">mentors</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Target className="h-4 w-4 text-purple-600" />
+          <span className="font-semibold">{stats.total_capacity}</span>
+          <span className="text-muted-foreground">capacity</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-indigo-600" />
+          <span className="font-semibold">{stats.matches_approved}</span>
+          <span className="text-muted-foreground">matched</span>
+        </div>
       </div>
 
-      {/* Tables */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {/* Matching Readiness Warning */}
+      {!validation.isReady && !isEmpty && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Not ready for matching:</strong>{" "}
+            {validation.issues.join(", ")}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Empty State or Content */}
+      {isEmpty ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <UserPlus className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No participants yet</h3>
+            <p className="text-muted-foreground text-center mb-4 max-w-md">
+              Add mentees and mentors to this cohort to get started with the matching process.
+            </p>
+            <Button onClick={() => setIsImportDialogOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Add Data
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="mentees">
             Mentees ({cohort.mentees.length})
@@ -393,11 +635,11 @@ export default function CohortDetail() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setViewingProfile({ profile: mentor, type: 'mentor' })}>
                                 <Eye className="w-4 h-4 mr-2" />
                                 View Profile
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setEditingProfile({ profile: mentor, type: 'mentor' })}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit Profile
                               </DropdownMenuItem>
@@ -458,11 +700,11 @@ export default function CohortDetail() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setViewingProfile({ profile: mentee, type: 'mentee' })}>
                                 <Eye className="w-4 h-4 mr-2" />
                                 View Profile
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setEditingProfile({ profile: mentee, type: 'mentee' })}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit Profile
                               </DropdownMenuItem>
@@ -540,6 +782,7 @@ export default function CohortDetail() {
                             <TableHead>Match Score</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Top Reasons</TableHead>
+                            <TableHead>Notes</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -581,6 +824,13 @@ export default function CohortDetail() {
                                           • {reason}
                                         </div>
                                       ))}
+                                  </TableCell>
+                                  <TableCell>
+                                    {assignedMatch.comment && (
+                                      <span className="text-sm text-muted-foreground italic">
+                                        {assignedMatch.comment}
+                                      </span>
+                                    )}
                                   </TableCell>
                                 </TableRow>
                               );
@@ -672,6 +922,44 @@ export default function CohortDetail() {
           </TabsContent>
         )}
       </Tabs>
+      )}
+
+      {/* Profile Modal */}
+      {viewingProfile && (
+        <ProfileModal
+          profile={{
+            ...viewingProfile.profile,
+            // Map id to expected field names for ProfileModal
+            [viewingProfile.type === 'mentee' ? 'mentee_id' : 'mentor_id']: viewingProfile.profile.id,
+            cohort_id: cohort.id
+          }}
+          type={viewingProfile.type}
+          isOpen={!!viewingProfile}
+          onClose={() => setViewingProfile(null)}
+        />
+      )}
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Edit {editingProfile?.type === 'mentee' ? 'Mentee' : 'Mentor'} Profile
+            </DialogTitle>
+            <DialogDescription>
+              Update profile information for {editingProfile?.profile.id}
+            </DialogDescription>
+          </DialogHeader>
+          {editingProfile && (
+            <ProfileEditForm
+              profile={editingProfile.profile}
+              type={editingProfile.type}
+              onSave={handleSaveProfile}
+              onCancel={() => setEditingProfile(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
