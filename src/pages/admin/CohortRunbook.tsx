@@ -70,6 +70,9 @@ import {
   addDocument,
   removeDocument,
   getRunbookProgress,
+  deleteCohortStage,
+  deleteAllCohortStages,
+  completeAllStages,
 } from '@/lib/runbookService';
 import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
@@ -116,6 +119,12 @@ export default function CohortRunbook() {
   const [isAddChecklistDialogOpen, setIsAddChecklistDialogOpen] = useState(false);
   const [selectedStageForChecklist, setSelectedStageForChecklist] = useState<string | null>(null);
   const [newChecklistText, setNewChecklistText] = useState('');
+
+  // Confirmation dialog states
+  const [isDeleteStageDialogOpen, setIsDeleteStageDialogOpen] = useState(false);
+  const [stageToDelete, setStageToDelete] = useState<string | null>(null);
+  const [isDeleteRunbookDialogOpen, setIsDeleteRunbookDialogOpen] = useState(false);
+  const [isCompleteAllDialogOpen, setIsCompleteAllDialogOpen] = useState(false);
 
   useEffect(() => {
     loadCohorts();
@@ -362,6 +371,58 @@ export default function CohortRunbook() {
     }
   };
 
+  const handleDeleteStage = async () => {
+    if (!stageToDelete) return;
+
+    try {
+      await deleteCohortStage(stageToDelete);
+      toast({ title: 'Stage deleted' });
+      setIsDeleteStageDialogOpen(false);
+      setStageToDelete(null);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete stage',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteRunbook = async () => {
+    if (!selectedCohort) return;
+
+    try {
+      await deleteAllCohortStages(selectedCohort);
+      toast({ title: 'Runbook deleted' });
+      setIsDeleteRunbookDialogOpen(false);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete runbook',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCompleteAll = async () => {
+    if (!selectedCohort) return;
+
+    try {
+      await completeAllStages(selectedCohort);
+      toast({ title: 'All stages marked as complete' });
+      setIsCompleteAllDialogOpen(false);
+      loadStages();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to complete all stages',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const getStatusBadge = (status: StageStatus) => {
     const config = statusConfig[status];
     const Icon = config.icon;
@@ -425,6 +486,25 @@ export default function CohortRunbook() {
                   <Progress value={progress.percentComplete} className="h-2" />
                 </div>
                 <div className="text-2xl font-bold">{progress.percentComplete}%</div>
+                <div className="flex gap-2 ml-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsCompleteAllDialogOpen(true)}
+                    disabled={progress.completed === progress.total}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    Mark All Complete
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setIsDeleteRunbookDialogOpen(true)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete Runbook
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -565,6 +645,17 @@ export default function CohortRunbook() {
                             <RotateCcw className="w-3 h-3 mr-1" /> Reset
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive ml-auto"
+                          onClick={() => {
+                            setStageToDelete(stage.id);
+                            setIsDeleteStageDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" /> Delete Stage
+                        </Button>
                       </div>
 
                       {/* Owner and Due Date */}
@@ -764,6 +855,68 @@ export default function CohortRunbook() {
               Cancel
             </Button>
             <Button onClick={handleAddDocument}>Add Document</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Stage Confirmation Dialog */}
+      <Dialog open={isDeleteStageDialogOpen} onOpenChange={setIsDeleteStageDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Stage</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this stage? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteStageDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteStage}>
+              Delete Stage
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Runbook Confirmation Dialog */}
+      <Dialog open={isDeleteRunbookDialogOpen} onOpenChange={setIsDeleteRunbookDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Entire Runbook</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete all stages for this cohort? This will remove all
+              progress, checklists, and documents. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteRunbookDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteRunbook}>
+              Delete Runbook
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Complete All Stages Confirmation Dialog */}
+      <Dialog open={isCompleteAllDialogOpen} onOpenChange={setIsCompleteAllDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark All Stages Complete</DialogTitle>
+            <DialogDescription>
+              This will mark all stages as completed. You can reset individual stages later if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCompleteAllDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCompleteAll}>
+              <CheckCircle2 className="w-4 h-4 mr-1" />
+              Complete All
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

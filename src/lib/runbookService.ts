@@ -144,6 +144,39 @@ export async function deleteCohortStage(stageId: string): Promise<void> {
   }
 }
 
+/**
+ * Delete all stages for a cohort (delete entire runbook)
+ */
+export async function deleteAllCohortStages(cohortId: string): Promise<void> {
+  const { error } = await supabase
+    .from('cohort_stages')
+    .delete()
+    .eq('cohort_id', cohortId);
+
+  if (error) {
+    console.error('Error deleting all cohort stages:', error);
+    throw error;
+  }
+}
+
+/**
+ * Complete all stages for a cohort at once
+ */
+export async function completeAllStages(cohortId: string): Promise<void> {
+  const { error } = await supabase
+    .from('cohort_stages')
+    .update({
+      status: 'completed',
+      completed_date: new Date().toISOString()
+    })
+    .eq('cohort_id', cohortId);
+
+  if (error) {
+    console.error('Error completing all stages:', error);
+    throw error;
+  }
+}
+
 // ============================================================================
 // STATUS UPDATES
 // ============================================================================
