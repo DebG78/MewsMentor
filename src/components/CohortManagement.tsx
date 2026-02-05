@@ -60,6 +60,7 @@ interface CohortManagementProps {
 }
 
 export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortManagementProps) {
+  const navigate = useNavigate();
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCohort, setSelectedCohort] = useState<Cohort | null>(null);
@@ -157,8 +158,8 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
   };
 
   const handleSelectCohort = (cohort: Cohort) => {
-    setSelectedCohort(cohort);
-    onCohortSelected?.(cohort);
+    // Navigate directly to cohort detail page
+    navigate(`/admin/mentoring/cohort/${cohort.id}/mentees`);
   };
 
   const handleDataImported = async (importData: ImportResult) => {
@@ -530,8 +531,7 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
         </DialogContent>
       </Dialog>
 
-      {!selectedCohort ? (
-        <Card>
+      <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -686,24 +686,6 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
             )}
           </CardContent>
         </Card>
-      ) : (
-        <div>
-          <div className="flex items-center gap-2 mb-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedCohort(null);
-                onCohortSelected?.(null as any);
-                navigate("/admin/mentoring/cohorts");
-              }}
-            >
-              ← Back to Cohorts
-            </Button>
-          </div>
-          <CohortOverview cohort={selectedCohort} />
-        </div>
-      )}
     </div>
   );
 }
