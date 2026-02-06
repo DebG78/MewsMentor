@@ -20,10 +20,14 @@ import {
   TrendingUp,
   Gauge,
   Crown,
+  GraduationCap,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useUser } from '@/contexts/UserContext'
 import { useToast } from '@/hooks/use-toast'
+import { useTheme } from '@/contexts/ThemeContext'
 
 const navItems = [
   {
@@ -111,6 +115,7 @@ export function AdminSidebar() {
   const location = useLocation()
   const { logout } = useUser()
   const { toast } = useToast()
+  const { theme, toggleTheme } = useTheme()
   const [expandedSections, setExpandedSections] = useState<string[]>([
     'Mentoring Program',
     'Analytics',
@@ -145,10 +150,13 @@ export function AdminSidebar() {
   }
 
   return (
-    <div className="w-64 border-r bg-card/50 min-h-screen p-4 flex flex-col">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-1">Admin Panel</h2>
-        <p className="text-sm text-muted-foreground">Manage all programs</p>
+    <div className="w-64 border-r bg-card/50 min-h-screen pt-11 px-4 pb-4 flex flex-col">
+      <div className="mb-6 border-l-4 border-primary pl-3">
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold">MewsMentor</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">Admin</p>
       </div>
 
       <nav className="space-y-1 flex-1">
@@ -224,11 +232,25 @@ export function AdminSidebar() {
         })}
       </nav>
 
-      {/* Logout Button at Bottom */}
+      {/* Bottom Actions */}
       <div className="mt-auto pt-4">
         <Separator className="mb-4" />
         <Button
           variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          onClick={toggleTheme}
+        >
+          {theme === 'light' ? (
+            <Moon className="w-4 h-4 mr-3" />
+          ) : (
+            <Sun className="w-4 h-4 mr-3" />
+          )}
+          <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
           onClick={handleLogout}
         >

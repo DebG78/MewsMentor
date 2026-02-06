@@ -1,7 +1,7 @@
 import { MatchScore } from "@/types/mentoring";
 import { getScoreComponents, ScoreComponent } from "@/utils/matchingDataTransform";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle, AlertTriangle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ScoreBreakdownVisualProps {
@@ -10,6 +10,7 @@ interface ScoreBreakdownVisualProps {
   showReasons?: boolean;
   showRisks?: boolean;
   className?: string;
+  explanation?: string;
 }
 
 /**
@@ -20,7 +21,8 @@ export function ScoreBreakdownVisual({
   variant = 'compact',
   showReasons = true,
   showRisks = true,
-  className
+  className,
+  explanation
 }: ScoreBreakdownVisualProps) {
   const components = getScoreComponents(score);
 
@@ -115,6 +117,22 @@ export function ScoreBreakdownVisual({
                 : `${score.logistics.timezone_mentee} / ${score.logistics.timezone_mentor}`}
             </Badge>
           )}
+          {score.is_embedding_based && (
+            <Badge variant="outline" className="text-xs text-purple-600 border-purple-200">
+              <Sparkles className="w-3 h-3 mr-1" />
+              AI Similarity
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* AI Explanation */}
+      {explanation && (
+        <div className="pt-2 border-t">
+          <p className="text-xs font-medium text-purple-700 mb-1 flex items-center gap-1">
+            <Sparkles className="w-3 h-3" /> AI Match Explanation
+          </p>
+          <p className="text-sm text-gray-600 italic">{explanation}</p>
         </div>
       )}
     </div>

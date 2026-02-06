@@ -528,6 +528,70 @@ export interface Database {
           updated_at?: string
         }
       }
+      profile_embeddings: {
+        Row: {
+          id: string
+          cohort_id: string
+          participant_id: string
+          participant_type: 'mentee' | 'mentor'
+          embedding_text: string
+          embedding: number[]
+          model_name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cohort_id: string
+          participant_id: string
+          participant_type: 'mentee' | 'mentor'
+          embedding_text: string
+          embedding: number[]
+          model_name?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cohort_id?: string
+          participant_id?: string
+          participant_type?: 'mentee' | 'mentor'
+          embedding_text?: string
+          embedding?: number[]
+          model_name?: string
+          created_at?: string
+        }
+      }
+      match_explanations: {
+        Row: {
+          id: string
+          cohort_id: string
+          mentee_id: string
+          mentor_id: string
+          explanation: string
+          model_used: string
+          total_score: number | null
+          generated_at: string
+        }
+        Insert: {
+          id?: string
+          cohort_id: string
+          mentee_id: string
+          mentor_id: string
+          explanation: string
+          model_used?: string
+          total_score?: number | null
+          generated_at?: string
+        }
+        Update: {
+          id?: string
+          cohort_id?: string
+          mentee_id?: string
+          mentor_id?: string
+          explanation?: string
+          model_used?: string
+          total_score?: number | null
+          generated_at?: string
+        }
+      }
       mentee_recommendations: {
         Row: {
           id: string

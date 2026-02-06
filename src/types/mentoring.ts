@@ -118,6 +118,8 @@ export interface MatchScore {
     capacity_remaining?: number;
   };
   icebreaker?: string; // Suggested conversation starter
+  ai_explanation?: string; // LLM-generated match explanation
+  is_embedding_based?: boolean; // Whether semantic similarity used AI embeddings
 }
 
 export interface MatchingResult {
