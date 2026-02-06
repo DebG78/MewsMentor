@@ -68,7 +68,7 @@ export function ScoreBreakdownVisual({
       {/* Individual score bars */}
       <div className="space-y-2">
         {components.map((comp) => (
-          <ScoreBar key={comp.key} component={comp} />
+          <ScoreBar key={comp.key} component={comp} showDescription />
         ))}
       </div>
 
@@ -142,21 +142,28 @@ export function ScoreBreakdownVisual({
 /**
  * Individual score bar component
  */
-function ScoreBar({ component }: { component: ScoreComponent }) {
+function ScoreBar({ component, showDescription = false }: { component: ScoreComponent; showDescription?: boolean }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-24 text-muted-foreground truncate" title={component.label}>
-        {component.label}
-      </span>
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={cn(component.color, "h-full transition-all rounded-full")}
-          style={{ width: `${component.percentage}%` }}
-        />
+    <div className="text-xs">
+      <div className="flex items-center gap-2">
+        <span className="w-24 text-muted-foreground truncate" title={component.description}>
+          {component.label}
+        </span>
+        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={cn(component.color, "h-full transition-all rounded-full")}
+            style={{ width: `${component.percentage}%` }}
+          />
+        </div>
+        <span className="w-12 text-right text-muted-foreground">
+          {component.value}/{component.maxValue}
+        </span>
       </div>
-      <span className="w-12 text-right text-muted-foreground">
-        {component.value}/{component.maxValue}
-      </span>
+      {showDescription && (
+        <p className="text-[11px] text-muted-foreground mt-0.5 ml-[calc(6rem+0.5rem)]">
+          {component.description}
+        </p>
+      )}
     </div>
   );
 }

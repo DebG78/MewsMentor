@@ -189,8 +189,12 @@ export async function updateCohort(id: string, updates: Partial<Cohort>): Promis
     .single()
 
   if (error) {
-    console.error('Error updating cohort:', error)
-    console.error('Update data was:', updateData)
+    console.error('Error updating cohort:', JSON.stringify(error, null, 2))
+    console.error('Error message:', error.message)
+    console.error('Error details:', error.details)
+    console.error('Error hint:', error.hint)
+    console.error('Error code:', error.code)
+    console.error('Update data keys:', Object.keys(updateData))
     console.error('Cohort ID:', id)
     return null
   }
@@ -634,9 +638,17 @@ export async function addMatchingToHistory(cohortId: string, matches: MatchingOu
   // Add to existing history
   const updatedHistory = [...(currentCohort.matching_history || []), historyEntry];
 
-  return updateCohort(cohortId, {
+  const result = await updateCohort(cohortId, {
     matching_history: updatedHistory
   })
+
+  // If matching_history column doesn't exist, just skip it silently
+  if (!result) {
+    console.warn('Could not save matching history (column may not exist in database)');
+    return getCohortById(cohortId);
+  }
+
+  return result;
 }
 
 // Save matching results to cohort
@@ -675,9 +687,10 @@ export async function saveMatchesToCohort(cohortId: string, matches: MatchingOut
 
   console.log('Updating cohort with:', { matches, matching_history: updatedHistory });
 
-  // Validate data can be serialized
+  // Validate data can be serialized and log payload size
   try {
-    JSON.stringify({ matches, matching_history: updatedHistory });
+    const payload = JSON.stringify({ matches, matching_history: updatedHistory });
+    console.log(`Payload size: ${(payload.length / 1024).toFixed(1)}KB, results: ${matches.results?.length || 0}`);
   } catch (serializationError) {
     console.error('Data serialization error:', serializationError);
     return null;
@@ -735,15 +748,27 @@ export async function saveMatchesToCohort(cohortId: string, matches: MatchingOut
       }
     }
 
-    const result = await updateCohort(cohortId, {
+    // Try saving matches and matching_history together first
+    let result = await updateCohort(cohortId, {
       matches,
       matching_history: updatedHistory
     });
 
+    // If the combined update failed, try saving just matches
+    // (matching_history column may not exist in older database schemas)
+    if (!result) {
+      console.warn('Combined update failed, trying to save just matches...');
+      result = await updateCohort(cohortId, { matches });
+
+      if (result) {
+        console.log('Saved matches successfully (matching_history skipped - column may not exist in database)');
+      }
+    }
+
     console.log('updateCohort result:', result);
     return result;
   } catch (error) {
-    console.error('Error in updateCohort:', error);
+    console.error('Error in saveMatchesToCohort:', error);
     return null;
   }
 }

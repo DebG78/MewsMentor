@@ -97,25 +97,38 @@ export async function getOrGenerateExplanation(
 
 /**
  * Batch-generate explanations for multiple matches.
- * Calls getOrGenerateExplanation for each pair sequentially
- * to avoid overwhelming the API.
+ * Processes up to CONCURRENCY matches in parallel for speed.
  */
+const CONCURRENCY = 3;
+
 export async function generateAllExplanations(
   cohortId: string,
   matches: { mentee: MenteeData; mentor: MentorData; score: MatchScore }[],
   onProgress?: (completed: number, total: number) => void,
+  onResult?: (key: string, explanation: string) => void,
 ): Promise<Map<string, string>> {
   const explanations = new Map<string, string>();
+  let completed = 0;
 
-  for (let i = 0; i < matches.length; i++) {
-    const { mentee, mentor, score } = matches[i];
-    try {
-      const explanation = await getOrGenerateExplanation(cohortId, mentee, mentor, score);
-      explanations.set(`${mentee.id}_${mentor.id}`, explanation);
-    } catch (err) {
-      console.warn(`Failed to generate explanation for ${mentee.id}-${mentor.id}:`, err);
+  for (let i = 0; i < matches.length; i += CONCURRENCY) {
+    const batch = matches.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(async ({ mentee, mentor, score }) => {
+        const explanation = await getOrGenerateExplanation(cohortId, mentee, mentor, score);
+        return { key: `${mentee.id}_${mentor.id}`, explanation };
+      }),
+    );
+
+    for (const result of results) {
+      completed++;
+      if (result.status === 'fulfilled') {
+        explanations.set(result.value.key, result.value.explanation);
+        onResult?.(result.value.key, result.value.explanation);
+      } else {
+        console.warn('Failed to generate explanation:', result.reason);
+      }
+      onProgress?.(completed, matches.length);
     }
-    onProgress?.(i + 1, matches.length);
   }
 
   return explanations;

@@ -378,17 +378,41 @@ function parseCapacity(row: Record<string, string>, defaultCapacity: number): nu
     const lowerKey = key.toLowerCase();
     return lowerKey.includes('capacity') ||
            lowerKey.includes('how many mentees') ||
+           lowerKey.includes('how many people') ||
            lowerKey.includes('number of mentees') ||
            lowerKey.includes('mentee slots') ||
-           lowerKey.includes('max mentees');
+           lowerKey.includes('max mentees') ||
+           (lowerKey.includes('how many') && lowerKey.includes('mentor'));
   });
 
   if (capacityKey) {
     const value = row[capacityKey].trim();
+    console.log(`[parseCapacity] Column: "${capacityKey}", Raw value: "${value}"`);
+
+    // Handle range values like "1-2", "0-1", "2-3" — take the higher number
+    const rangeMatch = value.match(/^(\d+)\s*[-–]\s*(\d+)/);
+    if (rangeMatch) {
+      const high = parseInt(rangeMatch[2], 10);
+      const result = Math.max(high, 1); // At least 1 if they signed up
+      console.log(`[parseCapacity] Range detected, using: ${result}`);
+      return result;
+    }
+
+    // Handle "3+" style
+    const plusMatch = value.match(/^(\d+)\s*\+/);
+    if (plusMatch) {
+      return parseInt(plusMatch[1], 10);
+    }
+
     const parsed = parseInt(value, 10);
     if (!isNaN(parsed) && parsed >= 0) {
+      console.log(`[parseCapacity] Parsed: ${parsed}`);
       return parsed;
     }
+
+    console.log(`[parseCapacity] Could not parse value, using default: ${defaultCapacity}`);
+  } else {
+    console.log(`[parseCapacity] No capacity column found in: ${Object.keys(row).slice(0, 5).join(', ')}...`);
   }
 
   return defaultCapacity;
