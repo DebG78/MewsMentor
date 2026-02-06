@@ -135,6 +135,7 @@ export interface MatchingResult {
   proposed_assignment?: {
     mentor_id: string | null;
     mentor_name?: string | null;
+    comment?: string;
   };
 }
 

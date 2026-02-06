@@ -81,6 +81,7 @@ export default function CohortDetail() {
   const [matchViewMode, setMatchViewMode] = useState<'mentee-centric' | 'mentor-centric'>('mentor-centric');
   const [batchDetailResult, setBatchDetailResult] = useState<any | null>(null);
   const [selectedBatchRows, setSelectedBatchRows] = useState<Set<string>>(new Set());
+  const [batchComments, setBatchComments] = useState<Record<string, string>>({});
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [pendingImportResult, setPendingImportResult] = useState<ImportResult | null>(null);
   const [viewingProfile, setViewingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
@@ -877,7 +878,7 @@ export default function CohortDetail() {
                                   selections[r.mentee_id] = r.proposed_assignment.mentor_id;
                                 }
                               });
-                              handleManualSelectionsApproved(selections);
+                              handleManualSelectionsApproved(selections, batchComments);
                             }}
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
@@ -910,6 +911,7 @@ export default function CohortDetail() {
                             <TableHead>Assigned Mentor</TableHead>
                             <TableHead className="text-center">Score</TableHead>
                             <TableHead>Why</TableHead>
+                            <TableHead>Notes</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -956,6 +958,20 @@ export default function CohortDetail() {
                                 </TableCell>
                                 <TableCell className="text-sm text-muted-foreground">
                                   {rec?.score.reasons?.slice(0, 2).join("; ")}
+                                </TableCell>
+                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                  {isSelected && (
+                                    <input
+                                      type="text"
+                                      placeholder="Add notes..."
+                                      className="w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                                      value={batchComments[result.mentee_id] || ""}
+                                      onChange={(e) => setBatchComments(prev => ({
+                                        ...prev,
+                                        [result.mentee_id]: e.target.value
+                                      }))}
+                                    />
+                                  )}
                                 </TableCell>
                               </TableRow>
                             );
