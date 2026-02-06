@@ -1,9 +1,17 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { User, MapPin, Clock, Target, MessageCircle, Heart, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { User, MapPin, Clock, Target, MessageCircle, Heart, AlertCircle, Users } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+
+interface OtherCohortInfo {
+  cohort_id: string;
+  cohort_name: string;
+  cohort_status: string;
+}
 
 interface ProfileModalProps {
   profile: any;
@@ -13,9 +21,57 @@ interface ProfileModalProps {
 }
 
 export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalProps) {
-  if (!profile) return null;
+  const [otherCohorts, setOtherCohorts] = useState<OtherCohortInfo[]>([]);
 
   const isMentee = type === 'mentee';
+  const personId = profile?.[isMentee ? 'mentee_id' : 'mentor_id'];
+  const currentCohortId = profile?.cohort_id;
+  const displayName = profile?.full_name || personId;
+
+  useEffect(() => {
+    if (!isOpen || !personId) {
+      setOtherCohorts([]);
+      return;
+    }
+
+    const fetchOtherCohorts = async () => {
+      const table = isMentee ? 'mentees' : 'mentors';
+      const idColumn = isMentee ? 'mentee_id' : 'mentor_id';
+
+      // Find all cohorts this person belongs to (excluding current)
+      const { data: rows } = await supabase
+        .from(table)
+        .select('cohort_id')
+        .eq(idColumn, personId)
+        .neq('cohort_id', currentCohortId || '');
+
+      if (!rows || rows.length === 0) {
+        setOtherCohorts([]);
+        return;
+      }
+
+      // Fetch cohort names and statuses
+      const cohortIds = rows.map((r: any) => r.cohort_id);
+      const { data: cohorts } = await supabase
+        .from('cohorts')
+        .select('id, name, status')
+        .in('id', cohortIds);
+
+      if (cohorts) {
+        setOtherCohorts(cohorts.map((c: any) => ({
+          cohort_id: c.id,
+          cohort_name: c.name,
+          cohort_status: c.status,
+        })));
+      }
+    };
+
+    fetchOtherCohorts();
+  }, [isOpen, personId, currentCohortId, isMentee]);
+
+  if (!profile) return null;
+
+  const activeCohorts = otherCohorts.filter(c => c.cohort_status === 'active' || c.cohort_status === 'matching');
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -23,11 +79,44 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="w-5 h-5" />
-            {profile[isMentee ? 'mentee_id' : 'mentor_id']} - {isMentee ? 'Mentee' : 'Mentor'} Profile
+            {displayName} - {isMentee ? 'Mentee' : 'Mentor'} Profile
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Cross-cohort participation warning */}
+          {activeCohorts.length > 0 && (
+            <Alert variant="destructive">
+              <Users className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Already in {activeCohorts.length} other active cohort{activeCohorts.length > 1 ? 's' : ''}:</strong>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {activeCohorts.map(c => (
+                    <Badge key={c.cohort_id} variant="outline" className="text-xs">
+                      {c.cohort_name}
+                    </Badge>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Other (non-active) cohort participation */}
+          {otherCohorts.length > 0 && activeCohorts.length < otherCohorts.length && (
+            <Alert>
+              <Users className="h-4 w-4" />
+              <AlertDescription>
+                Also in {otherCohorts.length - activeCohorts.length} other cohort{otherCohorts.length - activeCohorts.length > 1 ? 's' : ''}:
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {otherCohorts.filter(c => c.cohort_status !== 'active' && c.cohort_status !== 'matching').map(c => (
+                    <Badge key={c.cohort_id} variant="secondary" className="text-xs">
+                      {c.cohort_name} ({c.cohort_status})
+                    </Badge>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
           {/* Basic Information */}
           <Card>
             <CardHeader>
@@ -313,7 +402,8 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="text-sm text-muted-foreground">
-                <p>Profile ID: {profile[isMentee ? 'mentee_id' : 'mentor_id']}</p>
+                {profile.full_name && <p>Name: {profile.full_name}</p>}
+                <p>ID: {profile[isMentee ? 'mentee_id' : 'mentor_id']}</p>
                 <p>Cohort: {profile.cohort_id}</p>
                 {profile.created_at && (
                   <p>Created: {new Date(profile.created_at).toLocaleDateString()}</p>

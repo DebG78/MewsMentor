@@ -292,7 +292,7 @@ export function MentorCentricMatchSelection({
               <p className="text-xl font-bold text-indigo-600">
                 {mentors.reduce((sum, m) => sum + m.capacity_remaining, 0)}
               </p>
-              <p className="text-xs text-muted-foreground">Total Capacity</p>
+              <p className="text-xs text-muted-foreground">Mentor Slots</p>
             </div>
           </div>
 

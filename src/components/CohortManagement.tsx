@@ -441,7 +441,7 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
                 <Target className="h-4 w-4 text-purple-600" />
                 <div>
                   <p className="text-2xl font-bold">{stats.total_capacity}</p>
-                  <p className="text-sm text-muted-foreground">Capacity</p>
+                  <p className="text-sm text-muted-foreground">Mentor Slots</p>
                 </div>
               </div>
             </CardContent>

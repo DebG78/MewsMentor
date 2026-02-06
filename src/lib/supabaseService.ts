@@ -34,6 +34,7 @@ function dbCohortToCohort(dbCohort: CohortRow, mentees: MenteeData[], mentors: M
 function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
   return {
     id: dbMentee.mentee_id,
+    name: dbMentee.full_name || dbMentee.mentee_id,
     role: dbMentee.role,
     experience_years: dbMentee.experience_years,
     location_timezone: dbMentee.location_timezone,
@@ -48,6 +49,7 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
 function dbMentorToMentor(dbMentor: MentorRow): MentorData {
   return {
     id: dbMentor.mentor_id,
+    name: dbMentor.full_name || dbMentor.mentor_id,
     role: dbMentor.role,
     experience_years: dbMentor.experience_years,
     location_timezone: dbMentor.location_timezone,
@@ -394,6 +396,7 @@ export async function addImportDataToCohort(
       return {
         cohort_id: cohortId,
         mentee_id: mentee.id,
+        full_name: mentee.name || mentee.id,
         role: sanitizeText(mentee.role) || 'Pending role',
         experience_years: parseExperienceYears(mentee.experience_years),
         location_timezone: sanitizeText(mentee.location_timezone) || 'Not specified',
@@ -550,6 +553,7 @@ export async function addImportDataToCohort(
       return {
         cohort_id: cohortId,
         mentor_id: mentor.id,
+        full_name: mentor.name || mentor.id,
         role: sanitizeText(mentor.role) || 'Pending role',
         experience_years: parseExperienceYears(mentor.experience_years),
         location_timezone: sanitizeText(mentor.location_timezone) || 'Not specified',

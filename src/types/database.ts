@@ -70,6 +70,7 @@ export interface Database {
           id: string
           cohort_id: string
           mentee_id: string
+          full_name: string | null
           pronouns: string | null
           role: string
           experience_years: number
@@ -99,6 +100,7 @@ export interface Database {
           id?: string
           cohort_id: string
           mentee_id: string
+          full_name?: string | null
           pronouns?: string | null
           role: string
           experience_years: number
@@ -128,6 +130,7 @@ export interface Database {
           id?: string
           cohort_id?: string
           mentee_id?: string
+          full_name?: string | null
           pronouns?: string | null
           role?: string
           experience_years?: number
@@ -159,6 +162,7 @@ export interface Database {
           id: string
           cohort_id: string
           mentor_id: string
+          full_name: string | null
           pronouns: string | null
           role: string
           experience_years: number
@@ -189,6 +193,7 @@ export interface Database {
           id?: string
           cohort_id: string
           mentor_id: string
+          full_name?: string | null
           pronouns?: string | null
           role: string
           experience_years: number
@@ -219,6 +224,7 @@ export interface Database {
           id?: string
           cohort_id?: string
           mentor_id?: string
+          full_name?: string | null
           pronouns?: string | null
           role?: string
           experience_years?: number

@@ -39,7 +39,7 @@ export function transformToMentorCentric(
   mentors.forEach(mentor => {
     mentorMap.set(mentor.id, {
       mentor_id: mentor.id,
-      mentor_name: mentor.id, // Will be overwritten if name available from recommendations
+      mentor_name: mentor.name || mentor.id,
       mentor_role: mentor.role,
       location_timezone: mentor.location_timezone,
       capacity_remaining: mentor.capacity_remaining,

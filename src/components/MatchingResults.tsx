@@ -22,7 +22,6 @@ import {
   Clock,
   Globe,
   MessageCircle,
-  TrendingUp,
   History,
   Sparkles
 } from "lucide-react";
@@ -331,7 +330,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
             </div>
 
             {/* Statistics */}
-                <div className="grid md:grid-cols-4 gap-4">
+                <div className="grid md:grid-cols-3 gap-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
@@ -359,26 +358,12 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-purple-600" />
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {(importedData?.mentees?.length || 0) * (importedData?.mentors?.length || 0)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">Combinations</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-indigo-600" />
                     <div>
                       <p className="text-2xl font-bold">
                         {(importedData?.mentors || []).reduce((sum, m) => sum + (m.capacity_remaining || 0), 0)}
                       </p>
-                      <p className="text-sm text-muted-foreground">Total Capacity</p>
+                      <p className="text-sm text-muted-foreground">Mentor Slots</p>
                     </div>
                   </div>
                 </CardContent>
