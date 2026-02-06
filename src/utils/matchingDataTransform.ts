@@ -122,7 +122,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     },
     {
       key: 'semantic',
-      label: 'Goals Alignment',
+      label: score.is_embedding_based ? 'Goals Alignment (AI)' : 'Goals Alignment',
       value: Math.round(features.semantic_similarity * 20),
       maxValue: 20,
       percentage: features.semantic_similarity * 100,

@@ -18,6 +18,8 @@ import type {
   ConstraintViolation,
   MatchingRule,
 } from "@/types/matching";
+import { cosineSimilarity } from "./embeddingUtils";
+import { getOrComputeEmbeddings, type EmbeddingCache } from "./embeddingService";
 
 // Hard filters implementation
 export function applyHardFilters(
@@ -716,4 +718,215 @@ export function evaluateMatchingRules(
   }
 
   return violations;
+}
+
+// ============================================================================
+// AI-ENHANCED MATCHING WITH OPENAI EMBEDDINGS
+// ============================================================================
+
+/**
+ * Calculate embedding-based semantic similarity from pre-computed vectors.
+ * Falls back to 0 if embeddings are missing for either participant.
+ */
+function calculateEmbeddingSimilarity(
+  menteeId: string,
+  mentorId: string,
+  cache: EmbeddingCache,
+): number {
+  const menteeVec = cache.menteeEmbeddings.get(menteeId);
+  const mentorVec = cache.mentorEmbeddings.get(mentorId);
+  if (!menteeVec || !mentorVec) return 0;
+  // Cosine similarity for normalized OpenAI embeddings returns 0-1 range
+  return Math.max(0, cosineSimilarity(menteeVec, mentorVec));
+}
+
+/**
+ * Calculate features with embedding-based semantic similarity
+ * instead of the keyword-counting heuristic.
+ */
+export function calculateFeaturesWithEmbeddings(
+  mentee: MenteeData,
+  mentor: MentorData,
+  embeddingCache: EmbeddingCache,
+): MatchingFeatures {
+  const baseFeatures = calculateFeatures(mentee, mentor);
+  return {
+    ...baseFeatures,
+    semantic_similarity: calculateEmbeddingSimilarity(mentee.id, mentor.id, embeddingCache),
+  };
+}
+
+/**
+ * Calculate match score using embedding-enhanced features.
+ */
+function calculateMatchScoreWithEmbeddings(
+  mentee: MenteeData,
+  mentor: MentorData,
+  embeddingCache: EmbeddingCache,
+): MatchScore {
+  const features = calculateFeaturesWithEmbeddings(mentee, mentor, embeddingCache);
+
+  const totalScore = Math.max(0, Math.min(100,
+    40 * features.topics_overlap +
+    15 * features.industry_overlap +
+    10 * features.role_seniority_fit +
+    20 * features.semantic_similarity +
+    5 * features.tz_overlap_bonus +
+    5 * features.language_bonus -
+    10 * features.capacity_penalty
+  ));
+
+  // Reuse the reason/risk generation from the original calculateMatchScore
+  const baseScore = calculateMatchScore(mentee, mentor);
+
+  return {
+    ...baseScore,
+    total_score: totalScore,
+    features,
+    is_embedding_based: true,
+  };
+}
+
+/**
+ * Find top matches using embedding-enhanced scoring.
+ */
+function findTopMatchesWithEmbeddings(
+  mentee: MenteeData,
+  mentors: MentorData[],
+  embeddingCache: EmbeddingCache,
+  maxResults: number = 3,
+): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
+  const validMatches = mentors
+    .filter(mentor => applyHardFilters(mentee, mentor))
+    .map(mentor => ({
+      mentor,
+      score: calculateMatchScoreWithEmbeddings(mentee, mentor, embeddingCache),
+    }))
+    .sort(compareMentorMatches)
+    .slice(0, maxResults);
+
+  return validMatches.map(match => ({
+    mentor_id: match.mentor.id,
+    mentor_name: match.mentor.id,
+    score: match.score,
+  }));
+}
+
+/**
+ * Async batch matching using OpenAI embeddings for semantic similarity.
+ * Falls back to the original synchronous matching if embedding generation fails.
+ */
+export async function performBatchMatchingAsync(
+  mentees: MenteeData[],
+  mentors: MentorData[],
+  cohortId: string,
+): Promise<{ output: MatchingOutput; usedEmbeddings: boolean }> {
+  let embeddingCache: EmbeddingCache | null = null;
+
+  try {
+    embeddingCache = await getOrComputeEmbeddings(cohortId, mentees, mentors);
+  } catch (error) {
+    console.warn('Embedding generation failed, falling back to keyword matching:', error);
+  }
+
+  if (!embeddingCache) {
+    return { output: performBatchMatching(mentees, mentors), usedEmbeddings: false };
+  }
+
+  const results: MatchingResult[] = [];
+  const stats: MatchingStats = {
+    mentees_total: mentees.length,
+    mentors_total: mentors.length,
+    pairs_evaluated: 0,
+    after_filters: 0,
+  };
+
+  const mentorCapacity = new Map<string, number>();
+  mentors.forEach(mentor => {
+    mentorCapacity.set(mentor.id, mentor.capacity_remaining);
+  });
+
+  mentees.forEach(mentee => {
+    const availableMentors = mentors.filter(mentor =>
+      (mentorCapacity.get(mentor.id) || 0) > 0
+    );
+
+    stats.pairs_evaluated += availableMentors.length;
+
+    const recommendations = findTopMatchesWithEmbeddings(mentee, availableMentors, embeddingCache!, 3);
+    stats.after_filters += recommendations.length;
+
+    let proposedAssignment: { mentor_id: string | null; mentor_name?: string | null } = {
+      mentor_id: null,
+      mentor_name: null,
+    };
+
+    if (recommendations.length > 0) {
+      const bestMatch = recommendations[0];
+      proposedAssignment = {
+        mentor_id: bestMatch.mentor_id,
+        mentor_name: bestMatch.mentor_name,
+      };
+      const currentCapacity = mentorCapacity.get(bestMatch.mentor_id) || 0;
+      mentorCapacity.set(bestMatch.mentor_id, currentCapacity - 1);
+    }
+
+    results.push({
+      mentee_id: mentee.id,
+      mentee_name: mentee.id,
+      recommendations,
+      proposed_assignment: proposedAssignment,
+    });
+  });
+
+  return {
+    output: { mode: "batch", stats, results },
+    usedEmbeddings: true,
+  };
+}
+
+/**
+ * Async top-3 matching using OpenAI embeddings for semantic similarity.
+ * Falls back to the original synchronous matching if embedding generation fails.
+ */
+export async function performTop3MatchingAsync(
+  mentees: MenteeData[],
+  mentors: MentorData[],
+  cohortId: string,
+): Promise<{ output: MatchingOutput; usedEmbeddings: boolean }> {
+  let embeddingCache: EmbeddingCache | null = null;
+
+  try {
+    embeddingCache = await getOrComputeEmbeddings(cohortId, mentees, mentors);
+  } catch (error) {
+    console.warn('Embedding generation failed, falling back to keyword matching:', error);
+  }
+
+  if (!embeddingCache) {
+    return { output: performTop3Matching(mentees, mentors), usedEmbeddings: false };
+  }
+
+  const results: MatchingResult[] = [];
+  const stats: MatchingStats = {
+    mentees_total: mentees.length,
+    mentors_total: mentors.length,
+    pairs_evaluated: mentees.length * mentors.length,
+    after_filters: 0,
+  };
+
+  mentees.forEach(mentee => {
+    const recommendations = findTopMatchesWithEmbeddings(mentee, mentors, embeddingCache!, 3);
+    stats.after_filters += recommendations.length;
+
+    results.push({
+      mentee_id: mentee.id,
+      mentee_name: mentee.id,
+      recommendations,
+    });
+  });
+
+  return {
+    output: { mode: "top3_per_mentee", stats, results },
+    usedEmbeddings: true,
+  };
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { MatchingOutput, MatchingResult, ImportResult, MatchingHistoryEntry, Cohort } from "@/types/mentoring";
-import { performBatchMatching, performTop3Matching } from "@/lib/matchingEngine";
+import { MatchingOutput, MatchingResult, ImportResult, MatchingHistoryEntry, Cohort, MenteeData, MentorData, MatchScore } from "@/types/mentoring";
+import { performBatchMatching, performTop3Matching, performBatchMatchingAsync, performTop3MatchingAsync } from "@/lib/matchingEngine";
 import { getActiveMatchingModels, getDefaultMatchingModel } from "@/lib/matchingModelService";
+import { getOrGenerateExplanation, generateAllExplanations } from "@/lib/explanationService";
 import type { MatchingModel } from "@/types/matching";
 import { saveMatchesToCohort } from "@/lib/cohortManager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,8 @@ import {
   Globe,
   MessageCircle,
   TrendingUp,
-  History
+  History,
+  Sparkles
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -46,6 +48,12 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
   const [activeModels, setActiveModels] = useState<MatchingModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<MatchingModel | null>(null);
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  // AI embedding and explanation state
+  const [embeddingStatus, setEmbeddingStatus] = useState<'idle' | 'loading' | 'success' | 'fallback'>('idle');
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
+  const [isGeneratingAllExplanations, setIsGeneratingAllExplanations] = useState(false);
 
   // Fetch active matching models on mount
   useEffect(() => {
@@ -81,36 +89,62 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
   const runMatching = async (mode: "batch" | "top3_per_mentee") => {
     setIsMatching(true);
     setSelectedMode(mode);
+    setEmbeddingStatus('loading');
+    setExplanations({});
 
     try {
-      // Simulate processing time for better UX
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const mentees = importedData?.mentees || [];
+      const mentors = importedData?.mentors || [];
+      const cohortId = cohort?.id || '';
 
-      const result = mode === "batch"
-        ? performBatchMatching(importedData?.mentees || [], importedData?.mentors || [])
-        : performTop3Matching(importedData?.mentees || [], importedData?.mentors || []);
+      let result: MatchingOutput;
+      let usedEmbeddings = false;
+
+      if (cohortId) {
+        // Use AI-enhanced async matching with embeddings
+        const asyncResult = mode === "batch"
+          ? await performBatchMatchingAsync(mentees, mentors, cohortId)
+          : await performTop3MatchingAsync(mentees, mentors, cohortId);
+
+        result = asyncResult.output;
+        usedEmbeddings = asyncResult.usedEmbeddings;
+      } else {
+        // No cohort ID — fall back to synchronous matching
+        result = mode === "batch"
+          ? performBatchMatching(mentees, mentors)
+          : performTop3Matching(mentees, mentors);
+      }
+
+      setEmbeddingStatus(usedEmbeddings ? 'success' : 'fallback');
+
+      if (!usedEmbeddings && cohortId) {
+        toast({
+          title: "AI embeddings unavailable",
+          description: "Using keyword-based similarity as fallback",
+        });
+      }
 
       // Add timestamp to the result
       result.timestamp = new Date().toISOString();
 
       const modelInfo = selectedModel ? ` using "${selectedModel.name}"` : "";
+      const aiInfo = usedEmbeddings ? " with AI embeddings" : "";
 
       if (mode === "top3_per_mentee") {
-        // For Top 3 mode, pass results to parent and close dialog
         toast({
           title: "Matching complete",
-          description: `Generated ${result.results.length} match recommendations${modelInfo}`,
+          description: `Generated ${result.results.length} match recommendations${modelInfo}${aiInfo}`,
         });
         onTop3ResultsReady?.(result);
       } else {
-        // For batch mode, show results in dialog
         setMatchingOutput(result);
         toast({
           title: "Matching complete",
-          description: `Generated ${result.results.length} match recommendations${modelInfo} (not saved yet)`,
+          description: `Generated ${result.results.length} match recommendations${modelInfo}${aiInfo} (not saved yet)`,
         });
       }
     } catch (error) {
+      setEmbeddingStatus('idle');
       toast({
         variant: "destructive",
         title: "Matching failed",
@@ -118,6 +152,81 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
       });
     } finally {
       setIsMatching(false);
+    }
+  };
+
+  const handleGenerateExplanation = async (menteeId: string, mentorId: string, score: MatchScore) => {
+    const key = `${menteeId}_${mentorId}`;
+    if (!cohort?.id) return;
+
+    setLoadingExplanations(prev => ({ ...prev, [key]: true }));
+    try {
+      const mentee = importedData?.mentees?.find(m => m.id === menteeId);
+      const mentor = importedData?.mentors?.find(m => m.id === mentorId);
+      if (!mentee || !mentor) return;
+
+      const explanation = await getOrGenerateExplanation(cohort.id, mentee, mentor, score);
+      setExplanations(prev => ({ ...prev, [key]: explanation }));
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to generate explanation",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setLoadingExplanations(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleGenerateAllExplanations = async () => {
+    if (!matchingOutput || !cohort?.id) return;
+
+    setIsGeneratingAllExplanations(true);
+    try {
+      const matches: { mentee: MenteeData; mentor: MentorData; score: MatchScore }[] = [];
+
+      for (const result of matchingOutput.results) {
+        const mentee = importedData?.mentees?.find(m => m.id === result.mentee_id);
+        if (!mentee) continue;
+
+        // For batch mode, use the proposed assignment; for top3, use the first recommendation
+        const topRec = result.recommendations[0];
+        if (!topRec) continue;
+
+        const mentor = importedData?.mentors?.find(m => m.id === topRec.mentor_id);
+        if (!mentor) continue;
+
+        matches.push({ mentee, mentor, score: topRec.score });
+      }
+
+      const allExplanations = await generateAllExplanations(
+        cohort.id,
+        matches,
+        (completed, total) => {
+          // Progress is tracked internally; could add a progress bar here
+        },
+      );
+
+      setExplanations(prev => {
+        const updated = { ...prev };
+        allExplanations.forEach((explanation, key) => {
+          updated[key] = explanation;
+        });
+        return updated;
+      });
+
+      toast({
+        title: "Explanations generated",
+        description: `Generated ${allExplanations.size} AI match explanations`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to generate explanations",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsGeneratingAllExplanations(false);
     }
   };
 
@@ -335,14 +444,22 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
 
               {isMatching && (
                 <Card className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
-                    <span className="font-medium">Running AI Matching Algorithm...</span>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                      <span className="font-medium">
+                        {embeddingStatus === 'loading'
+                          ? 'Computing AI embeddings...'
+                          : 'Running matching algorithm...'}
+                      </span>
+                    </div>
+                    <Progress value={embeddingStatus === 'loading' ? 30 : 75} className="w-full" />
+                    <p className="text-sm text-muted-foreground">
+                      {embeddingStatus === 'loading'
+                        ? 'Generating semantic embeddings via OpenAI for accurate goal alignment...'
+                        : 'Applying hard filters, calculating feature scores, and ranking matches...'}
+                    </p>
                   </div>
-                  <Progress value={75} className="w-full" />
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Applying hard filters, calculating feature scores, and ranking matches...
-                  </p>
                 </Card>
               )}
             </div>
@@ -389,6 +506,24 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
             </div>
           </div>
 
+          {/* AI Status Indicator */}
+          {embeddingStatus === 'success' && (
+            <Alert className="mb-4 border-green-200 bg-green-50">
+              <Sparkles className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-700">
+                AI-enhanced matching: semantic similarity powered by OpenAI embeddings
+              </AlertDescription>
+            </Alert>
+          )}
+          {embeddingStatus === 'fallback' && (
+            <Alert className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                AI embeddings were unavailable. Results use keyword-based similarity as fallback.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Action Buttons */}
           <div className="flex gap-2 mb-6">
             <Button onClick={() => setMatchingOutput(null)} variant="outline">
@@ -397,6 +532,16 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
             <Button onClick={handleApproveMatches}>
               Approve & Launch Matches
             </Button>
+            {cohort?.id && (
+              <Button
+                onClick={handleGenerateAllExplanations}
+                variant="outline"
+                disabled={isGeneratingAllExplanations}
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                {isGeneratingAllExplanations ? 'Generating...' : 'AI Explain All Matches'}
+              </Button>
+            )}
           </div>
 
           {/* Results Display */}
@@ -560,6 +705,37 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                                       </div>
                                     ))}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* AI Explanation */}
+                              {cohort?.id && (
+                                <div className="mt-2 pt-2 border-t">
+                                  {explanations[`${result.mentee_id}_${rec.mentor_id}`] ? (
+                                    <div className="text-sm text-gray-700 italic">
+                                      <div className="flex items-center gap-1 mb-1">
+                                        <Sparkles className="w-3 h-3 text-purple-500" />
+                                        <span className="text-xs font-medium text-purple-600">AI Match Explanation</span>
+                                      </div>
+                                      {explanations[`${result.mentee_id}_${rec.mentor_id}`]}
+                                    </div>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-xs"
+                                      disabled={loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`]}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleGenerateExplanation(result.mentee_id, rec.mentor_id, rec.score);
+                                      }}
+                                    >
+                                      <Sparkles className="w-3 h-3 mr-1" />
+                                      {loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`]
+                                        ? 'Generating...'
+                                        : 'AI Explain Match'}
+                                    </Button>
+                                  )}
                                 </div>
                               )}
                             </CardContent>

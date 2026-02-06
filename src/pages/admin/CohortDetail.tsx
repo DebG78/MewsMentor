@@ -44,6 +44,7 @@ import {
   Trash2,
   AlertTriangle,
   UserPlus,
+  Sparkles,
 } from "lucide-react";
 import {
   getCohortById,
@@ -725,6 +726,16 @@ export default function CohortDetail() {
           <TabsContent value="matches">
             {pendingTop3Results ? (
               <div className="space-y-4">
+                {/* AI Status Indicator */}
+                {pendingTop3Results.results?.[0]?.recommendations?.[0]?.score?.is_embedding_based && (
+                  <Alert className="border-green-200 bg-green-50">
+                    <Sparkles className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-700">
+                      AI-enhanced matching: semantic similarity powered by OpenAI embeddings
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {/* View Mode Toggle */}
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
