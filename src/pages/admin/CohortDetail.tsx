@@ -231,31 +231,38 @@ export default function CohortDetail() {
   const handleManualSelectionsApproved = async (selections: Record<string, string>, comments?: Record<string, string>) => {
     if (!pendingTop3Results || !cohort) return;
 
-    // Create a modified matching output with user's selections
-    // Only selected rows get a proposed_assignment; unselected rows have it cleared
+    // Create a modified matching output that merges new selections with existing approved matches
+    const newResults = pendingTop3Results.results.map((result: any) => {
+      const selectedMentorId = selections[result.mentee_id];
+      if (selectedMentorId) {
+        const selectedRecommendation = result.recommendations.find(
+          (rec: any) => rec.mentor_id === selectedMentorId
+        );
+        if (selectedRecommendation) {
+          return {
+            ...result,
+            proposed_assignment: {
+              mentor_id: selectedRecommendation.mentor_id,
+              mentor_name: selectedRecommendation.mentor_name,
+              ...(comments?.[result.mentee_id] && { comment: comments[result.mentee_id] })
+            }
+          };
+        }
+      }
+      // Not selected — strip proposed_assignment so it's not saved as approved
+      const { proposed_assignment, ...rest } = result;
+      return rest;
+    });
+
+    // Merge with previously approved matches that aren't in this run
+    const newMenteeIds = new Set(newResults.map((r: any) => r.mentee_id));
+    const existingApproved = (cohort.matches?.results || []).filter(
+      (r) => r.proposed_assignment?.mentor_id && !newMenteeIds.has(r.mentee_id)
+    );
+
     const modifiedOutput = {
       ...pendingTop3Results,
-      results: pendingTop3Results.results.map((result: any) => {
-        const selectedMentorId = selections[result.mentee_id];
-        if (selectedMentorId) {
-          const selectedRecommendation = result.recommendations.find(
-            (rec: any) => rec.mentor_id === selectedMentorId
-          );
-          if (selectedRecommendation) {
-            return {
-              ...result,
-              proposed_assignment: {
-                mentor_id: selectedRecommendation.mentor_id,
-                mentor_name: selectedRecommendation.mentor_name,
-                ...(comments?.[result.mentee_id] && { comment: comments[result.mentee_id] })
-              }
-            };
-          }
-        }
-        // Not selected — strip proposed_assignment so it's not saved as approved
-        const { proposed_assignment, ...rest } = result;
-        return rest;
-      })
+      results: [...existingApproved, ...newResults]
     };
 
     try {
