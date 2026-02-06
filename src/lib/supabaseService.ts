@@ -697,56 +697,10 @@ export async function saveMatchesToCohort(cohortId: string, matches: MatchingOut
   }
 
   try {
-    // Count how many mentees are assigned to each mentor
-    const mentorAssignmentCounts = new Map<string, number>();
-
-    matches.results.forEach(result => {
-      const assignedMentorId = result.proposed_assignment?.mentor_id;
-      if (assignedMentorId) {
-        const currentCount = mentorAssignmentCounts.get(assignedMentorId) || 0;
-        mentorAssignmentCounts.set(assignedMentorId, currentCount + 1);
-      }
-    });
-
-    console.log('Mentor assignment counts:', Object.fromEntries(mentorAssignmentCounts));
-
-    // Update capacity_remaining for each affected mentor in the database
-    for (const [mentorId, assignmentCount] of mentorAssignmentCounts.entries()) {
-      console.log(`Updating capacity for mentor ${mentorId}: reducing by ${assignmentCount}`);
-
-      // Get current mentor capacity
-      const { data: mentorData, error: fetchError } = await supabase
-        .from('mentors')
-        .select('capacity_remaining')
-        .eq('cohort_id', cohortId)
-        .eq('mentor_id', mentorId)
-        .single();
-
-      if (fetchError) {
-        console.error(`Error fetching mentor ${mentorId}:`, fetchError);
-        continue;
-      }
-
-      if (mentorData) {
-        const currentCapacity = mentorData.capacity_remaining;
-        const newCapacity = Math.max(0, currentCapacity - assignmentCount);
-
-        console.log(`Mentor ${mentorId}: current capacity ${currentCapacity} -> new capacity ${newCapacity}`);
-
-        // Update the mentor's capacity
-        const { error: updateError } = await supabase
-          .from('mentors')
-          .update({ capacity_remaining: newCapacity })
-          .eq('cohort_id', cohortId)
-          .eq('mentor_id', mentorId);
-
-        if (updateError) {
-          console.error(`Error updating capacity for mentor ${mentorId}:`, updateError);
-        } else {
-          console.log(`Successfully updated capacity for mentor ${mentorId}`);
-        }
-      }
-    }
+    // NOTE: We do NOT decrement capacity_remaining in the mentors table here.
+    // Effective capacity is computed dynamically in the UI from the original
+    // uploaded capacity minus the number of approved matches per mentor.
+    // This avoids double-counting, failed-save drift, and deletion issues.
 
     // Try saving matches and matching_history together first
     let result = await updateCohort(cohortId, {

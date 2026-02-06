@@ -451,6 +451,10 @@ export default function CohortDetail() {
     ...m,
     capacity_remaining: Math.max(0, (m.capacity_remaining || 0) - (mentorAssignedCounts.get(m.id) || 0)),
   }));
+  // Lookup for effective capacity per mentor (original capacity minus approved matches)
+  const effectiveCapacity = new Map<string, number>(
+    adjustedMentors.map((m) => [m.id, m.capacity_remaining])
+  );
 
   // Validate matching readiness using adjusted values (accounts for already-matched mentees)
   const adjustedCapacity = adjustedMentors.reduce((sum, m) => sum + m.capacity_remaining, 0);
@@ -666,12 +670,12 @@ export default function CohortDetail() {
                   <CardTitle>Mentors</CardTitle>
                   <CardDescription>All mentors in this cohort</CardDescription>
                 </div>
-                {cohort.mentors.some(m => (m.capacity_remaining || 0) === 0) && (
+                {cohort.mentors.some(m => (effectiveCapacity.get(m.id) || 0) === 0) && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={async () => {
-                      const zeroCapMentors = cohort.mentors.filter(m => (m.capacity_remaining || 0) === 0);
+                      const zeroCapMentors = cohort.mentors.filter(m => (effectiveCapacity.get(m.id) || 0) === 0);
                       const input = window.prompt(
                         `${zeroCapMentors.length} mentor(s) have 0 capacity.\nSet their capacity to:`,
                         "2"
@@ -720,7 +724,8 @@ export default function CohortDetail() {
                 </TableHeader>
                 <TableBody>
                   {cohort.mentors.map((mentor, index) => {
-                    const isAtCapacity = (mentor.capacity_remaining || 0) === 0;
+                    const remaining = effectiveCapacity.get(mentor.id) || 0;
+                    const isAtCapacity = remaining === 0;
                     return (
                       <TableRow
                         key={index}
@@ -742,7 +747,7 @@ export default function CohortDetail() {
                             variant={isAtCapacity ? "secondary" : "default"}
                             className={isAtCapacity ? "bg-gray-200 text-gray-600" : ""}
                           >
-                            {mentor.capacity_remaining || 0}
+                            {remaining}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
