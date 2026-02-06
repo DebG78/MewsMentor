@@ -117,7 +117,7 @@ export function DataImport({ onDataImported, importResult: controlledImportResul
       <TableBody>
         {mentees.map((mentee) => (
           <TableRow key={mentee.id}>
-            <TableCell className="font-medium">{mentee.id}</TableCell>
+            <TableCell className="font-medium">{mentee.name || mentee.id}</TableCell>
             <TableCell>{mentee.role}</TableCell>
             <TableCell>{mentee.experience_years}</TableCell>
             <TableCell className="text-sm">{mentee.location_timezone}</TableCell>
@@ -157,7 +157,7 @@ export function DataImport({ onDataImported, importResult: controlledImportResul
       <TableBody>
         {mentors.map((mentor) => (
           <TableRow key={mentor.id}>
-            <TableCell className="font-medium">{mentor.id}</TableCell>
+            <TableCell className="font-medium">{mentor.name || mentor.id}</TableCell>
             <TableCell>{mentor.role}</TableCell>
             <TableCell>{mentor.experience_years}</TableCell>
             <TableCell className="text-sm">{mentor.location_timezone}</TableCell>

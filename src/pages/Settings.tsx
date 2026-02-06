@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,13 +13,22 @@ import {
   Globe,
   Palette,
   Database,
-  Mail
+  HelpCircle
 } from "lucide-react";
 import { SurveyTemplateManager } from "@/components/SurveyTemplateManager";
 import { SurveyMigrationHelper } from "@/components/SurveyMigrationHelper";
+import { HelpGuide } from "@/components/HelpGuide";
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState("survey-templates");
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(tabFromUrl || "survey-templates");
+
+  useEffect(() => {
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   const settingsCategories = [
     {
@@ -71,11 +81,10 @@ const Settings = () => {
       badge: "Coming Soon"
     },
     {
-      id: "email",
-      title: "Email Templates",
-      icon: Mail,
-      description: "Customize email templates",
-      badge: "Coming Soon"
+      id: "help",
+      title: "Help Guide",
+      icon: HelpCircle,
+      description: "Learn how uploads, columns, and matching work"
     }
   ];
 
@@ -148,8 +157,26 @@ const Settings = () => {
               </Card>
             </TabsContent>
 
+            {/* Help Guide */}
+            <TabsContent value="help" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <HelpCircle className="w-5 h-5" />
+                    Help Guide
+                  </CardTitle>
+                  <CardDescription>
+                    Learn about spreadsheet columns, data uploads, and how the matching algorithm works.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <HelpGuide />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* Other Settings - Coming Soon */}
-            {settingsCategories.filter(cat => cat.id !== "survey-templates").map((category) => (
+            {settingsCategories.filter(cat => cat.id !== "survey-templates" && cat.id !== "help").map((category) => (
               <TabsContent key={category.id} value={category.id} className="space-y-6">
                 {renderComingSoon(category)}
               </TabsContent>

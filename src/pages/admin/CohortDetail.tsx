@@ -531,7 +531,7 @@ export default function CohortDetail() {
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-purple-600" />
           <span className="font-semibold">{stats.total_capacity}</span>
-          <span className="text-muted-foreground">capacity</span>
+          <span className="text-muted-foreground">mentor slots</span>
         </div>
         <div className="flex items-center gap-2">
           <CheckCircle className="h-4 w-4 text-indigo-600" />
@@ -610,7 +610,7 @@ export default function CohortDetail() {
                         className={isAtCapacity ? "opacity-50 bg-gray-50" : ""}
                       >
                         <TableCell className="font-medium">
-                          {mentor.id}
+                          {mentor.name || mentor.id}
                           {isAtCapacity && (
                             <Badge variant="secondary" className="ml-2 text-xs">
                               At Capacity
@@ -682,7 +682,7 @@ export default function CohortDetail() {
                     );
                     return (
                       <TableRow key={index}>
-                        <TableCell className="font-medium">{mentee.id}</TableCell>
+                        <TableCell className="font-medium">{mentee.name || mentee.id}</TableCell>
                         <TableCell>{mentee.role}</TableCell>
                         <TableCell>{mentee.location_timezone}</TableCell>
                         <TableCell>{mentee.experience_years}</TableCell>

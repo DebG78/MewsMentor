@@ -279,7 +279,7 @@ export function findTopMatches(
 
   return validMatches.map(match => ({
     mentor_id: match.mentor.id,
-    mentor_name: match.mentor.id, // Using ID as name for now
+    mentor_name: match.mentor.name || match.mentor.id,
     score: match.score
   }));
 }
@@ -336,7 +336,7 @@ export function performBatchMatching(
 
     results.push({
       mentee_id: mentee.id,
-      mentee_name: mentee.id, // Using ID as name for now
+      mentee_name: mentee.name || mentee.id,
       recommendations,
       proposed_assignment: proposedAssignment
     });
@@ -368,7 +368,7 @@ export function performTop3Matching(
 
     results.push({
       mentee_id: mentee.id,
-      mentee_name: mentee.id,
+      mentee_name: mentee.name || mentee.id,
       recommendations
     });
   });
@@ -522,7 +522,7 @@ export function findAlternativeMentors(
 
   return alternatives.map((alt, index) => ({
     mentor_id: alt.mentor.id,
-    mentor_name: alt.mentor.id,
+    mentor_name: alt.mentor.name || alt.mentor.id,
     score: alt.score.total_score,
     rank: index + 2, // 2 = second best, 3 = third best
   }));
@@ -606,7 +606,7 @@ export function performMatchingWithModel(
     // Get top 3 recommendations
     const recommendations = scoredMentors.slice(0, 3).map(match => ({
       mentor_id: match.mentor.id,
-      mentor_name: match.mentor.id,
+      mentor_name: match.mentor.name || match.mentor.id,
       score: match.score,
     }));
 
@@ -636,7 +636,7 @@ export function performMatchingWithModel(
 
     return {
       mentee_id: mentee.id,
-      mentee_name: mentee.id,
+      mentee_name: mentee.name || mentee.id,
       recommendations,
       proposed_assignment: proposedAssignment,
     };
@@ -807,7 +807,7 @@ function findTopMatchesWithEmbeddings(
 
   return validMatches.map(match => ({
     mentor_id: match.mentor.id,
-    mentor_name: match.mentor.id,
+    mentor_name: match.mentor.name || match.mentor.id,
     score: match.score,
   }));
 }
@@ -873,7 +873,7 @@ export async function performBatchMatchingAsync(
 
     results.push({
       mentee_id: mentee.id,
-      mentee_name: mentee.id,
+      mentee_name: mentee.name || mentee.id,
       recommendations,
       proposed_assignment: proposedAssignment,
     });
@@ -920,7 +920,7 @@ export async function performTop3MatchingAsync(
 
     results.push({
       mentee_id: mentee.id,
-      mentee_name: mentee.id,
+      mentee_name: mentee.name || mentee.id,
       recommendations,
     });
   });

@@ -190,6 +190,9 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
   const id = row['#'] || row['id'];
   if (!id) return null;
 
+  // Extract name from "Full Name" or "Name" column, fall back to id
+  const name = row['Full Name'] || row['Name'] || row['full_name'] || row['name'] || id;
+
   // Extract development topics from boolean columns
   const topicsToLearn: string[] = [];
   const topicColumns = [
@@ -260,21 +263,70 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     .filter(text => text.trim())
     .join(' ');
 
-  // Find exact column names from the row keys
-  const roleValue = row["What's your current role at Mews?"] ||
-                   Object.keys(row).find(key => key.toLowerCase().includes('current role'))
-                   ? row[Object.keys(row).find(key => key.toLowerCase().includes('current role'))!] : '';
+  // Find exact column names from the row keys (fix operator precedence: || before ?:)
+  const roleKey = Object.keys(row).find(key => key.toLowerCase().includes('current role'));
+  let roleValue = row["What's your current role at Mews?"] || (roleKey ? row[roleKey] : '');
 
-  const experienceValue = row["How many years of work experience do you have?"] ||
-                         Object.keys(row).find(key => key.toLowerCase().includes('years of work experience'))
-                         ? row[Object.keys(row).find(key => key.toLowerCase().includes('years of work experience'))!] : '';
+  const expKey = Object.keys(row).find(key => key.toLowerCase().includes('years of work experience'));
+  let experienceValue = row["How many years of work experience do you have?"] || (expKey ? row[expKey] : '');
 
-  const locationValue = row["Where are you based (location/time zone)?"] ||
-                       Object.keys(row).find(key => key.toLowerCase().includes('where are you based'))
-                       ? row[Object.keys(row).find(key => key.toLowerCase().includes('where are you based'))!] : '';
+  const locKey = Object.keys(row).find(key => key.toLowerCase().includes('where are you based'));
+  let locationValue = row["Where are you based (location/time zone)?"] || (locKey ? row[locKey] : '');
+
+  // Content-based validation to detect misaligned columns (e.g. extra survey columns shifting data)
+  const locationPattern = /\b(UTC|GMT|CET|CEST|EST|PST|CST|MST|EET|WET|AEST|JST|IST|BST|NZST|HKT|SGT|europe|america|asia|africa|pacific|australia|prague|london|berlin|paris|amsterdam|barcelona|lisbon|vienna|dublin|new york|san francisco|los angeles|chicago|toronto|tokyo|sydney|singapore|hong kong|mumbai|dubai|cairo|time.?zone|central\s+europe|eastern\s+europe|western\s+europe)\b/i;
+  const experiencePattern = /^(0[-–]2|3[-–]5|6[-–]10|10\+|15\+|\d+[-–]\d+|\d+\s*\+)/;
+
+  // Detect if role column actually contains location data
+  if (roleValue && locationPattern.test(roleValue) && !locationValue) {
+    console.log(`Column misalignment detected: role "${roleValue}" looks like location, swapping`);
+    locationValue = roleValue;
+    roleValue = '';
+  }
+
+  // Detect if role column actually contains experience data
+  if (roleValue && experiencePattern.test(roleValue.trim()) && !experienceValue) {
+    console.log(`Column misalignment detected: role "${roleValue}" looks like experience, swapping`);
+    experienceValue = roleValue;
+    roleValue = '';
+  }
+
+  // Detect if experience column actually contains location data
+  if (experienceValue && locationPattern.test(experienceValue) && !locationValue) {
+    console.log(`Column misalignment detected: experience "${experienceValue}" looks like location, swapping`);
+    locationValue = experienceValue;
+    experienceValue = '';
+  }
+
+  // If role is still empty, check other columns for job-title-like data
+  if (!roleValue) {
+    const emailKey = Object.keys(row).find(key => key.toLowerCase().includes('work email') || key.toLowerCase().includes('email'));
+    if (emailKey) {
+      const emailVal = row[emailKey];
+      if (emailVal && !emailVal.includes('@') && emailVal.length > 2) {
+        console.log(`Found role in email column: "${emailVal}"`);
+        roleValue = emailVal;
+      }
+    }
+  }
+
+  // If experience is still empty, scan columns for experience-like values
+  if (!experienceValue) {
+    for (const [key, value] of Object.entries(row)) {
+      if (value && experiencePattern.test(value.trim())) {
+        const lk = key.toLowerCase();
+        if (!lk.includes('current role') && !lk.includes('where are you based') && !lk.includes('#') && !lk.includes('full name')) {
+          console.log(`Found experience in column "${key}": "${value}"`);
+          experienceValue = value;
+          break;
+        }
+      }
+    }
+  }
 
   const result = {
     id,
+    name,
     pronouns: row["Do you want to share your pronouns?"] || '',
     role: roleValue,
     experience_years: experienceValue,
@@ -320,10 +372,35 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
   return result;
 }
 
+// Parse capacity from a row, with flexible column name matching
+function parseCapacity(row: Record<string, string>, defaultCapacity: number): number {
+  const capacityKey = Object.keys(row).find(key => {
+    const lowerKey = key.toLowerCase();
+    return lowerKey.includes('capacity') ||
+           lowerKey.includes('how many mentees') ||
+           lowerKey.includes('number of mentees') ||
+           lowerKey.includes('mentee slots') ||
+           lowerKey.includes('max mentees');
+  });
+
+  if (capacityKey) {
+    const value = row[capacityKey].trim();
+    const parsed = parseInt(value, 10);
+    if (!isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return defaultCapacity;
+}
+
 // Parse mentor data from CSV row
 export function parseMentorRow(row: Record<string, string>): MentorData | null {
   const id = row['#'] || row['id'];
   if (!id) return null;
+
+  // Extract name from "Full Name" or "Name" column, fall back to id
+  const name = row['Full Name'] || row['Name'] || row['full_name'] || row['name'] || id;
 
   // Extract mentoring topics with flexible matching
   const topicsToMentor: string[] = [];
@@ -435,12 +512,64 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
            key === "location_timezone";
   });
 
+  // Extract raw values
+  let mentorRole = roleKey ? row[roleKey] : '';
+  let mentorExperience = experienceKey ? row[experienceKey] : '';
+  let mentorLocation = locationKey ? row[locationKey] : '';
+
+  // Content-based validation to detect misaligned columns (same as mentee parser)
+  const mentorLocationPattern = /\b(UTC|GMT|CET|CEST|EST|PST|CST|MST|EET|WET|AEST|JST|IST|BST|NZST|HKT|SGT|europe|america|asia|africa|pacific|australia|prague|london|berlin|paris|amsterdam|barcelona|lisbon|vienna|dublin|new york|san francisco|los angeles|chicago|toronto|tokyo|sydney|singapore|hong kong|mumbai|dubai|cairo|time.?zone|central\s+europe|eastern\s+europe|western\s+europe)\b/i;
+  const mentorExperiencePattern = /^(0[-–]2|3[-–]5|6[-–]10|10\+|15\+|\d+[-–]\d+|\d+\s*\+)/;
+
+  if (mentorRole && mentorLocationPattern.test(mentorRole) && !mentorLocation) {
+    console.log(`Mentor column misalignment: role "${mentorRole}" looks like location, swapping`);
+    mentorLocation = mentorRole;
+    mentorRole = '';
+  }
+  if (mentorRole && mentorExperiencePattern.test(mentorRole.trim()) && !mentorExperience) {
+    console.log(`Mentor column misalignment: role "${mentorRole}" looks like experience, swapping`);
+    mentorExperience = mentorRole;
+    mentorRole = '';
+  }
+  if (mentorExperience && mentorLocationPattern.test(mentorExperience) && !mentorLocation) {
+    console.log(`Mentor column misalignment: experience "${mentorExperience}" looks like location, swapping`);
+    mentorLocation = mentorExperience;
+    mentorExperience = '';
+  }
+
+  // If role is still empty, check email column for job-title-like data
+  if (!mentorRole) {
+    const emailKey = Object.keys(row).find(key => key.toLowerCase().includes('work email') || key.toLowerCase().includes('email'));
+    if (emailKey) {
+      const emailVal = row[emailKey];
+      if (emailVal && !emailVal.includes('@') && emailVal.length > 2) {
+        console.log(`Found mentor role in email column: "${emailVal}"`);
+        mentorRole = emailVal;
+      }
+    }
+  }
+
+  // If experience is still empty, scan for experience-like values
+  if (!mentorExperience) {
+    for (const [key, value] of Object.entries(row)) {
+      if (value && mentorExperiencePattern.test(value.trim())) {
+        const lk = key.toLowerCase();
+        if (!lk.includes('current role') && !lk.includes('where are you based') && !lk.includes('#') && !lk.includes('full name')) {
+          console.log(`Found mentor experience in column "${key}": "${value}"`);
+          mentorExperience = value;
+          break;
+        }
+      }
+    }
+  }
+
   return {
     id,
+    name,
     pronouns: row["Do you want to share your pronouns?"],
-    role: roleKey ? row[roleKey] : '',
-    experience_years: experienceKey ? row[experienceKey] : '',
-    location_timezone: locationKey ? row[locationKey] : '',
+    role: mentorRole,
+    experience_years: mentorExperience,
+    location_timezone: mentorLocation,
 
     // Life experiences
     returning_from_leave: !!row["Returning from maternity/paternity/parental leave"],
@@ -470,7 +599,7 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
 
     // Computed fields
     bio_text: bioText,
-    capacity_remaining: 3, // Default capacity, can be updated
+    capacity_remaining: parseCapacity(row, 1),
     seniority_band: mapExperienceToSeniority(row["How many years of work experience do you have?"] || ''),
     languages: [] // TODO: Extract from text or add to CSV
   };

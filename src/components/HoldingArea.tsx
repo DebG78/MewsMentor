@@ -238,7 +238,7 @@ export function HoldingArea() {
                     {unassignedMentees.map((mentee) => (
                       <TableRow key={mentee.id}>
                         <TableCell>
-                          <div className="font-medium">{mentee.mentee_id}</div>
+                          <div className="font-medium">{mentee.full_name || mentee.mentee_id}</div>
                           {mentee.pronouns && (
                             <div className="text-sm text-muted-foreground">({mentee.pronouns})</div>
                           )}
@@ -319,7 +319,7 @@ export function HoldingArea() {
                     {unassignedMentors.map((mentor) => (
                       <TableRow key={mentor.id}>
                         <TableCell>
-                          <div className="font-medium">{mentor.mentor_id}</div>
+                          <div className="font-medium">{mentor.full_name || mentor.mentor_id}</div>
                           {mentor.pronouns && (
                             <div className="text-sm text-muted-foreground">({mentor.pronouns})</div>
                           )}
