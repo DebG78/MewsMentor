@@ -53,6 +53,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
   const [isGeneratingAllExplanations, setIsGeneratingAllExplanations] = useState(false);
+  const [explanationProgress, setExplanationProgress] = useState<{ completed: number; total: number } | null>(null);
 
   // Fetch active matching models on mount
   useEffect(() => {
@@ -129,19 +130,13 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
       const modelInfo = selectedModel ? ` using "${selectedModel.name}"` : "";
       const aiInfo = usedEmbeddings ? " with AI embeddings" : "";
 
-      if (mode === "top3_per_mentee") {
-        toast({
-          title: "Matching complete",
-          description: `Generated ${result.results.length} match recommendations${modelInfo}${aiInfo}`,
-        });
-        onTop3ResultsReady?.(result);
-      } else {
-        setMatchingOutput(result);
-        toast({
-          title: "Matching complete",
-          description: `Generated ${result.results.length} match recommendations${modelInfo}${aiInfo} (not saved yet)`,
-        });
-      }
+      toast({
+        title: "Matching complete",
+        description: `Generated ${result.results.length} match recommendations${modelInfo}${aiInfo}`,
+      });
+
+      // Always send results to the parent to display on-screen in the matches tab
+      onTop3ResultsReady?.(result);
     } catch (error) {
       setEmbeddingStatus('idle');
       toast({
@@ -181,6 +176,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
     if (!matchingOutput || !cohort?.id) return;
 
     setIsGeneratingAllExplanations(true);
+    setExplanationProgress({ completed: 0, total: 0 });
     try {
       const matches: { mentee: MenteeData; mentor: MentorData; score: MatchScore }[] = [];
 
@@ -198,14 +194,20 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
         matches.push({ mentee, mentor, score: topRec.score });
       }
 
+      setExplanationProgress({ completed: 0, total: matches.length });
+
       const allExplanations = await generateAllExplanations(
         cohort.id,
         matches,
         (completed, total) => {
-          // Progress is tracked internally; could add a progress bar here
+          setExplanationProgress({ completed, total });
+        },
+        (key, explanation) => {
+          setExplanations(prev => ({ ...prev, [key]: explanation }));
         },
       );
 
+      // Ensure all results are set (in case any were missed by onResult)
       setExplanations(prev => {
         const updated = { ...prev };
         allExplanations.forEach((explanation, key) => {
@@ -226,6 +228,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
       });
     } finally {
       setIsGeneratingAllExplanations(false);
+      setExplanationProgress(null);
     }
   };
 
@@ -276,180 +279,96 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
 
   if (!matchingOutput) {
     return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              AI Matching Engine
-            </CardTitle>
-            <CardDescription>
-              Run the matching algorithm to find optimal mentor-mentee pairs.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Model Selection Dropdown */}
+      <div className="space-y-4">
+        {/* Model Selection */}
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium whitespace-nowrap">Model:</label>
+          {isLoadingModels ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+              <span className="text-sm text-muted-foreground">Loading...</span>
+            </div>
+          ) : activeModels.length === 0 ? (
+            <Alert variant="destructive" className="py-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                No active models.{" "}
+                <a href="/admin/mentoring/matching-models" className="underline font-medium">
+                  Configure one
+                </a>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Select
+              value={selectedModel?.id || ""}
+              onValueChange={(value) => {
+                const model = activeModels.find(m => m.id === value);
+                if (model) setSelectedModel(model);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a model" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeModels.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.name} v{model.version}
+                    {model.is_default && " (Default)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* Quick stats */}
+        <div className="flex gap-4 text-sm text-muted-foreground">
+          <span><strong className="text-foreground">{importedData?.mentees?.length || 0}</strong> mentees</span>
+          <span><strong className="text-foreground">{importedData?.mentors?.length || 0}</strong> mentors</span>
+          <span><strong className="text-foreground">{(importedData?.mentors || []).reduce((sum, m) => sum + (m.capacity_remaining || 0), 0)}</strong> slots</span>
+        </div>
+
+        {/* Matching Mode Buttons */}
+        <div className="space-y-2">
+          <Button
+            onClick={() => runMatching("batch")}
+            className="w-full justify-start"
+            disabled={isMatching || !selectedModel}
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            <div className="text-left">
+              <div>Batch Assignment</div>
+              <div className="text-xs font-normal opacity-80">Auto-assign each mentee to their best mentor</div>
+            </div>
+          </Button>
+
+          <Button
+            onClick={() => runMatching("top3_per_mentee")}
+            className="w-full justify-start"
+            variant="outline"
+            disabled={isMatching || !selectedModel}
+          >
+            <Target className="h-4 w-4 mr-2" />
+            <div className="text-left">
+              <div>Top 3 Recommendations</div>
+              <div className="text-xs font-normal opacity-60">Show 3 options per mentee for manual review</div>
+            </div>
+          </Button>
+        </div>
+
+        {isMatching && (
+          <div className="space-y-2 pt-2">
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium whitespace-nowrap">Matching Model:</label>
-              {isLoadingModels ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-                  <span className="text-sm text-muted-foreground">Loading...</span>
-                </div>
-              ) : activeModels.length === 0 ? (
-                <Alert variant="destructive" className="py-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription className="text-sm">
-                    No active models.{" "}
-                    <a href="/admin/mentoring/matching-models" className="underline font-medium">
-                      Configure one
-                    </a>
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <Select
-                  value={selectedModel?.id || ""}
-                  onValueChange={(value) => {
-                    const model = activeModels.find(m => m.id === value);
-                    if (model) setSelectedModel(model);
-                  }}
-                >
-                  <SelectTrigger className="w-[280px]">
-                    <SelectValue placeholder="Select a model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name} v{model.version}
-                        {model.is_default && " (Default)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+              <span className="text-sm font-medium">
+                {embeddingStatus === 'loading'
+                  ? 'Computing AI embeddings...'
+                  : 'Running matching algorithm...'}
+              </span>
             </div>
-
-            {/* Statistics */}
-                <div className="grid md:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-blue-600" />
-                    <div>
-                      <p className="text-2xl font-bold">{importedData?.mentees?.length || 0}</p>
-                      <p className="text-sm text-muted-foreground">Mentees</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-green-600" />
-                    <div>
-                      <p className="text-2xl font-bold">{importedData?.mentors?.length || 0}</p>
-                      <p className="text-sm text-muted-foreground">Mentors</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-indigo-600" />
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {(importedData?.mentors || []).reduce((sum, m) => sum + (m.capacity_remaining || 0), 0)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">Mentor Slots</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Matching Options */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Select Matching Mode</h3>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <Card className="border-2 hover:border-green-500 hover:shadow-lg transition-all">
-                  <CardContent className="p-6 flex flex-col h-full">
-                    <div className="flex items-center gap-3 mb-3">
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                      <h4 className="font-semibold">Batch Assignment</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Assign each mentee to their single best available mentor, respecting capacity constraints.
-                    </p>
-                    <div className="space-y-2 text-xs text-muted-foreground mb-4 flex-grow">
-                      <p>• Each mentee gets one mentor</p>
-                      <p>• Respects mentor capacity limits</p>
-                      <p>• Optimal for program launch</p>
-                    </div>
-                    <Button
-                      onClick={() => runMatching("batch")}
-                      className="w-full"
-                      disabled={isMatching || !selectedModel}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Run Batch Assignment
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-2 hover:border-blue-500 hover:shadow-lg transition-all">
-                  <CardContent className="p-6 flex flex-col h-full">
-                    <div className="flex items-center gap-3 mb-3">
-                      <Target className="h-5 w-5 text-blue-600" />
-                      <h4 className="font-semibold">Top 3 Recommendations</h4>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Show the top 3 mentor options for each mentee with detailed scoring.
-                    </p>
-                    <div className="space-y-2 text-xs text-muted-foreground mb-4 flex-grow">
-                      <p>• Multiple options per mentee</p>
-                      <p>• Detailed match explanations</p>
-                      <p>• Good for manual review</p>
-                    </div>
-                    <Button
-                      onClick={() => runMatching("top3_per_mentee")}
-                      className="w-full"
-                      variant="outline"
-                      disabled={isMatching || !selectedModel}
-                    >
-                      <Target className="h-4 w-4 mr-2" />
-                      Show Top 3 Options
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {isMatching && (
-                <Card className="p-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
-                      <span className="font-medium">
-                        {embeddingStatus === 'loading'
-                          ? 'Computing AI embeddings...'
-                          : 'Running matching algorithm...'}
-                      </span>
-                    </div>
-                    <Progress value={embeddingStatus === 'loading' ? 30 : 75} className="w-full" />
-                    <p className="text-sm text-muted-foreground">
-                      {embeddingStatus === 'loading'
-                        ? 'Generating semantic embeddings via OpenAI for accurate goal alignment...'
-                        : 'Applying hard filters, calculating feature scores, and ranking matches...'}
-                    </p>
-                  </div>
-                </Card>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            <Progress value={embeddingStatus === 'loading' ? 30 : 75} className="w-full" />
+          </div>
+        )}
       </div>
     );
   }
@@ -518,14 +437,30 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
               Approve & Launch Matches
             </Button>
             {cohort?.id && (
-              <Button
-                onClick={handleGenerateAllExplanations}
-                variant="outline"
-                disabled={isGeneratingAllExplanations}
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                {isGeneratingAllExplanations ? 'Generating...' : 'AI Explain All Matches'}
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleGenerateAllExplanations}
+                  variant="outline"
+                  disabled={isGeneratingAllExplanations}
+                >
+                  {isGeneratingAllExplanations ? (
+                    <div className="animate-spin h-4 w-4 mr-2 border-2 border-purple-500 border-t-transparent rounded-full" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  {isGeneratingAllExplanations
+                    ? `Generating${explanationProgress ? ` (${explanationProgress.completed}/${explanationProgress.total})` : '...'}`
+                    : 'AI Explain All Matches'}
+                </Button>
+                {isGeneratingAllExplanations && explanationProgress && explanationProgress.total > 0 && (
+                  <div className="flex items-center gap-2 min-w-[160px]">
+                    <Progress value={(explanationProgress.completed / explanationProgress.total) * 100} className="w-[120px]" />
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {Math.round((explanationProgress.completed / explanationProgress.total) * 100)}%
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -704,21 +639,30 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                                       </div>
                                       {explanations[`${result.mentee_id}_${rec.mentor_id}`]}
                                     </div>
+                                  ) : loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`] ? (
+                                    <div className="space-y-2 py-1">
+                                      <div className="flex items-center gap-1 mb-1">
+                                        <div className="animate-spin h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" />
+                                        <span className="text-xs font-medium text-purple-600">Generating AI explanation...</span>
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
+                                        <div className="h-3 bg-gray-200 rounded animate-pulse w-4/5" />
+                                        <div className="h-3 bg-gray-200 rounded animate-pulse w-3/5" />
+                                      </div>
+                                    </div>
                                   ) : (
                                     <Button
                                       size="sm"
                                       variant="ghost"
                                       className="text-xs"
-                                      disabled={loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`]}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleGenerateExplanation(result.mentee_id, rec.mentor_id, rec.score);
                                       }}
                                     >
                                       <Sparkles className="w-3 h-3 mr-1" />
-                                      {loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`]
-                                        ? 'Generating...'
-                                        : 'AI Explain Match'}
+                                      AI Explain Match
                                     </Button>
                                   )}
                                 </div>

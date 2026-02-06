@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,8 +26,9 @@ import {
   MapPin,
   User,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
-import { MatchingOutput, MentorData } from "@/types/mentoring";
+import { MatchingOutput, MentorData, MenteeData, MatchScore } from "@/types/mentoring";
 import {
   transformToMentorCentric,
   MentorCentricMatch,
@@ -39,11 +41,14 @@ import {
   CapacityIndicator,
   RankBadge,
 } from "@/components/ScoreBreakdownVisual";
+import { getOrGenerateExplanation, generateAllExplanations } from "@/lib/explanationService";
 import { useToast } from "@/hooks/use-toast";
 
 interface MentorCentricMatchSelectionProps {
   matchingOutput: MatchingOutput;
   mentors: MentorData[];
+  mentees?: MenteeData[];
+  cohortId?: string;
   onSelectionsApproved: (selections: Record<string, string>, comments?: Record<string, string>) => void;
   onCancel: () => void;
 }
@@ -51,25 +56,57 @@ interface MentorCentricMatchSelectionProps {
 export function MentorCentricMatchSelection({
   matchingOutput,
   mentors,
+  mentees,
+  cohortId,
   onSelectionsApproved,
   onCancel,
 }: MentorCentricMatchSelectionProps) {
   const { toast } = useToast();
 
+  // AI explanation state
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [explanationProgress, setExplanationProgress] = useState<{ completed: number; total: number } | null>(null);
+
+  // In batch mode, pre-select the proposed assignments and expand those mentors
+  const isBatchMode = matchingOutput.mode === "batch";
+
   // Transform to mentor-centric format
+  // In top3 mode, limit each mentor to their top 3 highest-scoring mentees
   const mentorCentricData = useMemo(
-    () => transformToMentorCentric(matchingOutput, mentors),
-    [matchingOutput, mentors]
+    () => transformToMentorCentric(matchingOutput, mentors, isBatchMode ? undefined : 3),
+    [matchingOutput, mentors, isBatchMode]
   );
 
-  // Track which mentors are expanded (all collapsed by default)
+  const initialSelections = useMemo(() => {
+    if (!isBatchMode) return new Map<string, Set<string>>();
+    const map = new Map<string, Set<string>>();
+    matchingOutput.results.forEach(result => {
+      const mentorId = result.proposed_assignment?.mentor_id;
+      if (mentorId) {
+        const existing = map.get(mentorId) || new Set<string>();
+        existing.add(result.mentee_id);
+        map.set(mentorId, existing);
+      }
+    });
+    return map;
+  }, [isBatchMode, matchingOutput]);
+
+  const initialExpandedMentors = useMemo(() => {
+    if (!isBatchMode) return new Set<string>();
+    // Expand mentors that have assignments
+    return new Set(initialSelections.keys());
+  }, [isBatchMode, initialSelections]);
+
+  // Track which mentors are expanded
   const [expandedMentors, setExpandedMentors] = useState<Set<string>>(
-    () => new Set()
+    () => initialExpandedMentors
   );
 
   // Track selections: mentor_id -> Set of mentee_ids
   const [selections, setSelections] = useState<Map<string, Set<string>>>(
-    () => new Map()
+    () => initialSelections
   );
 
   // Track detail dialog
@@ -194,6 +231,84 @@ export function MentorCentricMatchSelection({
     return comments.get(`${mentorId}_${menteeId}`) || "";
   };
 
+  const handleGenerateExplanation = async (menteeId: string, mentorId: string, score: MatchScore) => {
+    if (!cohortId || !mentees) return;
+    const key = `${menteeId}_${mentorId}`;
+
+    setLoadingExplanations(prev => ({ ...prev, [key]: true }));
+    try {
+      const mentee = mentees.find(m => m.id === menteeId);
+      const mentor = mentors.find(m => m.id === mentorId);
+      if (!mentee || !mentor) return;
+
+      const explanation = await getOrGenerateExplanation(cohortId, mentee, mentor, score);
+      setExplanations(prev => ({ ...prev, [key]: explanation }));
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to generate explanation",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setLoadingExplanations(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleGenerateAllExplanations = async () => {
+    if (!cohortId || !mentees) return;
+
+    setIsGeneratingAll(true);
+    setExplanationProgress({ completed: 0, total: 0 });
+    try {
+      const matchPairs: { mentee: MenteeData; mentor: MentorData; score: MatchScore }[] = [];
+
+      for (const result of matchingOutput.results) {
+        const mentee = mentees.find(m => m.id === result.mentee_id);
+        if (!mentee) continue;
+        const topRec = result.recommendations[0];
+        if (!topRec) continue;
+        const mentor = mentors.find(m => m.id === topRec.mentor_id);
+        if (!mentor) continue;
+        matchPairs.push({ mentee, mentor, score: topRec.score });
+      }
+
+      setExplanationProgress({ completed: 0, total: matchPairs.length });
+
+      const allExplanations = await generateAllExplanations(
+        cohortId,
+        matchPairs,
+        (completed, total) => {
+          setExplanationProgress({ completed, total });
+        },
+        (key, explanation) => {
+          setExplanations(prev => ({ ...prev, [key]: explanation }));
+        },
+      );
+
+      setExplanations(prev => {
+        const updated = { ...prev };
+        allExplanations.forEach((explanation, key) => {
+          updated[key] = explanation;
+        });
+        return updated;
+      });
+
+      toast({
+        title: "Explanations generated",
+        description: `Generated ${allExplanations.size} AI match explanations`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to generate explanations",
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsGeneratingAll(false);
+      setExplanationProgress(null);
+    }
+  };
+
   const handleApprove = () => {
     if (!validation.isValid) {
       toast({
@@ -239,13 +354,37 @@ export function MentorCentricMatchSelection({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Assign Mentees to Mentors
+                {isBatchMode ? "Review Proposed Assignments" : "Assign Mentees to Mentors"}
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Select which mentees to assign to each mentor. Click on a mentee row for details.
+                {isBatchMode
+                  ? "The algorithm assigned each mentee to their best available mentor. Review and approve, or adjust as needed."
+                  : "Select which mentees to assign to each mentor. Click on a mentee row for details."}
               </p>
             </div>
             <div className="flex gap-2">
+              {cohortId && mentees && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleGenerateAllExplanations}
+                    variant="outline"
+                    disabled={isGeneratingAll}
+                    size="sm"
+                  >
+                    {isGeneratingAll ? (
+                      <div className="animate-spin h-4 w-4 mr-2 border-2 border-purple-500 border-t-transparent rounded-full" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-2" />
+                    )}
+                    {isGeneratingAll
+                      ? `Explaining${explanationProgress ? ` (${explanationProgress.completed}/${explanationProgress.total})` : '...'}`
+                      : 'AI Explain All'}
+                  </Button>
+                  {isGeneratingAll && explanationProgress && explanationProgress.total > 0 && (
+                    <Progress value={(explanationProgress.completed / explanationProgress.total) * 100} className="w-[100px]" />
+                  )}
+                </div>
+              )}
               <Button onClick={onCancel} variant="outline">
                 Cancel
               </Button>
@@ -333,6 +472,9 @@ export function MentorCentricMatchSelection({
                   onShowDetails={(mentee) => handleShowDetails(mentor, mentee)}
                   getComment={(menteeId) => getComment(mentor.mentor_id, menteeId)}
                   onCommentChange={(menteeId, comment) => handleCommentChange(mentor.mentor_id, menteeId, comment)}
+                  explanations={explanations}
+                  loadingExplanations={loadingExplanations}
+                  onGenerateExplanation={cohortId && mentees ? handleGenerateExplanation : undefined}
                 />
               ))}
             </div>
@@ -403,6 +545,9 @@ interface MentorCardProps {
   onShowDetails: (mentee: PotentialMentee) => void;
   getComment: (menteeId: string) => string;
   onCommentChange: (menteeId: string, comment: string) => void;
+  explanations: Record<string, string>;
+  loadingExplanations: Record<string, boolean>;
+  onGenerateExplanation?: (menteeId: string, mentorId: string, score: MatchScore) => void;
 }
 
 function MentorCard({
@@ -417,6 +562,9 @@ function MentorCard({
   onShowDetails,
   getComment,
   onCommentChange,
+  explanations,
+  loadingExplanations,
+  onGenerateExplanation,
 }: MentorCardProps) {
   const selectedCount = selectedMentees.size;
   const capacityUsed = selectedCount;
@@ -553,6 +701,52 @@ function MentorCard({
                               showReasons
                               showRisks
                             />
+
+                            {/* AI Explanation */}
+                            {(() => {
+                              const key = `${mentee.mentee_id}_${mentor.mentor_id}`;
+                              if (explanations[key]) {
+                                return (
+                                  <div className="mt-2 text-sm text-gray-700 italic">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Sparkles className="w-3 h-3 text-purple-500" />
+                                      <span className="text-xs font-medium text-purple-600">AI Match Explanation</span>
+                                    </div>
+                                    {explanations[key]}
+                                  </div>
+                                );
+                              }
+                              if (loadingExplanations[key]) {
+                                return (
+                                  <div className="mt-2 space-y-1.5">
+                                    <div className="flex items-center gap-1">
+                                      <div className="animate-spin h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" />
+                                      <span className="text-xs font-medium text-purple-600">Generating AI explanation...</span>
+                                    </div>
+                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
+                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-4/5" />
+                                    <div className="h-3 bg-gray-200 rounded animate-pulse w-3/5" />
+                                  </div>
+                                );
+                              }
+                              if (onGenerateExplanation) {
+                                return (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="mt-1 text-xs h-7 px-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onGenerateExplanation(mentee.mentee_id, mentor.mentor_id, mentee.score);
+                                    }}
+                                  >
+                                    <Sparkles className="w-3 h-3 mr-1" />
+                                    AI Explain Match
+                                  </Button>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
 
                           {/* Comment input - shown when selected */}

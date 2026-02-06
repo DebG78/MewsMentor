@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -29,7 +30,6 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  ArrowLeft,
   MoreHorizontal,
   Eye,
   Edit,
@@ -49,7 +49,6 @@ import {
 import {
   getCohortById,
   calculateCohortStats,
-  validateCohortForMatching,
   updateCohort,
   deleteCohort,
   getCohortStatusInfo,
@@ -66,6 +65,7 @@ import { DataImport } from "@/components/DataImport";
 import { ProfileModal } from "@/components/ProfileModal";
 import { ProfileEditForm } from "@/components/ProfileEditForm";
 import { MenteeData, MentorData } from "@/types/mentoring";
+import { ScoreBreakdownVisual, ScoreBadge } from "@/components/ScoreBreakdownVisual";
 
 export default function CohortDetail() {
   const { cohortId, tab } = useParams<{ cohortId: string; tab?: string }>();
@@ -79,6 +79,8 @@ export default function CohortDetail() {
   const [pendingTop3Results, setPendingTop3Results] = useState<any | null>(null);
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
   const [matchViewMode, setMatchViewMode] = useState<'mentee-centric' | 'mentor-centric'>('mentor-centric');
+  const [batchDetailResult, setBatchDetailResult] = useState<any | null>(null);
+  const [selectedBatchRows, setSelectedBatchRows] = useState<Set<string>>(new Set());
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [pendingImportResult, setPendingImportResult] = useState<ImportResult | null>(null);
   const [viewingProfile, setViewingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
@@ -213,12 +215,24 @@ export default function CohortDetail() {
     setManualSelections({});
     setIsMatchingDialogOpen(false);
     setActiveTab("matches");
+
+    // For batch mode, pre-select all rows that have a proposed assignment
+    if (results.mode === "batch") {
+      const preSelected = new Set<string>();
+      results.results.forEach((r: any) => {
+        if (r.proposed_assignment?.mentor_id) {
+          preSelected.add(r.mentee_id);
+        }
+      });
+      setSelectedBatchRows(preSelected);
+    }
   };
 
   const handleManualSelectionsApproved = async (selections: Record<string, string>, comments?: Record<string, string>) => {
     if (!pendingTop3Results || !cohort) return;
 
     // Create a modified matching output with user's selections
+    // Only selected rows get a proposed_assignment; unselected rows have it cleared
     const modifiedOutput = {
       ...pendingTop3Results,
       results: pendingTop3Results.results.map((result: any) => {
@@ -233,32 +247,55 @@ export default function CohortDetail() {
               proposed_assignment: {
                 mentor_id: selectedRecommendation.mentor_id,
                 mentor_name: selectedRecommendation.mentor_name,
-                // Include comment if provided
                 ...(comments?.[result.mentee_id] && { comment: comments[result.mentee_id] })
               }
             };
           }
         }
-        return result;
+        // Not selected — strip proposed_assignment so it's not saved as approved
+        const { proposed_assignment, ...rest } = result;
+        return rest;
       })
     };
 
     try {
       // Save matches to cohort (updates both matches field and history)
+      console.log('[handleManualSelectionsApproved] Saving matches:', {
+        cohortId: cohort.id,
+        selectionsCount: Object.keys(selections).length,
+        totalResults: modifiedOutput.results.length,
+        approvedCount: modifiedOutput.results.filter((r: any) => r.proposed_assignment?.mentor_id).length,
+      });
+
       const updatedCohort = await saveMatchesToCohort(cohort.id, modifiedOutput);
-      if (updatedCohort) {
-        setCohort(updatedCohort);
+
+      if (!updatedCohort) {
+        console.error('[handleManualSelectionsApproved] saveMatchesToCohort returned null - save failed');
+        toast({
+          variant: "destructive",
+          title: "Failed to save matches",
+          description: "The save operation failed. Check browser console for details.",
+        });
+        return;
       }
+
+      console.log('[handleManualSelectionsApproved] Save successful, matches approved:',
+        updatedCohort.matches?.results?.filter((r) => r.proposed_assignment?.mentor_id).length
+      );
+
+      setCohort(updatedCohort);
 
       toast({
         title: "Matches saved successfully",
         description: `${Object.keys(selections).length} mentor-mentee pairs have been saved`,
       });
 
-      // Clear pending results
+      // Clear pending results and navigate to matches tab
       setPendingTop3Results(null);
       setManualSelections({});
+      setActiveTab("matches");
     } catch (error) {
+      console.error('[handleManualSelectionsApproved] Exception:', error);
       toast({
         variant: "destructive",
         title: "Failed to save matches",
@@ -386,23 +423,46 @@ export default function CohortDetail() {
   }
 
   const stats = calculateCohortStats(cohort);
-  const validation = validateCohortForMatching(cohort);
   const statusInfo = getCohortStatusInfo(cohort.status);
   const isEmpty = cohort.mentees.length === 0 && cohort.mentors.length === 0;
+
+  // Compute unmatched mentees and adjusted mentor capacities for re-matching
+  const approvedMatches = cohort.matches?.results?.filter(
+    (r) => r.proposed_assignment?.mentor_id
+  ) || [];
+  const matchedMenteeIds = new Set(approvedMatches.map((r) => r.mentee_id));
+  const unmatchedMentees = cohort.mentees.filter((m) => !matchedMenteeIds.has(m.id));
+
+  // Count how many mentees are already assigned to each mentor
+  const mentorAssignedCounts = new Map<string, number>();
+  approvedMatches.forEach((r) => {
+    const mid = r.proposed_assignment?.mentor_id;
+    if (mid) mentorAssignedCounts.set(mid, (mentorAssignedCounts.get(mid) || 0) + 1);
+  });
+  const adjustedMentors = cohort.mentors.map((m) => ({
+    ...m,
+    capacity_remaining: Math.max(0, (m.capacity_remaining || 0) - (mentorAssignedCounts.get(m.id) || 0)),
+  }));
+
+  // Validate matching readiness using adjusted values (accounts for already-matched mentees)
+  const adjustedCapacity = adjustedMentors.reduce((sum, m) => sum + m.capacity_remaining, 0);
+  const matchingIssues: string[] = [];
+  if (unmatchedMentees.length === 0) {
+    matchingIssues.push("All mentees are already matched");
+  }
+  if (cohort.mentors.length === 0) {
+    matchingIssues.push("No mentors in cohort");
+  }
+  if (adjustedCapacity === 0 && unmatchedMentees.length > 0) {
+    matchingIssues.push("No available mentor capacity");
+  }
+  const matchingReady = matchingIssues.length === 0 && unmatchedMentees.length > 0 && cohort.mentors.length > 0;
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/admin/mentoring/cohorts")}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Cohorts
-          </Button>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{cohort.name}</h1>
@@ -447,7 +507,7 @@ export default function CohortDetail() {
           </Dialog>
 
           {/* Start Matching Button */}
-          {validation.isReady && (
+          {matchingReady && (
             <Dialog open={isMatchingDialogOpen} onOpenChange={handleDialogOpenChange}>
               <DialogTrigger asChild>
                 <Button>
@@ -455,16 +515,21 @@ export default function CohortDetail() {
                   Start Matching
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Run Matching Algorithm</DialogTitle>
                   <DialogDescription>
                     Generate match recommendations for "{cohort.name}"
                   </DialogDescription>
                 </DialogHeader>
+                {matchedMenteeIds.size > 0 && (
+                  <p className="text-sm text-muted-foreground bg-muted/50 rounded px-3 py-2">
+                    {matchedMenteeIds.size} mentee{matchedMenteeIds.size !== 1 ? 's' : ''} already matched — running for {unmatchedMentees.length} remaining
+                  </p>
+                )}
                 <MatchingResults
                   key={matchingKey}
-                  importedData={{ mentees: cohort.mentees, mentors: cohort.mentors, errors: [], warnings: [] }}
+                  importedData={{ mentees: unmatchedMentees, mentors: adjustedMentors, errors: [], warnings: [] }}
                   cohort={cohort}
                   onCohortUpdated={(updated) => {
                     setCohort(updated);
@@ -541,12 +606,12 @@ export default function CohortDetail() {
       </div>
 
       {/* Matching Readiness Warning */}
-      {!validation.isReady && !isEmpty && (
+      {!matchingReady && !isEmpty && matchingIssues.length > 0 && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             <strong>Not ready for matching:</strong>{" "}
-            {validation.issues.join(", ")}
+            {matchingIssues.join(", ")}
           </AlertDescription>
         </Alert>
       )}
@@ -568,26 +633,70 @@ export default function CohortDetail() {
         </Card>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="mentees">
-            Mentees ({cohort.mentees.length})
-          </TabsTrigger>
-          <TabsTrigger value="mentors">
-            Mentors ({cohort.mentors.length})
-          </TabsTrigger>
-          {cohort.matches && cohort.matches.results && cohort.matches.results.length > 0 && (
-            <TabsTrigger value="matches">
-              Matches ({cohort.matches.results.length})
+        {!pendingTop3Results && (
+          <TabsList>
+            <TabsTrigger value="mentees">
+              Mentees ({cohort.mentees.length})
             </TabsTrigger>
-          )}
-        </TabsList>
+            <TabsTrigger value="mentors">
+              Mentors ({cohort.mentors.length})
+            </TabsTrigger>
+            {cohort.matches && cohort.matches.results && cohort.matches.results.length > 0 && (
+              <TabsTrigger value="matches">
+                Matches ({cohort.matches.results.length})
+              </TabsTrigger>
+            )}
+          </TabsList>
+        )}
 
         {/* Mentors Tab */}
         <TabsContent value="mentors">
           <Card>
             <CardHeader>
-              <CardTitle>Mentors</CardTitle>
-              <CardDescription>All mentors in this cohort</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Mentors</CardTitle>
+                  <CardDescription>All mentors in this cohort</CardDescription>
+                </div>
+                {cohort.mentors.some(m => (m.capacity_remaining || 0) === 0) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const zeroCapMentors = cohort.mentors.filter(m => (m.capacity_remaining || 0) === 0);
+                      const input = window.prompt(
+                        `${zeroCapMentors.length} mentor(s) have 0 capacity.\nSet their capacity to:`,
+                        "2"
+                      );
+                      if (!input) return;
+                      const newCap = parseInt(input, 10);
+                      if (isNaN(newCap) || newCap < 1) return;
+
+                      try {
+                        await Promise.all(
+                          zeroCapMentors.map(m =>
+                            updateMentorProfile(m.id, { capacity_remaining: newCap })
+                          )
+                        );
+                        const refreshed = await getCohortById(cohort.id);
+                        if (refreshed) setCohort(refreshed);
+                        toast({
+                          title: "Capacity updated",
+                          description: `Set ${zeroCapMentors.length} mentors to capacity ${newCap}`,
+                        });
+                      } catch (error) {
+                        toast({
+                          variant: "destructive",
+                          title: "Failed to update capacity",
+                          description: error instanceof Error ? error.message : "Unknown error",
+                        });
+                      }
+                    }}
+                  >
+                    Set Default Capacity
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -736,43 +845,216 @@ export default function CohortDetail() {
                   </Alert>
                 )}
 
-                {/* View Mode Toggle */}
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Choose how to view and assign matches
-                  </p>
-                  <div className="flex gap-1 p-1 bg-muted rounded-lg">
-                    <Button
-                      size="sm"
-                      variant={matchViewMode === 'mentor-centric' ? 'default' : 'ghost'}
-                      onClick={() => setMatchViewMode('mentor-centric')}
-                    >
-                      By Mentor
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={matchViewMode === 'mentee-centric' ? 'default' : 'ghost'}
-                      onClick={() => setMatchViewMode('mentee-centric')}
-                    >
-                      By Mentee
-                    </Button>
-                  </div>
-                </div>
+                {pendingTop3Results.mode === "batch" ? (
+                  /* ---- BATCH MODE: simple table ---- */
+                  <>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>Proposed Assignments</CardTitle>
+                          <CardDescription>
+                            Each mentee was assigned to their best available mentor. A mentor may receive multiple mentees if they have the capacity.
+                          </CardDescription>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={handleCancelManualSelection}>
+                            Cancel
+                          </Button>
+                          <Button
+                            disabled={selectedBatchRows.size === 0}
+                            onClick={() => {
+                              const selections: Record<string, string> = {};
+                              pendingTop3Results.results.forEach((r: any) => {
+                                if (selectedBatchRows.has(r.mentee_id) && r.proposed_assignment?.mentor_id) {
+                                  selections[r.mentee_id] = r.proposed_assignment.mentor_id;
+                                }
+                              });
+                              handleManualSelectionsApproved(selections);
+                            }}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Approve Selected ({selectedBatchRows.size})
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">
+                              <Checkbox
+                                checked={selectedBatchRows.size === pendingTop3Results.results.filter((r: any) => r.proposed_assignment?.mentor_id).length}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    const all = new Set<string>();
+                                    pendingTop3Results.results.forEach((r: any) => {
+                                      if (r.proposed_assignment?.mentor_id) all.add(r.mentee_id);
+                                    });
+                                    setSelectedBatchRows(all);
+                                  } else {
+                                    setSelectedBatchRows(new Set());
+                                  }
+                                }}
+                              />
+                            </TableHead>
+                            <TableHead>Mentee</TableHead>
+                            <TableHead>Assigned Mentor</TableHead>
+                            <TableHead className="text-center">Score</TableHead>
+                            <TableHead>Why</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pendingTop3Results.results.map((result: any) => {
+                            const rec = result.recommendations?.[0];
+                            const isSelected = selectedBatchRows.has(result.mentee_id);
+                            return (
+                              <TableRow
+                                key={result.mentee_id}
+                                className={`cursor-pointer hover:bg-muted/50 ${!isSelected ? 'opacity-50' : ''}`}
+                                onClick={() => setBatchDetailResult(result)}
+                              >
+                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={isSelected}
+                                    disabled={!result.proposed_assignment?.mentor_id}
+                                    onCheckedChange={(checked) => {
+                                      setSelectedBatchRows(prev => {
+                                        const next = new Set(prev);
+                                        if (checked) {
+                                          next.add(result.mentee_id);
+                                        } else {
+                                          next.delete(result.mentee_id);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {result.mentee_name || result.mentee_id}
+                                </TableCell>
+                                <TableCell>
+                                  {result.proposed_assignment?.mentor_name || (
+                                    <span className="text-muted-foreground">No match</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {rec && (
+                                    <Badge variant={rec.score.total_score >= 80 ? "default" : rec.score.total_score >= 60 ? "secondary" : "destructive"}>
+                                      {Math.round(rec.score.total_score)}
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {rec?.score.reasons?.slice(0, 2).join("; ")}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
 
-                {/* Render based on view mode */}
-                {matchViewMode === 'mentor-centric' ? (
-                  <MentorCentricMatchSelection
-                    matchingOutput={pendingTop3Results}
-                    mentors={cohort.mentors}
-                    onSelectionsApproved={handleManualSelectionsApproved}
-                    onCancel={handleCancelManualSelection}
-                  />
+                  {/* Batch detail dialog */}
+                  <Dialog open={!!batchDetailResult} onOpenChange={(open) => !open && setBatchDetailResult(null)}>
+                    <DialogContent className="max-w-lg">
+                      {batchDetailResult && (() => {
+                        const rec = batchDetailResult.recommendations?.[0];
+                        return (
+                          <>
+                            <DialogHeader>
+                              <DialogTitle>Match Details</DialogTitle>
+                              <DialogDescription>
+                                {batchDetailResult.mentee_name} &rarr; {batchDetailResult.proposed_assignment?.mentor_name}
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              {/* Score */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">Overall Score</span>
+                                {rec && (
+                                  <ScoreBadge score={rec.score.total_score} size="lg" />
+                                )}
+                              </div>
+
+                              {/* Score breakdown */}
+                              {rec && (
+                                <ScoreBreakdownVisual
+                                  score={rec.score}
+                                  variant="detailed"
+                                  showReasons
+                                  showRisks
+                                />
+                              )}
+
+                              {/* Alternates */}
+                              {batchDetailResult.recommendations.length > 1 && (
+                                <div>
+                                  <p className="text-sm font-medium mb-2">Other options considered</p>
+                                  <div className="space-y-1">
+                                    {batchDetailResult.recommendations.slice(1).map((alt: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/50">
+                                        <span className="text-muted-foreground">{alt.mentor_name}</span>
+                                        <Badge variant="outline">{Math.round(alt.score.total_score)}</Badge>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </DialogContent>
+                  </Dialog>
+                  </>
                 ) : (
-                  <ManualMatchSelection
-                    matchingOutput={pendingTop3Results}
-                    onSelectionsApproved={handleManualSelectionsApproved}
-                    onCancel={handleCancelManualSelection}
-                  />
+                  /* ---- TOP 3 MODE: full selection UI ---- */
+                  <>
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Choose how to view and assign matches
+                      </p>
+                      <div className="flex gap-1 p-1 bg-muted rounded-lg">
+                        <Button
+                          size="sm"
+                          variant={matchViewMode === 'mentor-centric' ? 'default' : 'ghost'}
+                          onClick={() => setMatchViewMode('mentor-centric')}
+                        >
+                          By Mentor
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={matchViewMode === 'mentee-centric' ? 'default' : 'ghost'}
+                          onClick={() => setMatchViewMode('mentee-centric')}
+                        >
+                          By Mentee
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Render based on view mode */}
+                    {matchViewMode === 'mentor-centric' ? (
+                      <MentorCentricMatchSelection
+                        matchingOutput={pendingTop3Results}
+                        mentors={cohort.mentors}
+                        mentees={cohort.mentees}
+                        cohortId={cohort.id}
+                        onSelectionsApproved={handleManualSelectionsApproved}
+                        onCancel={handleCancelManualSelection}
+                      />
+                    ) : (
+                      <ManualMatchSelection
+                        matchingOutput={pendingTop3Results}
+                        onSelectionsApproved={handleManualSelectionsApproved}
+                        onCancel={handleCancelManualSelection}
+                      />
+                    )}
+                  </>
                 )}
               </div>
             ) : (

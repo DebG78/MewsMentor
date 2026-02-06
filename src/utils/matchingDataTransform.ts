@@ -30,7 +30,8 @@ export interface PotentialMentee {
  */
 export function transformToMentorCentric(
   matchingOutput: MatchingOutput,
-  mentors: MentorData[]
+  mentors: MentorData[],
+  maxPerMentor?: number
 ): MentorCentricMatch[] {
   // Create a map to collect mentees for each mentor
   const mentorMap = new Map<string, MentorCentricMatch>();
@@ -48,8 +49,15 @@ export function transformToMentorCentric(
   });
 
   // Pivot the data: for each mentee's recommendations, add to the mentor's potential list
+  // In batch mode, only include the proposed assignment (the single best match)
+  const isBatchMode = matchingOutput.mode === "batch";
+
   matchingOutput.results.forEach(result => {
-    result.recommendations.forEach((rec, idx) => {
+    const recsToUse = isBatchMode && result.proposed_assignment?.mentor_id
+      ? result.recommendations.filter(rec => rec.mentor_id === result.proposed_assignment?.mentor_id)
+      : result.recommendations;
+
+    recsToUse.forEach((rec, idx) => {
       let mentorEntry = mentorMap.get(rec.mentor_id);
 
       // If mentor not in map (shouldn't happen but handle gracefully), create entry
@@ -73,7 +81,7 @@ export function transformToMentorCentric(
         mentee_id: result.mentee_id,
         mentee_name: result.mentee_name || result.mentee_id,
         score: rec.score,
-        rank_for_this_mentee: idx + 1 // 1-indexed rank
+        rank_for_this_mentee: isBatchMode ? 1 : idx + 1 // batch = always the #1 pick
       });
     });
   });
@@ -83,6 +91,9 @@ export function transformToMentorCentric(
 
   mentorList.forEach(mentor => {
     mentor.potential_mentees.sort((a, b) => b.score.total_score - a.score.total_score);
+    if (maxPerMentor && mentor.potential_mentees.length > maxPerMentor) {
+      mentor.potential_mentees = mentor.potential_mentees.slice(0, maxPerMentor);
+    }
   });
 
   // Sort mentors by number of potential mentees (most matches first), then by name
@@ -102,6 +113,7 @@ export function transformToMentorCentric(
 export interface ScoreComponent {
   key: string;
   label: string;
+  description: string;
   value: number;
   maxValue: number;
   percentage: number;
@@ -115,6 +127,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     {
       key: 'topics',
       label: 'Topics',
+      description: 'How well the mentor\'s expertise matches what the mentee wants to learn',
       value: Math.round(features.topics_overlap * 40),
       maxValue: 40,
       percentage: features.topics_overlap * 100,
@@ -123,6 +136,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     {
       key: 'semantic',
       label: score.is_embedding_based ? 'Goals Alignment (AI)' : 'Goals Alignment',
+      description: 'How closely the mentee\'s goals align with what the mentor offers',
       value: Math.round(features.semantic_similarity * 20),
       maxValue: 20,
       percentage: features.semantic_similarity * 100,
@@ -131,6 +145,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     {
       key: 'industry',
       label: 'Industry',
+      description: 'Whether mentor and mentee work in the same or related industries',
       value: Math.round(features.industry_overlap * 15),
       maxValue: 15,
       percentage: features.industry_overlap * 100,
@@ -139,6 +154,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     {
       key: 'seniority',
       label: 'Seniority Fit',
+      description: 'Whether the mentor has enough seniority gap to guide the mentee',
       value: Math.round(features.role_seniority_fit * 10),
       maxValue: 10,
       percentage: features.role_seniority_fit * 100,
@@ -147,6 +163,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     {
       key: 'timezone',
       label: 'Timezone',
+      description: 'Whether they can easily schedule meetings in overlapping hours',
       value: Math.round(features.tz_overlap_bonus * 5),
       maxValue: 5,
       percentage: features.tz_overlap_bonus * 100,
@@ -155,6 +172,7 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
     {
       key: 'language',
       label: 'Language',
+      description: 'Whether they share a common language for communication',
       value: Math.round(features.language_bonus * 5),
       maxValue: 5,
       percentage: features.language_bonus * 100,
