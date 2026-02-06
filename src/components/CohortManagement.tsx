@@ -468,10 +468,22 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Cohort not ready for matching:</strong>
+              <strong>Not ready for matching:</strong>
               <ul className="mt-1 list-disc list-inside text-sm">
                 {validation.issues.map((issue, index) => (
                   <li key={index}>{issue}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+        {validation.isReady && validation.warnings.length > 0 && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <ul className="list-disc list-inside text-sm">
+                {validation.warnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
                 ))}
               </ul>
             </AlertDescription>

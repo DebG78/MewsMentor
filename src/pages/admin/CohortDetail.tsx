@@ -469,6 +469,9 @@ export default function CohortDetail() {
     matchingIssues.push("No available mentor capacity");
   }
   const matchingReady = matchingIssues.length === 0 && unmatchedMentees.length > 0 && cohort.mentors.length > 0;
+  const matchingWarning = matchingReady && adjustedCapacity < unmatchedMentees.length
+    ? `Capacity covers ${adjustedCapacity} of ${unmatchedMentees.length} unmatched mentees — partial matching will be used`
+    : null;
 
   return (
     <div className="space-y-6 p-6">
@@ -625,6 +628,12 @@ export default function CohortDetail() {
             <strong>Not ready for matching:</strong>{" "}
             {matchingIssues.join(", ")}
           </AlertDescription>
+        </Alert>
+      )}
+      {matchingWarning && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{matchingWarning}</AlertDescription>
         </Alert>
       )}
 

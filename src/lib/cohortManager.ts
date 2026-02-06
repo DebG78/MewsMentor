@@ -57,8 +57,9 @@ export function getCohortStatusInfo(status: Cohort['status']) {
 }
 
 // Validate cohort readiness for matching
-export function validateCohortForMatching(cohort: Cohort): { isReady: boolean; issues: string[] } {
+export function validateCohortForMatching(cohort: Cohort): { isReady: boolean; issues: string[]; warnings: string[] } {
   const issues: string[] = [];
+  const warnings: string[] = [];
 
   if (cohort.mentees.length === 0) {
     issues.push("No mentees in cohort");
@@ -68,17 +69,38 @@ export function validateCohortForMatching(cohort: Cohort): { isReady: boolean; i
     issues.push("No mentors in cohort");
   }
 
-  const totalCapacity = cohort.mentors.reduce((sum, mentor) => sum + mentor.capacity_remaining, 0);
-  if (totalCapacity === 0) {
+  // Account for already-matched mentees
+  const approvedMatches = cohort.matches?.results?.filter(
+    (r: any) => r.proposed_assignment?.mentor_id
+  ) || [];
+  const matchedMenteeIds = new Set(approvedMatches.map((r: any) => r.mentee_id));
+  const unmatchedCount = cohort.mentees.filter((m) => !matchedMenteeIds.has(m.id)).length;
+
+  // Compute effective capacity (original capacity minus approved matches per mentor)
+  const mentorMatchCounts = new Map<string, number>();
+  approvedMatches.forEach((r: any) => {
+    const mid = r.proposed_assignment?.mentor_id;
+    if (mid) mentorMatchCounts.set(mid, (mentorMatchCounts.get(mid) || 0) + 1);
+  });
+  const effectiveCapacity = cohort.mentors.reduce((sum, mentor) => {
+    return sum + Math.max(0, (mentor.capacity_remaining || 0) - (mentorMatchCounts.get(mentor.id) || 0));
+  }, 0);
+
+  if (effectiveCapacity === 0 && unmatchedCount > 0) {
     issues.push("No available mentor capacity");
   }
 
-  if (totalCapacity < cohort.mentees.length) {
-    issues.push(`Insufficient capacity: ${totalCapacity} slots for ${cohort.mentees.length} mentees`);
+  if (unmatchedCount === 0) {
+    issues.push("All mentees are already matched");
+  }
+
+  if (effectiveCapacity > 0 && effectiveCapacity < unmatchedCount) {
+    warnings.push(`Capacity covers ${effectiveCapacity} of ${unmatchedCount} unmatched mentees — partial matching will be used`);
   }
 
   return {
     isReady: issues.length === 0,
-    issues
+    issues,
+    warnings
   };
 }
