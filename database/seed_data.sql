@@ -68,7 +68,7 @@ INSERT INTO skills (name, category, description) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================
--- STEP 3: GET PROGRAM IDs (Mentoring and Cross-Exposure)
+-- STEP 3: CREATE MENTORING COHORT
 -- ============================================================================
 
 -- Create a mentoring cohort
@@ -199,88 +199,7 @@ WHERE s.name IN ('Leadership', 'Communication')
 ON CONFLICT (user_id, skill_id) DO NOTHING;
 
 -- ============================================================================
--- STEP 7: CREATE SAMPLE HOST OFFERINGS (Cross-Exposure)
--- ============================================================================
-
-INSERT INTO host_offerings (host_user_id, title, description, skills_offered, topics_covered, what_shadow_will_do, availability, max_concurrent_shadows, slots_per_week, is_active, is_accepting_bookings)
-VALUES
-  ('user_002',
-   'Product Strategy in Action',
-   'Shadow me during product roadmap planning, user interviews, and stakeholder meetings. Learn how product decisions are made.',
-   ARRAY['Product Strategy', 'User Research', 'Stakeholder Management'],
-   ARRAY['Roadmap Planning', 'User Interviews', 'Data-Driven Decisions'],
-   'Observe user interviews, participate in planning discussions, review product metrics together',
-   '{"monday": [{"start": "09:00", "end": "12:00"}], "wednesday": [{"start": "14:00", "end": "17:00"}]}',
-   2,
-   3,
-   true,
-   true),
-
-  ('user_005',
-   'UX Design Process Deep Dive',
-   'Experience the full UX design process from research to final designs. Perfect for anyone interested in design thinking.',
-   ARRAY['UI Design', 'User Research', 'Figma'],
-   ARRAY['User Research', 'Wireframing', 'Prototyping', 'User Testing'],
-   'Participate in user research sessions, observe design critiques, learn Figma tips and tricks',
-   '{"tuesday": [{"start": "10:00", "end": "13:00"}], "thursday": [{"start": "10:00", "end": "13:00"}]}',
-   1,
-   2,
-   true,
-   true),
-
-  ('user_008',
-   'DevOps & Infrastructure',
-   'Learn about cloud infrastructure, CI/CD pipelines, and monitoring systems. Hands-on exposure to DevOps practices.',
-   ARRAY['AWS', 'Kubernetes', 'CI/CD', 'Monitoring'],
-   ARRAY['Infrastructure as Code', 'Deployment Pipelines', 'System Monitoring', 'Incident Response'],
-   'Walk through infrastructure setup, review deployment processes, participate in system monitoring',
-   '{"friday": [{"start": "14:00", "end": "17:00"}]}',
-   2,
-   2,
-   true,
-   true);
-
--- ============================================================================
--- STEP 8: CREATE SAMPLE SHADOW BOOKINGS
--- ============================================================================
-
-INSERT INTO shadow_bookings (host_offering_id, host_user_id, shadow_user_id, booking_type, start_datetime, end_datetime, duration_hours, learning_goals, skills_to_develop, status)
-SELECT
-  ho.id,
-  'user_002',
-  'user_003',
-  'single',
-  '2025-02-10 09:00:00',
-  '2025-02-10 12:00:00',
-  3,
-  'Learn how product managers make data-driven decisions and prioritize features',
-  ARRAY['Product Strategy', 'Data Analysis'],
-  'confirmed'
-FROM host_offerings ho
-WHERE ho.host_user_id = 'user_002'
-LIMIT 1;
-
-INSERT INTO shadow_bookings (host_offering_id, host_user_id, shadow_user_id, booking_type, start_datetime, end_datetime, duration_hours, learning_goals, skills_to_develop, status, shadow_rating, shadow_reflection, skills_developed)
-SELECT
-  ho.id,
-  'user_005',
-  'user_007',
-  'single',
-  '2025-01-30 10:00:00',
-  '2025-01-30 13:00:00',
-  3,
-  'Understand the UX design process and learn Figma',
-  ARRAY['UI Design', 'User Research'],
-  'completed',
-  5,
-  'Amazing experience! Learned so much about user research methods and got hands-on time with Figma. Emily was very patient and explained everything clearly.',
-  ARRAY['UI Design', 'User Research']
-FROM host_offerings ho
-WHERE ho.host_user_id = 'user_005'
-LIMIT 1;
-
--- ============================================================================
--- STEP 9: INITIALIZE BADGES
+-- STEP 7: INITIALIZE BADGES
 -- ============================================================================
 -- Call this function to set up default badges (would be called from application)
 -- For now, just document that initializeBadges() should be called
@@ -288,7 +207,7 @@ LIMIT 1;
 COMMENT ON TABLE badges IS 'Run initializeBadges() function from badgeService.ts to populate default badges';
 
 -- ============================================================================
--- STEP 10: CREATE SAMPLE RECOMMENDATIONS
+-- STEP 8: CREATE SAMPLE RECOMMENDATIONS
 -- ============================================================================
 
 INSERT INTO growth_recommendations (user_id, program_cohort_id, recommendation_key, title, description, icon, stage, display_order, is_completed, completed_at)
@@ -318,10 +237,6 @@ SELECT 'growth_events', COUNT(*) FROM growth_events
 UNION ALL
 SELECT 'user_skill_progress', COUNT(*) FROM user_skill_progress
 UNION ALL
-SELECT 'host_offerings', COUNT(*) FROM host_offerings
-UNION ALL
-SELECT 'shadow_bookings', COUNT(*) FROM shadow_bookings
-UNION ALL
 SELECT 'growth_recommendations', COUNT(*) FROM growth_recommendations
 ORDER BY table_name;
 
@@ -331,8 +246,7 @@ SELECT
   ' | Mentors: ' || (SELECT COUNT(DISTINCT user_id) FROM program_participants WHERE role_in_program = 'mentor') ||
   ' | Mentees: ' || (SELECT COUNT(DISTINCT user_id) FROM program_participants WHERE role_in_program = 'mentee') ||
   ' | Growth Events: ' || (SELECT COUNT(*) FROM growth_events) ||
-  ' | Skills: ' || (SELECT COUNT(*) FROM skills) ||
-  ' | Host Offerings: ' || (SELECT COUNT(*) FROM host_offerings) as summary;
+  ' | Skills: ' || (SELECT COUNT(*) FROM skills) as summary;
 
 -- ============================================================================
 -- DONE!
