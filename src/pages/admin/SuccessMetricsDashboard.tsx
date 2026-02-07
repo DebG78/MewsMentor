@@ -114,6 +114,9 @@ export default function SuccessMetricsDashboard() {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState('overview');
+
   // Comparison state
   const [comparisonMetric, setComparisonMetric] = useState<string>('');
   const [comparisonData, setComparisonData] = useState<CohortComparison[]>([]);
@@ -289,7 +292,7 @@ export default function SuccessMetricsDashboard() {
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
       ) : (
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="metrics">All Metrics</TabsTrigger>
@@ -362,7 +365,10 @@ export default function SuccessMetricsDashboard() {
                           <div
                             key={cat.category}
                             className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => setSelectedCategory(cat.category)}
+                            onClick={() => {
+                              setSelectedCategory(cat.category);
+                              setActiveTab('metrics');
+                            }}
                           >
                             <div className="flex items-center gap-2 mb-3">
                               <div className={cn('w-8 h-8 rounded-full flex items-center justify-center', meta.color, 'text-white')}>
