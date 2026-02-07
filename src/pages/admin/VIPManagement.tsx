@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2,
@@ -47,6 +48,21 @@ import {
   UserCheck,
   UserX,
 } from 'lucide-react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+} from 'recharts';
 import type {
   VIPScore,
   VIPRule,
@@ -68,6 +84,23 @@ import {
 import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
 
+const tierDonutConfig = {
+  platinum: { label: 'Platinum', color: 'hsl(215, 14%, 50%)' },
+  gold: { label: 'Gold', color: 'hsl(45, 93%, 47%)' },
+  silver: { label: 'Silver', color: 'hsl(0, 0%, 65%)' },
+  bronze: { label: 'Bronze', color: 'hsl(30, 75%, 45%)' },
+  none: { label: 'Standard', color: 'hsl(0, 0%, 80%)' },
+} satisfies ChartConfig;
+
+const scoreHistogramConfig = {
+  count: { label: 'Participants', color: 'hsl(221, 83%, 53%)' },
+} satisfies ChartConfig;
+
+const radarConfig = {
+  participant: { label: 'Participant', color: 'hsl(221, 83%, 53%)' },
+  average: { label: 'Cohort Average', color: 'hsl(0, 0%, 60%)' },
+} satisfies ChartConfig;
+
 export default function VIPManagement() {
   const { toast } = useToast();
   const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
@@ -82,6 +115,9 @@ export default function VIPManagement() {
   // Filter
   const [filterType, setFilterType] = useState<'all' | 'vip' | 'non_vip'>('all');
 
+  // Selected participant for radar chart
+  const [selectedParticipant, setSelectedParticipant] = useState<string>('');
+
   // Rule dialog
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<VIPRule | null>(null);
@@ -90,6 +126,78 @@ export default function VIPManagement() {
   const [ruleConditionType, setRuleConditionType] = useState<'score_threshold' | 'component_threshold'>('score_threshold');
   const [ruleThreshold, setRuleThreshold] = useState('80');
   const [ruleAppliesTo, setRuleAppliesTo] = useState<'both' | 'mentor' | 'mentee'>('both');
+
+  // Chart data computed from scores
+  const tierDonutData = useMemo(() => {
+    if (scores.length === 0) return [];
+    const tiers = { platinum: 0, gold: 0, silver: 0, bronze: 0, none: 0 };
+    for (const score of scores) {
+      const tier = getVIPTier(score.total_score).tier;
+      tiers[tier]++;
+    }
+    return Object.entries(tiers)
+      .filter(([, count]) => count > 0)
+      .map(([tier, count]) => ({
+        name: tier.charAt(0).toUpperCase() + tier.slice(1),
+        value: count,
+        fill: `var(--color-${tier})`,
+      }));
+  }, [scores]);
+
+  const scoreHistogramData = useMemo(() => {
+    if (scores.length === 0) return [];
+    const buckets = [
+      { range: '0-20', min: 0, max: 20, count: 0 },
+      { range: '21-40', min: 21, max: 40, count: 0 },
+      { range: '41-60', min: 41, max: 60, count: 0 },
+      { range: '61-80', min: 61, max: 80, count: 0 },
+      { range: '81-100', min: 81, max: 100, count: 0 },
+    ];
+    for (const score of scores) {
+      const bucket = buckets.find(b => score.total_score >= b.min && score.total_score <= b.max);
+      if (bucket) bucket.count++;
+    }
+    return buckets;
+  }, [scores]);
+
+  const radarData = useMemo(() => {
+    if (scores.length === 0) return [];
+    const avgEngagement = scores.reduce((s, sc) => s + sc.engagement_score, 0) / scores.length;
+    const avgSession = scores.reduce((s, sc) => s + sc.session_score, 0) / scores.length;
+    const avgResponse = scores.reduce((s, sc) => s + sc.response_score, 0) / scores.length;
+    const avgFeedback = scores.reduce((s, sc) => s + sc.feedback_score, 0) / scores.length;
+
+    const selected = selectedParticipant
+      ? scores.find(s => s.id === selectedParticipant)
+      : null;
+
+    return [
+      {
+        component: 'Engagement',
+        average: Math.round(avgEngagement * 10) / 10,
+        participant: selected?.engagement_score ?? avgEngagement,
+        fullMark: 25,
+      },
+      {
+        component: 'Sessions',
+        average: Math.round(avgSession * 10) / 10,
+        participant: selected?.session_score ?? avgSession,
+        fullMark: 25,
+      },
+      {
+        component: 'Response',
+        average: Math.round(avgResponse * 10) / 10,
+        participant: selected?.response_score ?? avgResponse,
+        fullMark: 25,
+      },
+      {
+        component: 'Feedback',
+        average: Math.round(avgFeedback * 10) / 10,
+        participant: selected?.feedback_score ?? avgFeedback,
+        fullMark: 25,
+      },
+    ];
+  }, [scores, selectedParticipant]);
 
   useEffect(() => {
     loadCohorts();
@@ -390,6 +498,131 @@ export default function VIPManagement() {
                       </div>
                       <Award className="w-10 h-10 text-green-500 opacity-50" />
                     </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Charts Row */}
+            {scores.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Score Distribution Histogram */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Score Distribution</CardTitle>
+                    <CardDescription>Participants by score range</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ChartContainer config={scoreHistogramConfig} className="h-[220px] w-full">
+                      <BarChart data={scoreHistogramData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="range" fontSize={12} />
+                        <YAxis allowDecimals={false} fontSize={12} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar
+                          dataKey="count"
+                          fill="var(--color-count)"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  </CardContent>
+                </Card>
+
+                {/* VIP Tier Donut */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">VIP Tier Distribution</CardTitle>
+                    <CardDescription>Breakdown by tier level</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {tierDonutData.length > 0 ? (
+                      <ChartContainer config={tierDonutConfig} className="h-[220px] w-full">
+                        <PieChart>
+                          <Pie
+                            data={tierDonutData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            dataKey="value"
+                            nameKey="name"
+                          >
+                            {tierDonutData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Pie>
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                        </PieChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-[220px] text-muted-foreground">
+                        No tier data
+                      </div>
+                    )}
+                    <div className="flex flex-wrap justify-center gap-3 mt-2">
+                      {tierDonutData.map(d => (
+                        <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                          <div
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: d.fill.startsWith('var') ? undefined : d.fill }}
+                          />
+                          <span>{d.name} ({d.value})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Score Component Radar */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Score Components</CardTitle>
+                    <CardDescription>
+                      {selectedParticipant ? 'Participant vs cohort average' : 'Cohort average across components'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-2">
+                      <Select value={selectedParticipant} onValueChange={setSelectedParticipant}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select participant to compare" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Cohort Average Only</SelectItem>
+                          {scores.slice(0, 20).map(s => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.person_id.slice(0, 8)}... ({s.person_type}) - {s.total_score.toFixed(0)}pts
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <ChartContainer config={radarConfig} className="h-[200px] w-full">
+                      <RadarChart data={radarData}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="component" fontSize={11} />
+                        <PolarRadiusAxis angle={30} domain={[0, 25]} fontSize={10} />
+                        <Radar
+                          name="Cohort Avg"
+                          dataKey="average"
+                          stroke="var(--color-average)"
+                          fill="var(--color-average)"
+                          fillOpacity={0.2}
+                        />
+                        {selectedParticipant && (
+                          <Radar
+                            name="Participant"
+                            dataKey="participant"
+                            stroke="var(--color-participant)"
+                            fill="var(--color-participant)"
+                            fillOpacity={0.3}
+                          />
+                        )}
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </RadarChart>
+                    </ChartContainer>
                   </CardContent>
                 </Card>
               </div>

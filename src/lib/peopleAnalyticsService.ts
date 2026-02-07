@@ -1,0 +1,389 @@
+import type { Cohort, MenteeData, MentorData, MatchingResult, MatchingFeatures } from '@/types/mentoring';
+
+// ============================================================================
+// TOPIC DEMAND VS SUPPLY
+// ============================================================================
+
+export interface TopicDemandSupply {
+  topic: string;
+  demand: number; // mentees wanting this topic
+  supply: number; // mentors offering this topic
+  gap: number;    // demand - supply (positive = unmet demand)
+}
+
+export function getTopicDemandSupply(cohorts: Cohort[]): TopicDemandSupply[] {
+  const demandMap = new Map<string, number>();
+  const supplyMap = new Map<string, number>();
+
+  for (const cohort of cohorts) {
+    for (const mentee of cohort.mentees) {
+      for (const topic of mentee.topics_to_learn || []) {
+        demandMap.set(topic, (demandMap.get(topic) || 0) + 1);
+      }
+    }
+    for (const mentor of cohort.mentors) {
+      for (const topic of mentor.topics_to_mentor || []) {
+        supplyMap.set(topic, (supplyMap.get(topic) || 0) + 1);
+      }
+    }
+  }
+
+  const allTopics = new Set([...demandMap.keys(), ...supplyMap.keys()]);
+
+  return Array.from(allTopics)
+    .map(topic => ({
+      topic,
+      demand: demandMap.get(topic) || 0,
+      supply: supplyMap.get(topic) || 0,
+      gap: (demandMap.get(topic) || 0) - (supplyMap.get(topic) || 0),
+    }))
+    .sort((a, b) => b.gap - a.gap);
+}
+
+// ============================================================================
+// EXPERIENCE DISTRIBUTION
+// ============================================================================
+
+export interface ExperienceBand {
+  band: string;
+  mentors: number;
+  mentees: number;
+}
+
+function getExperienceBand(years: string): string {
+  const num = parseInt(years);
+  if (isNaN(num)) return 'Unknown';
+  if (num <= 2) return '0-2 years';
+  if (num <= 5) return '3-5 years';
+  if (num <= 10) return '6-10 years';
+  if (num <= 15) return '11-15 years';
+  return '15+ years';
+}
+
+export function getExperienceDistribution(cohorts: Cohort[]): ExperienceBand[] {
+  const bands = new Map<string, { mentors: number; mentees: number }>();
+  const orderedBands = ['0-2 years', '3-5 years', '6-10 years', '11-15 years', '15+ years', 'Unknown'];
+
+  for (const band of orderedBands) {
+    bands.set(band, { mentors: 0, mentees: 0 });
+  }
+
+  for (const cohort of cohorts) {
+    for (const mentee of cohort.mentees) {
+      const band = getExperienceBand(mentee.experience_years);
+      const entry = bands.get(band) || { mentors: 0, mentees: 0 };
+      entry.mentees++;
+      bands.set(band, entry);
+    }
+    for (const mentor of cohort.mentors) {
+      const band = getExperienceBand(mentor.experience_years);
+      const entry = bands.get(band) || { mentors: 0, mentees: 0 };
+      entry.mentors++;
+      bands.set(band, entry);
+    }
+  }
+
+  return orderedBands
+    .map(band => ({
+      band,
+      mentors: bands.get(band)?.mentors || 0,
+      mentees: bands.get(band)?.mentees || 0,
+    }))
+    .filter(b => b.mentors > 0 || b.mentees > 0);
+}
+
+// ============================================================================
+// LIFE EXPERIENCE DISTRIBUTION
+// ============================================================================
+
+export interface LifeExperienceCount {
+  experience: string;
+  mentees: number;
+  mentors: number;
+}
+
+const LIFE_EXPERIENCE_LABELS: Record<string, string> = {
+  returning_from_leave: 'Returning from Leave',
+  navigating_menopause: 'Navigating Menopause',
+  career_break: 'Career Break',
+  relocation: 'Relocation',
+  career_change: 'Career Change',
+  health_challenges: 'Health Challenges',
+  stepping_into_leadership: 'Stepping into Leadership',
+  working_towards_promotion: 'Working Towards Promotion',
+  thinking_about_internal_move: 'Internal Move',
+  promotions: 'Promotions',
+  internal_moves: 'Internal Moves',
+};
+
+export function getLifeExperienceDistribution(cohorts: Cohort[]): LifeExperienceCount[] {
+  const counts = new Map<string, { mentees: number; mentors: number }>();
+
+  for (const cohort of cohorts) {
+    for (const mentee of cohort.mentees) {
+      // Check boolean flags
+      for (const [key, label] of Object.entries(LIFE_EXPERIENCE_LABELS)) {
+        if ((mentee as Record<string, unknown>)[key] === true) {
+          const entry = counts.get(label) || { mentees: 0, mentors: 0 };
+          entry.mentees++;
+          counts.set(label, entry);
+        }
+      }
+      // Check life_experiences array
+      if (mentee.life_experiences) {
+        for (const exp of mentee.life_experiences) {
+          const label = LIFE_EXPERIENCE_LABELS[exp] || exp;
+          const entry = counts.get(label) || { mentees: 0, mentors: 0 };
+          entry.mentees++;
+          counts.set(label, entry);
+        }
+      }
+    }
+    for (const mentor of cohort.mentors) {
+      for (const [key, label] of Object.entries(LIFE_EXPERIENCE_LABELS)) {
+        if ((mentor as Record<string, unknown>)[key] === true) {
+          const entry = counts.get(label) || { mentees: 0, mentors: 0 };
+          entry.mentors++;
+          counts.set(label, entry);
+        }
+      }
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([experience, data]) => ({
+      experience,
+      mentees: data.mentees,
+      mentors: data.mentors,
+    }))
+    .sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors));
+}
+
+// ============================================================================
+// MENTOR UTILIZATION
+// ============================================================================
+
+export interface MentorUtilization {
+  mentor_id: string;
+  mentor_name: string;
+  cohort_name: string;
+  capacity: number;
+  assigned: number;
+  remaining: number;
+}
+
+export function getMentorUtilization(cohorts: Cohort[]): MentorUtilization[] {
+  const results: MentorUtilization[] = [];
+
+  for (const cohort of cohorts) {
+    if (cohort.status !== 'active' && cohort.status !== 'completed') continue;
+
+    const assignedCounts = new Map<string, number>();
+    if (cohort.matches?.results) {
+      for (const result of cohort.matches.results) {
+        if (result.proposed_assignment?.mentor_id) {
+          const mentorId = result.proposed_assignment.mentor_id;
+          assignedCounts.set(mentorId, (assignedCounts.get(mentorId) || 0) + 1);
+        }
+      }
+    }
+
+    for (const mentor of cohort.mentors) {
+      const assigned = assignedCounts.get(mentor.id) || 0;
+      const capacity = mentor.capacity_remaining + assigned; // total capacity = remaining + already assigned
+      results.push({
+        mentor_id: mentor.id,
+        mentor_name: mentor.name || mentor.id.slice(0, 8),
+        cohort_name: cohort.name,
+        capacity,
+        assigned,
+        remaining: capacity - assigned,
+      });
+    }
+  }
+
+  return results.sort((a, b) => b.remaining - a.remaining);
+}
+
+// ============================================================================
+// MATCH QUALITY
+// ============================================================================
+
+export interface MatchScoreBucket {
+  range: string;
+  count: number;
+}
+
+export interface FeatureContribution {
+  feature: string;
+  avgValue: number;
+}
+
+export interface CohortMatchQuality {
+  cohort_id: string;
+  cohort_name: string;
+  avgScore: number;
+  matchCount: number;
+}
+
+export function getMatchScoreDistribution(cohort: Cohort): MatchScoreBucket[] {
+  if (!cohort.matches?.results) return [];
+
+  const buckets = [
+    { range: '0-20', min: 0, max: 20, count: 0 },
+    { range: '21-40', min: 21, max: 40, count: 0 },
+    { range: '41-60', min: 41, max: 60, count: 0 },
+    { range: '61-80', min: 61, max: 80, count: 0 },
+    { range: '81-100', min: 81, max: 100, count: 0 },
+  ];
+
+  for (const result of cohort.matches.results) {
+    if (result.proposed_assignment?.mentor_id) {
+      const rec = result.recommendations.find(
+        r => r.mentor_id === result.proposed_assignment?.mentor_id
+      );
+      if (rec) {
+        const score = rec.score.total_score;
+        const bucket = buckets.find(b => score >= b.min && score <= b.max);
+        if (bucket) bucket.count++;
+      }
+    }
+  }
+
+  return buckets;
+}
+
+export function getFeatureContributions(cohort: Cohort): FeatureContribution[] {
+  if (!cohort.matches?.results) return [];
+
+  const featureSums: Record<string, { sum: number; count: number }> = {
+    topics_overlap: { sum: 0, count: 0 },
+    industry_overlap: { sum: 0, count: 0 },
+    role_seniority_fit: { sum: 0, count: 0 },
+    semantic_similarity: { sum: 0, count: 0 },
+    tz_overlap_bonus: { sum: 0, count: 0 },
+    language_bonus: { sum: 0, count: 0 },
+  };
+
+  for (const result of cohort.matches.results) {
+    if (result.proposed_assignment?.mentor_id) {
+      const rec = result.recommendations.find(
+        r => r.mentor_id === result.proposed_assignment?.mentor_id
+      );
+      if (rec?.score.features) {
+        for (const [key, value] of Object.entries(rec.score.features)) {
+          if (key in featureSums && key !== 'capacity_penalty') {
+            featureSums[key].sum += value as number;
+            featureSums[key].count++;
+          }
+        }
+      }
+    }
+  }
+
+  const featureLabels: Record<string, string> = {
+    topics_overlap: 'Topics',
+    industry_overlap: 'Industry',
+    role_seniority_fit: 'Seniority',
+    semantic_similarity: 'AI Similarity',
+    tz_overlap_bonus: 'Timezone',
+    language_bonus: 'Language',
+  };
+
+  return Object.entries(featureSums)
+    .filter(([, data]) => data.count > 0)
+    .map(([feature, data]) => ({
+      feature: featureLabels[feature] || feature,
+      avgValue: Math.round((data.sum / data.count) * 100),
+    }))
+    .sort((a, b) => b.avgValue - a.avgValue);
+}
+
+export function getCohortMatchQualities(cohorts: Cohort[]): CohortMatchQuality[] {
+  return cohorts
+    .filter(c => c.matches?.results && c.matches.results.length > 0)
+    .map(cohort => {
+      let totalScore = 0;
+      let count = 0;
+
+      for (const result of cohort.matches!.results) {
+        if (result.proposed_assignment?.mentor_id) {
+          const rec = result.recommendations.find(
+            r => r.mentor_id === result.proposed_assignment?.mentor_id
+          );
+          if (rec) {
+            totalScore += rec.score.total_score;
+            count++;
+          }
+        }
+      }
+
+      return {
+        cohort_id: cohort.id,
+        cohort_name: cohort.name,
+        avgScore: count > 0 ? Math.round(totalScore / count) : 0,
+        matchCount: count,
+      };
+    })
+    .filter(c => c.matchCount > 0);
+}
+
+// ============================================================================
+// POPULATION STATS
+// ============================================================================
+
+export interface PopulationStats {
+  totalMentors: number;
+  totalMentees: number;
+  totalPairs: number;
+  activeCohorts: number;
+  uniqueTopics: number;
+  avgMatchScore: number | null;
+}
+
+export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
+  const topics = new Set<string>();
+  let totalMentors = 0;
+  let totalMentees = 0;
+  let totalPairs = 0;
+  let activeCohorts = 0;
+  let matchScoreSum = 0;
+  let matchCount = 0;
+
+  for (const cohort of cohorts) {
+    totalMentors += cohort.mentors.length;
+    totalMentees += cohort.mentees.length;
+    if (cohort.status === 'active') activeCohorts++;
+
+    for (const mentee of cohort.mentees) {
+      for (const t of mentee.topics_to_learn || []) topics.add(t);
+    }
+    for (const mentor of cohort.mentors) {
+      for (const t of mentor.topics_to_mentor || []) topics.add(t);
+    }
+
+    if (cohort.matches?.results) {
+      for (const result of cohort.matches.results) {
+        if (result.proposed_assignment?.mentor_id) {
+          totalPairs++;
+          const rec = result.recommendations.find(
+            r => r.mentor_id === result.proposed_assignment?.mentor_id
+          );
+          if (rec) {
+            matchScoreSum += rec.score.total_score;
+            matchCount++;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    totalMentors,
+    totalMentees,
+    totalPairs,
+    activeCohorts,
+    uniqueTopics: topics.size,
+    avgMatchScore: matchCount > 0 ? Math.round(matchScoreSum / matchCount) : null,
+  };
+}

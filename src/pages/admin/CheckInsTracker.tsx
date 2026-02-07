@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
 import {
   Plus,
@@ -39,6 +40,16 @@ import {
   Calendar,
   Filter,
 } from 'lucide-react';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from 'recharts';
 import type { CheckIn, RiskFlag, CheckInSummary } from '@/types/checkIns';
 import {
   getCheckInsByCohort,
@@ -50,6 +61,18 @@ import {
 } from '@/lib/checkInService';
 import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
+
+const riskDonutConfig = {
+  green: { label: 'Green', color: 'hsl(142, 71%, 45%)' },
+  amber: { label: 'Amber', color: 'hsl(45, 93%, 47%)' },
+  red: { label: 'Red', color: 'hsl(0, 84%, 60%)' },
+} satisfies ChartConfig;
+
+const riskTrendConfig = {
+  green: { label: 'Green', color: 'hsl(142, 71%, 45%)' },
+  amber: { label: 'Amber', color: 'hsl(45, 93%, 47%)' },
+  red: { label: 'Red', color: 'hsl(0, 84%, 60%)' },
+} satisfies ChartConfig;
 
 export default function CheckInsTracker() {
   const { toast } = useToast();
@@ -70,6 +93,40 @@ export default function CheckInsTracker() {
   const [formRiskFlag, setFormRiskFlag] = useState<RiskFlag>('green');
   const [formRiskReason, setFormRiskReason] = useState('');
   const [formNextAction, setFormNextAction] = useState('');
+
+  // Chart data computed from check-ins
+  const riskDonutData = useMemo(() => {
+    if (!summary) return [];
+    return [
+      { name: 'Green', value: summary.green, fill: 'var(--color-green)' },
+      { name: 'Amber', value: summary.amber, fill: 'var(--color-amber)' },
+      { name: 'Red', value: summary.red, fill: 'var(--color-red)' },
+    ].filter(d => d.value > 0);
+  }, [summary]);
+
+  const riskTrendData = useMemo(() => {
+    if (checkIns.length === 0) return [];
+
+    // Group check-ins by date and count risk flags
+    const dateMap = new Map<string, { date: string; green: number; amber: number; red: number }>();
+
+    const sorted = [...checkIns].sort(
+      (a, b) => new Date(a.check_in_date).getTime() - new Date(b.check_in_date).getTime()
+    );
+
+    for (const ci of sorted) {
+      const date = ci.check_in_date.split('T')[0];
+      if (!dateMap.has(date)) {
+        dateMap.set(date, { date, green: 0, amber: 0, red: 0 });
+      }
+      const entry = dateMap.get(date)!;
+      if (ci.risk_flag === 'green') entry.green++;
+      else if (ci.risk_flag === 'amber') entry.amber++;
+      else if (ci.risk_flag === 'red') entry.red++;
+    }
+
+    return Array.from(dateMap.values());
+  }, [checkIns]);
 
   useEffect(() => {
     loadCohorts();
@@ -255,53 +312,162 @@ export default function CheckInsTracker() {
         </Button>
       </div>
 
-      {/* Cohort Selector and Summary */}
-      <div className="flex gap-4 items-start">
-        <div className="w-64">
-          <Label>Select Cohort</Label>
-          <Select value={selectedCohort} onValueChange={setSelectedCohort}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select cohort" />
-            </SelectTrigger>
-            <SelectContent>
-              {cohorts.map(cohort => (
-                <SelectItem key={cohort.id} value={cohort.id}>
-                  {cohort.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {summary && (
-          <div className="flex gap-4">
-            <Card className="w-32">
-              <CardContent className="pt-4 text-center">
-                <div className="text-2xl font-bold">{summary.total}</div>
-                <div className="text-xs text-muted-foreground">Total</div>
-              </CardContent>
-            </Card>
-            <Card className="w-32">
-              <CardContent className="pt-4 text-center">
-                <div className="text-2xl font-bold text-green-600">{summary.green}</div>
-                <div className="text-xs text-muted-foreground">Green</div>
-              </CardContent>
-            </Card>
-            <Card className="w-32">
-              <CardContent className="pt-4 text-center">
-                <div className="text-2xl font-bold text-yellow-600">{summary.amber}</div>
-                <div className="text-xs text-muted-foreground">Amber</div>
-              </CardContent>
-            </Card>
-            <Card className="w-32">
-              <CardContent className="pt-4 text-center">
-                <div className="text-2xl font-bold text-red-600">{summary.red}</div>
-                <div className="text-xs text-muted-foreground">Red</div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+      {/* Cohort Selector */}
+      <div className="w-64">
+        <Label>Select Cohort</Label>
+        <Select value={selectedCohort} onValueChange={setSelectedCohort}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select cohort" />
+          </SelectTrigger>
+          <SelectContent>
+            {cohorts.map(cohort => (
+              <SelectItem key={cohort.id} value={cohort.id}>
+                {cohort.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Summary Cards */}
+      {summary && (
+        <div className="grid grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold">{summary.total}</div>
+              <div className="text-xs text-muted-foreground">Total Check-ins</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-green-600">{summary.green}</div>
+              <div className="text-xs text-muted-foreground">Green</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-yellow-600">{summary.amber}</div>
+              <div className="text-xs text-muted-foreground">Amber</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 text-center">
+              <div className="text-2xl font-bold text-red-600">{summary.red}</div>
+              <div className="text-xs text-muted-foreground">Red</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Charts Row */}
+      {summary && summary.total > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Risk Distribution Donut */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Risk Distribution</CardTitle>
+              <CardDescription>Current risk flag breakdown</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {riskDonutData.length > 0 ? (
+                <ChartContainer config={riskDonutConfig} className="h-[250px] w-full">
+                  <PieChart>
+                    <Pie
+                      data={riskDonutData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={3}
+                      dataKey="value"
+                      nameKey="name"
+                    >
+                      {riskDonutData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                  </PieChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                  No risk data available
+                </div>
+              )}
+              <div className="flex justify-center gap-6 mt-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span>Green ({summary.green})</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                  <span>Amber ({summary.amber})</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <span>Red ({summary.red})</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Risk Trend Over Time */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Risk Trend Over Time</CardTitle>
+              <CardDescription>Risk flag distribution by check-in date</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {riskTrendData.length > 1 ? (
+                <ChartContainer config={riskTrendConfig} className="h-[250px] w-full">
+                  <AreaChart data={riskTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      fontSize={12}
+                    />
+                    <YAxis allowDecimals={false} fontSize={12} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area
+                      type="monotone"
+                      dataKey="red"
+                      stackId="1"
+                      fill="var(--color-red)"
+                      stroke="var(--color-red)"
+                      fillOpacity={0.6}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="amber"
+                      stackId="1"
+                      fill="var(--color-amber)"
+                      stroke="var(--color-amber)"
+                      fillOpacity={0.6}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="green"
+                      stackId="1"
+                      fill="var(--color-green)"
+                      stroke="var(--color-green)"
+                      fillOpacity={0.6}
+                    />
+                  </AreaChart>
+                </ChartContainer>
+              ) : riskTrendData.length === 1 ? (
+                <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
+                  Need at least 2 check-in dates to show trend
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                  No trend data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex items-center gap-2">

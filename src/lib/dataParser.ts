@@ -6,6 +6,10 @@ import {
   DEVELOPMENT_TOPICS,
   EXPERIENCE_MAPPING
 } from "@/types/mentoring";
+import type { CreateCheckInInput, RiskFlag } from '@/types/checkIns';
+import type { CreateVIPScoreInput, PersonType } from '@/types/vip';
+import type { CreateMetricSnapshotInput } from '@/types/metrics';
+import type { CreateSessionInput, SessionStatus } from '@/lib/sessionService';
 import * as XLSX from 'xlsx';
 
 // CSV parsing utility
@@ -736,4 +740,411 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
   }
 
   return { mentees, mentors, errors, warnings };
+}
+
+// ============================================================================
+// ANALYTICS CSV PARSERS
+// ============================================================================
+
+export interface CSVParseResult<T> {
+  data: T[];
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Parse Session Log CSV
+ * Expected columns: mentor_id, mentee_id, cohort_id, meeting_date, duration_minutes, status, notes, mentor_rating, mentee_rating
+ */
+export function parseSessionCSV(csvText: string): CSVParseResult<CreateSessionInput> {
+  const rows = parseCSV(csvText);
+  const data: CreateSessionInput[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (rows.length === 0) {
+    errors.push('No data found in CSV');
+    return { data, errors, warnings };
+  }
+
+  const headers = Object.keys(rows[0]).map(h => h.toLowerCase());
+  const requiredCols = ['mentor_id', 'mentee_id', 'cohort_id', 'meeting_date'];
+  const missingCols = requiredCols.filter(col =>
+    !headers.some(h => h.replace(/\s+/g, '_').includes(col))
+  );
+  if (missingCols.length > 0) {
+    errors.push(`Missing required columns: ${missingCols.join(', ')}`);
+    return { data, errors, warnings };
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2; // +2 for header row + 0-index
+
+    // Find values with flexible column name matching
+    const mentorId = findColumnValue(row, ['mentor_id']);
+    const menteeId = findColumnValue(row, ['mentee_id']);
+    const cohortId = findColumnValue(row, ['cohort_id']);
+    const meetingDate = findColumnValue(row, ['meeting_date', 'date', 'scheduled_datetime']);
+    const durationStr = findColumnValue(row, ['duration_minutes', 'duration']);
+    const statusStr = findColumnValue(row, ['status']);
+    const notes = findColumnValue(row, ['notes']);
+    const mentorRatingStr = findColumnValue(row, ['mentor_rating']);
+    const menteeRatingStr = findColumnValue(row, ['mentee_rating']);
+
+    if (!mentorId || !menteeId || !cohortId) {
+      errors.push(`Row ${rowNum}: Missing mentor_id, mentee_id, or cohort_id`);
+      continue;
+    }
+
+    if (!meetingDate) {
+      errors.push(`Row ${rowNum}: Missing meeting_date`);
+      continue;
+    }
+
+    // Validate and normalize date
+    const parsedDate = new Date(meetingDate);
+    if (isNaN(parsedDate.getTime())) {
+      errors.push(`Row ${rowNum}: Invalid date "${meetingDate}"`);
+      continue;
+    }
+
+    // Validate status
+    const validStatuses: SessionStatus[] = ['scheduled', 'completed', 'cancelled', 'no_show'];
+    const status = statusStr?.toLowerCase().replace(/[\s-]/g, '_') as SessionStatus;
+    if (statusStr && !validStatuses.includes(status)) {
+      warnings.push(`Row ${rowNum}: Unknown status "${statusStr}", defaulting to "completed"`);
+    }
+
+    const duration = durationStr ? parseInt(durationStr, 10) : 60;
+    if (durationStr && isNaN(duration)) {
+      warnings.push(`Row ${rowNum}: Invalid duration "${durationStr}", defaulting to 60`);
+    }
+
+    const session: CreateSessionInput = {
+      mentor_id: mentorId,
+      mentee_id: menteeId,
+      cohort_id: cohortId,
+      title: `Session - ${parsedDate.toLocaleDateString()}`,
+      scheduled_datetime: parsedDate.toISOString(),
+      duration_minutes: isNaN(duration) ? 60 : duration,
+      status: validStatuses.includes(status) ? status : 'completed',
+      notes: notes || undefined,
+    };
+
+    // Attach ratings as extra metadata (caller will use updateSession for these)
+    const mentorRating = mentorRatingStr ? parseFloat(mentorRatingStr) : undefined;
+    const menteeRating = menteeRatingStr ? parseFloat(menteeRatingStr) : undefined;
+
+    if (mentorRating !== undefined && !isNaN(mentorRating)) {
+      (session as Record<string, unknown>)['_mentor_rating'] = Math.min(Math.max(mentorRating, 1), 5);
+    }
+    if (menteeRating !== undefined && !isNaN(menteeRating)) {
+      (session as Record<string, unknown>)['_mentee_rating'] = Math.min(Math.max(menteeRating, 1), 5);
+    }
+
+    data.push(session);
+  }
+
+  return { data, errors, warnings };
+}
+
+/**
+ * Parse Survey/Feedback CSV
+ * Expected columns: respondent_id, respondent_type, cohort_id, survey_date, satisfaction_score, nps_score, would_recommend
+ */
+export function parseSurveyCSV(csvText: string): CSVParseResult<CreateMetricSnapshotInput> {
+  const rows = parseCSV(csvText);
+  const data: CreateMetricSnapshotInput[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (rows.length === 0) {
+    errors.push('No data found in CSV');
+    return { data, errors, warnings };
+  }
+
+  const headers = Object.keys(rows[0]).map(h => h.toLowerCase());
+  const requiredCols = ['cohort_id'];
+  const missingCols = requiredCols.filter(col =>
+    !headers.some(h => h.replace(/\s+/g, '_').includes(col))
+  );
+  if (missingCols.length > 0) {
+    errors.push(`Missing required columns: ${missingCols.join(', ')}`);
+    return { data, errors, warnings };
+  }
+
+  // Aggregate scores per cohort + date combination
+  const aggregator = new Map<string, {
+    cohortId: string;
+    date: string;
+    satisfaction: number[];
+    nps: number[];
+    recommend: number[];
+  }>();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2;
+
+    const cohortId = findColumnValue(row, ['cohort_id']);
+    const surveyDate = findColumnValue(row, ['survey_date', 'date']);
+    const satisfactionStr = findColumnValue(row, ['satisfaction_score', 'satisfaction']);
+    const npsStr = findColumnValue(row, ['nps_score', 'nps']);
+    const recommendStr = findColumnValue(row, ['would_recommend', 'recommend']);
+
+    if (!cohortId) {
+      errors.push(`Row ${rowNum}: Missing cohort_id`);
+      continue;
+    }
+
+    const date = surveyDate || new Date().toISOString().split('T')[0];
+    const key = `${cohortId}:${date}`;
+
+    if (!aggregator.has(key)) {
+      aggregator.set(key, { cohortId, date, satisfaction: [], nps: [], recommend: [] });
+    }
+    const agg = aggregator.get(key)!;
+
+    if (satisfactionStr) {
+      const val = parseFloat(satisfactionStr);
+      if (!isNaN(val)) agg.satisfaction.push(val);
+      else warnings.push(`Row ${rowNum}: Invalid satisfaction_score "${satisfactionStr}"`);
+    }
+
+    if (npsStr) {
+      const val = parseFloat(npsStr);
+      if (!isNaN(val)) agg.nps.push(val);
+      else warnings.push(`Row ${rowNum}: Invalid nps_score "${npsStr}"`);
+    }
+
+    if (recommendStr) {
+      const val = recommendStr.toLowerCase();
+      if (['yes', '1', 'true'].includes(val)) agg.recommend.push(1);
+      else if (['no', '0', 'false'].includes(val)) agg.recommend.push(0);
+      else {
+        const numVal = parseFloat(recommendStr);
+        if (!isNaN(numVal)) agg.recommend.push(numVal);
+      }
+    }
+  }
+
+  // Create metric snapshots from aggregated data
+  for (const agg of aggregator.values()) {
+    if (agg.satisfaction.length > 0) {
+      const avg = agg.satisfaction.reduce((a, b) => a + b, 0) / agg.satisfaction.length;
+      data.push({
+        cohort_id: agg.cohortId,
+        metric_name: 'satisfaction_score',
+        actual_value: Math.round(avg * 10) / 10,
+        snapshot_date: agg.date,
+        notes: `Imported from survey CSV (${agg.satisfaction.length} responses)`,
+      });
+    }
+
+    if (agg.nps.length > 0) {
+      const avg = agg.nps.reduce((a, b) => a + b, 0) / agg.nps.length;
+      data.push({
+        cohort_id: agg.cohortId,
+        metric_name: 'nps_score',
+        actual_value: Math.round(avg * 10) / 10,
+        snapshot_date: agg.date,
+        notes: `Imported from survey CSV (${agg.nps.length} responses)`,
+      });
+    }
+
+    if (agg.recommend.length > 0) {
+      const rate = (agg.recommend.reduce((a, b) => a + b, 0) / agg.recommend.length) * 100;
+      data.push({
+        cohort_id: agg.cohortId,
+        metric_name: 'would_recommend_rate',
+        actual_value: Math.round(rate * 10) / 10,
+        snapshot_date: agg.date,
+        notes: `Imported from survey CSV (${agg.recommend.length} responses)`,
+      });
+    }
+  }
+
+  return { data, errors, warnings };
+}
+
+/**
+ * Parse Check-in CSV
+ * Expected columns: mentor_id, mentee_id, cohort_id, check_in_date, risk_flag, notes, next_action
+ */
+export function parseCheckInCSV(csvText: string): CSVParseResult<CreateCheckInInput> {
+  const rows = parseCSV(csvText);
+  const data: CreateCheckInInput[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (rows.length === 0) {
+    errors.push('No data found in CSV');
+    return { data, errors, warnings };
+  }
+
+  const headers = Object.keys(rows[0]).map(h => h.toLowerCase());
+  const requiredCols = ['mentor_id', 'mentee_id', 'cohort_id'];
+  const missingCols = requiredCols.filter(col =>
+    !headers.some(h => h.replace(/\s+/g, '_').includes(col))
+  );
+  if (missingCols.length > 0) {
+    errors.push(`Missing required columns: ${missingCols.join(', ')}`);
+    return { data, errors, warnings };
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2;
+
+    const mentorId = findColumnValue(row, ['mentor_id']);
+    const menteeId = findColumnValue(row, ['mentee_id']);
+    const cohortId = findColumnValue(row, ['cohort_id']);
+    const checkInDate = findColumnValue(row, ['check_in_date', 'date']);
+    const riskFlagStr = findColumnValue(row, ['risk_flag', 'risk']);
+    const notes = findColumnValue(row, ['notes']);
+    const nextAction = findColumnValue(row, ['next_action']);
+    const riskReason = findColumnValue(row, ['risk_reason', 'reason']);
+
+    if (!mentorId || !menteeId || !cohortId) {
+      errors.push(`Row ${rowNum}: Missing mentor_id, mentee_id, or cohort_id`);
+      continue;
+    }
+
+    // Validate date
+    const date = checkInDate || new Date().toISOString().split('T')[0];
+    if (checkInDate) {
+      const parsed = new Date(checkInDate);
+      if (isNaN(parsed.getTime())) {
+        errors.push(`Row ${rowNum}: Invalid date "${checkInDate}"`);
+        continue;
+      }
+    }
+
+    // Validate risk flag
+    const validRisks: RiskFlag[] = ['green', 'amber', 'red'];
+    const riskFlag = riskFlagStr?.toLowerCase() as RiskFlag;
+    if (riskFlagStr && !validRisks.includes(riskFlag)) {
+      warnings.push(`Row ${rowNum}: Unknown risk_flag "${riskFlagStr}", defaulting to "green"`);
+    }
+
+    data.push({
+      cohort_id: cohortId,
+      mentor_id: mentorId,
+      mentee_id: menteeId,
+      check_in_date: date,
+      status: 'completed',
+      risk_flag: validRisks.includes(riskFlag) ? riskFlag : 'green',
+      notes: notes || undefined,
+      risk_reason: riskReason || undefined,
+      next_action: nextAction || undefined,
+    });
+  }
+
+  return { data, errors, warnings };
+}
+
+/**
+ * Parse VIP Score CSV
+ * Expected columns: person_id, person_type, cohort_id, engagement_score, session_score, response_score, feedback_score
+ */
+export function parseVIPScoreCSV(csvText: string): CSVParseResult<CreateVIPScoreInput> {
+  const rows = parseCSV(csvText);
+  const data: CreateVIPScoreInput[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (rows.length === 0) {
+    errors.push('No data found in CSV');
+    return { data, errors, warnings };
+  }
+
+  const headers = Object.keys(rows[0]).map(h => h.toLowerCase());
+  const requiredCols = ['person_id', 'person_type'];
+  const missingCols = requiredCols.filter(col =>
+    !headers.some(h => h.replace(/\s+/g, '_').includes(col))
+  );
+  if (missingCols.length > 0) {
+    errors.push(`Missing required columns: ${missingCols.join(', ')}`);
+    return { data, errors, warnings };
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2;
+
+    const personId = findColumnValue(row, ['person_id']);
+    const personTypeStr = findColumnValue(row, ['person_type', 'type']);
+    const cohortId = findColumnValue(row, ['cohort_id']);
+    const engagementStr = findColumnValue(row, ['engagement_score', 'engagement']);
+    const sessionStr = findColumnValue(row, ['session_score', 'session']);
+    const responseStr = findColumnValue(row, ['response_score', 'response']);
+    const feedbackStr = findColumnValue(row, ['feedback_score', 'feedback']);
+
+    if (!personId) {
+      errors.push(`Row ${rowNum}: Missing person_id`);
+      continue;
+    }
+
+    // Validate person type
+    const validTypes: PersonType[] = ['mentor', 'mentee'];
+    const personType = personTypeStr?.toLowerCase() as PersonType;
+    if (!validTypes.includes(personType)) {
+      errors.push(`Row ${rowNum}: Invalid person_type "${personTypeStr}" (must be "mentor" or "mentee")`);
+      continue;
+    }
+
+    // Parse scores (0-25 each)
+    const parseScore = (val: string | undefined, name: string): number => {
+      if (!val) return 0;
+      const num = parseFloat(val);
+      if (isNaN(num)) {
+        warnings.push(`Row ${rowNum}: Invalid ${name} "${val}", defaulting to 0`);
+        return 0;
+      }
+      if (num < 0 || num > 25) {
+        warnings.push(`Row ${rowNum}: ${name} ${num} out of range (0-25), clamping`);
+      }
+      return Math.min(Math.max(num, 0), 25);
+    };
+
+    data.push({
+      person_id: personId,
+      person_type: personType,
+      cohort_id: cohortId || undefined,
+      engagement_score: parseScore(engagementStr, 'engagement_score'),
+      session_score: parseScore(sessionStr, 'session_score'),
+      response_score: parseScore(responseStr, 'response_score'),
+      feedback_score: parseScore(feedbackStr, 'feedback_score'),
+    });
+  }
+
+  return { data, errors, warnings };
+}
+
+/**
+ * Helper: find a value from a row using flexible column name matching.
+ * Tries each candidate key, matching case-insensitively with underscores/spaces normalized.
+ */
+function findColumnValue(row: Record<string, string>, candidates: string[]): string | undefined {
+  for (const candidate of candidates) {
+    const normalized = candidate.toLowerCase().replace(/[\s_-]+/g, '_');
+
+    // Exact match first
+    if (row[candidate] !== undefined && row[candidate].trim()) {
+      return row[candidate].trim();
+    }
+
+    // Flexible match
+    for (const key of Object.keys(row)) {
+      const normalizedKey = key.toLowerCase().replace(/[\s_-]+/g, '_');
+      if (normalizedKey === normalized || normalizedKey.includes(normalized)) {
+        if (row[key] !== undefined && row[key].trim()) {
+          return row[key].trim();
+        }
+      }
+    }
+  }
+
+  return undefined;
 }

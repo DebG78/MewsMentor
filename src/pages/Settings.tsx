@@ -13,11 +13,13 @@ import {
   Globe,
   Palette,
   Database,
-  HelpCircle
+  HelpCircle,
+  BarChart3,
 } from "lucide-react";
 import { SurveyTemplateManager } from "@/components/SurveyTemplateManager";
 import { SurveyMigrationHelper } from "@/components/SurveyMigrationHelper";
 import { HelpGuide } from "@/components/HelpGuide";
+import { AnalyticsHelpGuide } from "@/components/AnalyticsHelpGuide";
 
 const Settings = () => {
   const [searchParams] = useSearchParams();
@@ -82,9 +84,15 @@ const Settings = () => {
     },
     {
       id: "help",
-      title: "Help Guide",
+      title: "Data & Matching",
       icon: HelpCircle,
       description: "Learn how uploads, columns, and matching work"
+    },
+    {
+      id: "analytics-guide",
+      title: "Analytics Guide",
+      icon: BarChart3,
+      description: "Understand analytics pages, metrics, and admin workflows"
     }
   ];
 
@@ -114,7 +122,7 @@ const Settings = () => {
 
           {/* Settings Navigation */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 h-auto p-1">
+            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 h-auto p-1">
               {settingsCategories.map((category) => (
                 <TabsTrigger
                   key={category.id}
@@ -175,8 +183,27 @@ const Settings = () => {
               </Card>
             </TabsContent>
 
+            {/* Analytics Guide */}
+            <TabsContent value="analytics-guide" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5" />
+                    Analytics Guide
+                  </CardTitle>
+                  <CardDescription>
+                    Understand every analytics page, what the metrics mean, how to read charts,
+                    and what actions to take as an admin.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AnalyticsHelpGuide />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* Other Settings - Coming Soon */}
-            {settingsCategories.filter(cat => cat.id !== "survey-templates" && cat.id !== "help").map((category) => (
+            {settingsCategories.filter(cat => cat.id !== "survey-templates" && cat.id !== "help" && cat.id !== "analytics-guide").map((category) => (
               <TabsContent key={category.id} value={category.id} className="space-y-6">
                 {renderComingSoon(category)}
               </TabsContent>

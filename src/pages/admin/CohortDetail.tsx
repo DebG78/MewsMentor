@@ -45,6 +45,11 @@ import {
   AlertTriangle,
   UserPlus,
   Sparkles,
+  ArrowRight,
+  Clock,
+  Globe,
+  MessageSquare,
+  Briefcase,
 } from "lucide-react";
 import {
   getCohortById,
@@ -56,7 +61,7 @@ import {
   saveMatchesToCohort,
 } from "@/lib/cohortManager";
 import { updateMenteeProfile, updateMentorProfile } from "@/lib/supabaseService";
-import { Cohort, ImportResult } from "@/types/mentoring";
+import { Cohort, ImportResult, MatchingResult } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
 import { ManualMatchSelection } from "@/components/ManualMatchSelection";
@@ -86,6 +91,7 @@ export default function CohortDetail() {
   const [pendingImportResult, setPendingImportResult] = useState<ImportResult | null>(null);
   const [viewingProfile, setViewingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
   const [editingProfile, setEditingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<MatchingResult | null>(null);
 
   useEffect(() => {
     loadCohort();
@@ -1145,7 +1151,11 @@ export default function CohortDetail() {
                             .map((result, index) => {
                               const assignedMatch = result.proposed_assignment;
                               return (
-                                <TableRow key={index}>
+                                <TableRow
+                                  key={index}
+                                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                  onClick={() => setSelectedMatch(result)}
+                                >
                                   <TableCell className="font-medium">
                                     {result.mentee_name || result.mentee_id}
                                   </TableCell>
@@ -1277,6 +1287,276 @@ export default function CohortDetail() {
         )}
       </Tabs>
       )}
+
+      {/* Match Detail Dialog */}
+      <Dialog open={!!selectedMatch} onOpenChange={(open) => !open && setSelectedMatch(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden p-0">
+          {selectedMatch && (() => {
+            const assignment = selectedMatch.proposed_assignment;
+            const matchedRec = selectedMatch.recommendations.find(
+              r => r.mentor_id === assignment?.mentor_id
+            );
+            const score = matchedRec?.score;
+            const mentee = cohort.mentees?.find(m => m.id === selectedMatch.mentee_id);
+            const mentor = cohort.mentors?.find(m => m.id === assignment?.mentor_id);
+            const sharedTopics = mentee && mentor
+              ? mentee.topics_to_learn.filter(t =>
+                  mentor.topics_to_mentor.some(mt => mt.toLowerCase() === t.toLowerCase())
+                )
+              : [];
+
+            return (
+              <div className="overflow-y-auto max-h-[85vh] p-6">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-lg">
+                    {selectedMatch.mentee_name || selectedMatch.mentee_id}
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                    {assignment?.mentor_name || assignment?.mentor_id}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Match details and compatibility breakdown
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-5 pt-4">
+                  {/* Score Summary */}
+                  {score && (
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold">{Math.round(score.total_score)}</div>
+                        <div className="text-xs text-muted-foreground">Match Score</div>
+                      </div>
+                      <div className="flex-1">
+                        <ScoreBreakdownVisual
+                          score={score}
+                          variant="detailed"
+                          showReasons={false}
+                          showRisks={false}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Profiles Side by Side */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Mentee Profile */}
+                    <Card>
+                      <CardHeader className="pb-2 pt-3 px-4">
+                        <CardTitle className="text-sm flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5" />
+                          Mentee
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3 space-y-2 text-sm">
+                        <div className="font-medium">{mentee?.name || selectedMatch.mentee_id}</div>
+                        {mentee?.role && (
+                          <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <Briefcase className="w-3 h-3" />
+                            {mentee.role}
+                          </div>
+                        )}
+                        {mentee?.experience_years && (
+                          <div className="text-xs text-muted-foreground">
+                            {mentee.experience_years} experience
+                            {mentee.seniority_band && ` (${mentee.seniority_band})`}
+                          </div>
+                        )}
+                        {mentee?.location_timezone && (
+                          <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <Globe className="w-3 h-3" />
+                            {mentee.location_timezone}
+                          </div>
+                        )}
+                        {mentee?.topics_to_learn && mentee.topics_to_learn.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">Wants to learn:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {mentee.topics_to_learn.map((t, i) => (
+                                <Badge
+                                  key={i}
+                                  variant={sharedTopics.some(st => st.toLowerCase() === t.toLowerCase()) ? "default" : "secondary"}
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {t}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {mentee?.preferred_mentor_style && (
+                          <div className="text-xs text-muted-foreground">
+                            Prefers: {mentee.preferred_mentor_style}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Mentor Profile */}
+                    <Card>
+                      <CardHeader className="pb-2 pt-3 px-4">
+                        <CardTitle className="text-sm flex items-center gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5" />
+                          Mentor
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3 space-y-2 text-sm">
+                        <div className="font-medium">{mentor?.name || assignment?.mentor_id}</div>
+                        {mentor?.role && (
+                          <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <Briefcase className="w-3 h-3" />
+                            {mentor.role}
+                          </div>
+                        )}
+                        {mentor?.experience_years && (
+                          <div className="text-xs text-muted-foreground">
+                            {mentor.experience_years} experience
+                            {mentor.seniority_band && ` (${mentor.seniority_band})`}
+                          </div>
+                        )}
+                        {mentor?.location_timezone && (
+                          <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <Globe className="w-3 h-3" />
+                            {mentor.location_timezone}
+                          </div>
+                        )}
+                        {mentor?.topics_to_mentor && mentor.topics_to_mentor.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">Can mentor in:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {mentor.topics_to_mentor.map((t, i) => (
+                                <Badge
+                                  key={i}
+                                  variant={sharedTopics.some(st => st.toLowerCase() === t.toLowerCase()) ? "default" : "secondary"}
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {t}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {mentor?.mentoring_style && (
+                          <div className="text-xs text-muted-foreground">
+                            Style: {mentor.mentoring_style}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Shared Topics Highlight */}
+                  {sharedTopics.length > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-green-800 mb-1.5 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {sharedTopics.length} Shared Topic{sharedTopics.length > 1 ? 's' : ''}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {sharedTopics.map((t, i) => (
+                          <Badge key={i} variant="default" className="text-xs bg-green-600">
+                            {t}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Why This Match */}
+                  {score && (score.reasons.length > 0 || score.risks.length > 0) && (
+                    <div className="space-y-3">
+                      {score.reasons.length > 0 && (
+                        <div>
+                          <div className="text-sm font-medium mb-1.5 flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                            Why this is a good match
+                          </div>
+                          <div className="space-y-1">
+                            {score.reasons.map((reason, i) => (
+                              <div key={i} className="text-sm text-muted-foreground pl-5">
+                                {reason}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {score.risks.length > 0 && (
+                        <div>
+                          <div className="text-sm font-medium mb-1.5 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                            Potential concerns
+                          </div>
+                          <div className="space-y-1">
+                            {score.risks.map((risk, i) => (
+                              <div key={i} className="text-sm text-muted-foreground pl-5">
+                                {risk}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Logistics */}
+                  {score?.logistics && (
+                    <div className="flex flex-wrap gap-2">
+                      {score.logistics.languages_shared.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          <MessageSquare className="w-3 h-3 mr-1" />
+                          {score.logistics.languages_shared.join(", ")}
+                        </Badge>
+                      )}
+                      {score.logistics.timezone_mentee && score.logistics.timezone_mentor && (
+                        <Badge variant="outline" className="text-xs">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {score.logistics.timezone_mentee === score.logistics.timezone_mentor
+                            ? score.logistics.timezone_mentee
+                            : `${score.logistics.timezone_mentee} / ${score.logistics.timezone_mentor}`}
+                        </Badge>
+                      )}
+                      {score.logistics.capacity_remaining != null && (
+                        <Badge variant="outline" className="text-xs">
+                          {score.logistics.capacity_remaining} mentor slot{score.logistics.capacity_remaining !== 1 ? 's' : ''} remaining
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Icebreaker */}
+                  {score?.icebreaker && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-blue-800 mb-1 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Icebreaker Suggestion
+                      </div>
+                      <div className="text-sm text-blue-700">{score.icebreaker}</div>
+                    </div>
+                  )}
+
+                  {/* AI Explanation */}
+                  {score?.ai_explanation && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-purple-800 mb-1 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        AI Match Explanation
+                      </div>
+                      <div className="text-sm text-purple-700 italic">{score.ai_explanation}</div>
+                    </div>
+                  )}
+
+                  {/* Admin Comment */}
+                  {assignment?.comment && (
+                    <div className="border rounded-lg p-3">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Admin Notes</div>
+                      <div className="text-sm italic">{assignment.comment}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Profile Modal */}
       {viewingProfile && (
