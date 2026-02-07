@@ -211,6 +211,37 @@ export async function getCheckInSummary(cohortId: string): Promise<CheckInSummar
   };
 }
 
+/**
+ * Get aggregate check-in summary across multiple cohorts
+ */
+export async function getAggregateCheckInSummary(cohortIds: string[]): Promise<CheckInSummary> {
+  if (cohortIds.length === 0) {
+    return { total: 0, scheduled: 0, completed: 0, missed: 0, at_risk: 0, green: 0, amber: 0, red: 0 };
+  }
+
+  const { data, error } = await supabase
+    .from('check_ins')
+    .select('status, risk_flag')
+    .in('cohort_id', cohortIds);
+
+  if (error) {
+    console.error('Error fetching aggregate check-ins:', error);
+    throw error;
+  }
+
+  const checkIns = data || [];
+  return {
+    total: checkIns.length,
+    scheduled: checkIns.filter(c => c.status === 'scheduled').length,
+    completed: checkIns.filter(c => c.status === 'completed').length,
+    missed: checkIns.filter(c => c.status === 'missed').length,
+    at_risk: checkIns.filter(c => c.risk_flag === 'amber' || c.risk_flag === 'red').length,
+    green: checkIns.filter(c => c.risk_flag === 'green').length,
+    amber: checkIns.filter(c => c.risk_flag === 'amber').length,
+    red: checkIns.filter(c => c.risk_flag === 'red').length,
+  };
+}
+
 // ============================================================================
 // MILESTONES
 // ============================================================================

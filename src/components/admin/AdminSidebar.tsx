@@ -23,6 +23,8 @@ import {
   GraduationCap,
   Moon,
   Sun,
+  GitCompareArrows,
+  Sparkles,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useUser } from '@/contexts/UserContext'
@@ -90,6 +92,16 @@ const navItems = [
         href: '/admin/people/analytics',
         icon: BarChart3,
       },
+      {
+        title: 'Cohort Comparison',
+        href: '/admin/analytics/compare',
+        icon: GitCompareArrows,
+      },
+      {
+        title: 'Match Quality',
+        href: '/admin/analytics/match-quality',
+        icon: Sparkles,
+      },
     ],
   },
   {
@@ -116,11 +128,7 @@ export function AdminSidebar() {
   const { logout } = useUser()
   const { toast } = useToast()
   const { theme, toggleTheme } = useTheme()
-  const [expandedSections, setExpandedSections] = useState<string[]>([
-    'Mentoring Program',
-    'Analytics',
-    'People'
-  ])
+  const [expandedSections, setExpandedSections] = useState<string[]>([])
 
   const handleLogout = () => {
     logout()
