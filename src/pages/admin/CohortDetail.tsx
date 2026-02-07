@@ -369,10 +369,22 @@ export default function CohortDetail() {
       if (editingProfile.type === 'mentee') {
         const menteeProfile = updatedProfile as MenteeData;
         result = await updateMenteeProfile(menteeProfile.id, {
+          full_name: menteeProfile.name,
+          pronouns: menteeProfile.pronouns || null,
           role: menteeProfile.role,
           experience_years: menteeProfile.experience_years,
           location_timezone: menteeProfile.location_timezone,
+          life_experiences: menteeProfile.life_experiences,
           topics_to_learn: menteeProfile.topics_to_learn,
+          motivation: menteeProfile.motivation || null,
+          main_reason: menteeProfile.main_reason || null,
+          preferred_style: menteeProfile.preferred_mentor_style || null,
+          preferred_energy: menteeProfile.preferred_mentor_energy || null,
+          feedback_preference: menteeProfile.feedback_preference || null,
+          mentor_experience_importance: menteeProfile.mentor_experience_importance || null,
+          unwanted_qualities: menteeProfile.what_not_wanted || null,
+          mentor_qualities: menteeProfile.desired_qualities || null,
+          expectations: menteeProfile.expectations || null,
           meeting_frequency: menteeProfile.meeting_frequency,
           languages: menteeProfile.languages,
           industry: menteeProfile.industry,
@@ -380,12 +392,24 @@ export default function CohortDetail() {
       } else {
         const mentorProfile = updatedProfile as MentorData;
         result = await updateMentorProfile(mentorProfile.id, {
+          full_name: mentorProfile.name,
+          pronouns: mentorProfile.pronouns || null,
           role: mentorProfile.role,
           experience_years: mentorProfile.experience_years,
           location_timezone: mentorProfile.location_timezone,
+          life_experiences: mentorProfile.life_experiences,
           topics_to_mentor: mentorProfile.topics_to_mentor,
-          capacity_remaining: mentorProfile.capacity_remaining,
+          has_mentored_before: mentorProfile.has_mentored_before,
+          mentoring_style: mentorProfile.mentoring_style || null,
+          meeting_style: mentorProfile.meeting_style || null,
+          mentor_energy: mentorProfile.mentor_energy || null,
+          feedback_style: mentorProfile.feedback_style || null,
+          preferred_mentee_level: mentorProfile.preferred_mentee_levels?.join(', ') || null,
+          topics_not_to_mentor: mentorProfile.topics_not_to_mentor?.join(', ') || null,
           meeting_frequency: mentorProfile.meeting_frequency,
+          motivation: mentorProfile.motivation || null,
+          expectations: mentorProfile.expectations || null,
+          capacity_remaining: mentorProfile.capacity_remaining,
           languages: mentorProfile.languages,
           industry: mentorProfile.industry,
         });

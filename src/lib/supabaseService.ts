@@ -35,11 +35,23 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
   return {
     id: dbMentee.mentee_id,
     name: dbMentee.full_name || dbMentee.mentee_id,
+    pronouns: dbMentee.pronouns || undefined,
     role: dbMentee.role,
     experience_years: dbMentee.experience_years,
     location_timezone: dbMentee.location_timezone,
+    life_experiences: dbMentee.life_experiences,
+    has_participated_before: dbMentee.has_participated_before ?? undefined,
     topics_to_learn: dbMentee.topics_to_learn,
+    motivation: dbMentee.motivation || undefined,
+    main_reason: dbMentee.main_reason || undefined,
+    preferred_mentor_style: dbMentee.preferred_style || undefined,
+    preferred_mentor_energy: dbMentee.preferred_energy || undefined,
+    feedback_preference: dbMentee.feedback_preference || undefined,
+    mentor_experience_importance: dbMentee.mentor_experience_importance || undefined,
+    what_not_wanted: dbMentee.unwanted_qualities || undefined,
     meeting_frequency: dbMentee.meeting_frequency,
+    desired_qualities: dbMentee.mentor_qualities || undefined,
+    expectations: dbMentee.expectations || undefined,
     languages: dbMentee.languages,
     industry: dbMentee.industry
   }
@@ -50,10 +62,26 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
   return {
     id: dbMentor.mentor_id,
     name: dbMentor.full_name || dbMentor.mentor_id,
+    pronouns: dbMentor.pronouns || undefined,
     role: dbMentor.role,
     experience_years: dbMentor.experience_years,
     location_timezone: dbMentor.location_timezone,
+    life_experiences: dbMentor.life_experiences,
     topics_to_mentor: dbMentor.topics_to_mentor,
+    has_mentored_before: dbMentor.has_mentored_before ?? false,
+    mentoring_style: dbMentor.mentoring_style || '',
+    meeting_style: dbMentor.meeting_style || '',
+    mentor_energy: dbMentor.mentor_energy || '',
+    feedback_style: dbMentor.feedback_style || '',
+    preferred_mentee_levels: dbMentor.preferred_mentee_level
+      ? dbMentor.preferred_mentee_level.split(',').map(s => s.trim())
+      : [],
+    topics_not_to_mentor: dbMentor.topics_not_to_mentor
+      ? dbMentor.topics_not_to_mentor.split(',').map(s => s.trim())
+      : undefined,
+    meeting_frequency: dbMentor.meeting_frequency,
+    motivation: dbMentor.motivation || '',
+    expectations: dbMentor.expectations || '',
     capacity_remaining: dbMentor.capacity_remaining,
     languages: dbMentor.languages,
     industry: dbMentor.industry
@@ -1410,10 +1438,22 @@ export async function getUserCohorts(userId: string, userType: 'mentor' | 'mente
 export async function updateMenteeProfile(
   menteeId: string,
   updates: {
+    full_name?: string
+    pronouns?: string | null
     role?: string
     experience_years?: number
     location_timezone?: string
+    life_experiences?: string[]
     topics_to_learn?: string[]
+    motivation?: string | null
+    main_reason?: string | null
+    preferred_style?: string | null
+    preferred_energy?: string | null
+    feedback_preference?: string | null
+    mentor_experience_importance?: string | null
+    unwanted_qualities?: string | null
+    mentor_qualities?: string | null
+    expectations?: string | null
     meeting_frequency?: string
     languages?: string[]
     industry?: string
@@ -1443,12 +1483,24 @@ export async function updateMenteeProfile(
 export async function updateMentorProfile(
   mentorId: string,
   updates: {
+    full_name?: string
+    pronouns?: string | null
     role?: string
     experience_years?: number
     location_timezone?: string
+    life_experiences?: string[]
     topics_to_mentor?: string[]
-    capacity_remaining?: number
+    has_mentored_before?: boolean | null
+    mentoring_style?: string | null
+    meeting_style?: string | null
+    mentor_energy?: string | null
+    feedback_style?: string | null
+    preferred_mentee_level?: string | null
+    topics_not_to_mentor?: string | null
     meeting_frequency?: string
+    motivation?: string | null
+    expectations?: string | null
+    capacity_remaining?: number
     languages?: string[]
     industry?: string
     profile_goals?: any[]

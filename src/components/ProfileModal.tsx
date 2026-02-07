@@ -1,10 +1,22 @@
 import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User, MapPin, Clock, Target, MessageCircle, Heart, AlertCircle, Users } from "lucide-react";
+import {
+  User,
+  MapPin,
+  Clock,
+  Target,
+  MessageCircle,
+  Heart,
+  AlertCircle,
+  Users,
+  Globe,
+  Briefcase,
+  Zap,
+  Star,
+  XCircle,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 interface OtherCohortInfo {
@@ -26,7 +38,7 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
   const isMentee = type === 'mentee';
   const personId = profile?.[isMentee ? 'mentee_id' : 'mentor_id'];
   const currentCohortId = profile?.cohort_id;
-  const displayName = profile?.full_name || personId;
+  const displayName = profile?.name || profile?.full_name || personId;
 
   useEffect(() => {
     if (!isOpen || !personId) {
@@ -38,7 +50,6 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
       const table = isMentee ? 'mentees' : 'mentors';
       const idColumn = isMentee ? 'mentee_id' : 'mentor_id';
 
-      // Find all cohorts this person belongs to (excluding current)
       const { data: rows } = await supabase
         .from(table)
         .select('cohort_id')
@@ -50,7 +61,6 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
         return;
       }
 
-      // Fetch cohort names and statuses
       const cohortIds = rows.map((r: any) => r.cohort_id);
       const { data: cohorts } = await supabase
         .from('cohorts')
@@ -73,346 +83,224 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
 
   const activeCohorts = otherCohorts.filter(c => c.cohort_status === 'active' || c.cohort_status === 'matching');
 
+  // Get the right field names (handles both DB column names and type field names)
+  const topics = profile[isMentee ? 'topics_to_learn' : 'topics_to_mentor'] || [];
+  const languages = profile.languages || [];
+  const lifeExperiences = profile.life_experiences || [];
+  const preferredStyle = profile.preferred_mentor_style || profile.preferred_style;
+  const preferredEnergy = profile.preferred_mentor_energy || profile.preferred_energy;
+  const feedbackPref = profile.feedback_preference;
+  const mentorExpImportance = profile.mentor_experience_importance;
+  const desiredQualities = profile.desired_qualities || profile.mentor_qualities;
+  const unwanted = profile.what_not_wanted || profile.unwanted_qualities;
+  const topicsNotToMentor = profile.topics_not_to_mentor;
+  const preferredMenteeLevels = profile.preferred_mentee_levels || profile.preferred_mentee_level;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <User className="w-5 h-5" />
-            {displayName} - {isMentee ? 'Mentee' : 'Mentor'} Profile
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden flex flex-col">
+        {/* Header - colored banner with key info */}
+        <div className={`px-8 pt-8 pb-6 shrink-0 ${isMentee ? 'bg-green-50 dark:bg-green-950/30' : 'bg-blue-50 dark:bg-blue-950/30'}`}>
+          <div className="flex items-start gap-4">
+            <div className={`w-14 h-14 rounded-lg flex items-center justify-center shrink-0 ${
+              isMentee ? 'bg-green-100 dark:bg-green-900' : 'bg-blue-100 dark:bg-blue-900'
+            }`}>
+              <User className={`w-7 h-7 ${isMentee ? 'text-green-600' : 'text-blue-600'}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold truncate">{displayName}</h2>
+                <Badge variant={isMentee ? "secondary" : "default"} className="shrink-0">
+                  {isMentee ? 'Mentee' : 'Mentor'}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground mt-0.5">{profile.role}</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" />
+                  {profile.location_timezone}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Briefcase className="w-3.5 h-3.5" />
+                  {profile.experience_years} yrs
+                </span>
+                {profile.meeting_frequency && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    {profile.meeting_frequency}
+                  </span>
+                )}
+                {!isMentee && profile.capacity_remaining !== undefined && (
+                  <span className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" />
+                    {profile.capacity_remaining} slots
+                  </span>
+                )}
+                {profile.pronouns && (
+                  <span className="text-xs">({profile.pronouns})</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
 
-        <div className="space-y-6">
-          {/* Cross-cohort participation warning */}
+        {/* Body */}
+        <div className="px-8 py-6 space-y-5 flex-1 overflow-y-auto min-h-0">
+          {/* Cross-cohort warnings */}
           {activeCohorts.length > 0 && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="py-2">
               <Users className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Already in {activeCohorts.length} other active cohort{activeCohorts.length > 1 ? 's' : ''}:</strong>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {activeCohorts.map(c => (
-                    <Badge key={c.cohort_id} variant="outline" className="text-xs">
-                      {c.cohort_name}
-                    </Badge>
-                  ))}
-                </div>
+              <AlertDescription className="text-sm">
+                Also active in: {activeCohorts.map(c => c.cohort_name).join(', ')}
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Other (non-active) cohort participation */}
-          {otherCohorts.length > 0 && activeCohorts.length < otherCohorts.length && (
-            <Alert>
-              <Users className="h-4 w-4" />
-              <AlertDescription>
-                Also in {otherCohorts.length - activeCohorts.length} other cohort{otherCohorts.length - activeCohorts.length > 1 ? 's' : ''}:
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {otherCohorts.filter(c => c.cohort_status !== 'active' && c.cohort_status !== 'matching').map(c => (
-                    <Badge key={c.cohort_id} variant="secondary" className="text-xs">
-                      {c.cohort_name} ({c.cohort_status})
-                    </Badge>
-                  ))}
+          {/* Languages & Industry - inline */}
+          {(languages.length > 0 || profile.industry) && (
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              {languages.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>{languages.join(', ')}</span>
                 </div>
-              </AlertDescription>
-            </Alert>
-          )}
-          {/* Basic Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Basic Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Role</label>
-                  <p className="font-medium">{profile.role}</p>
+              )}
+              {profile.industry && (
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>{profile.industry}</span>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Experience</label>
-                  <p className="font-medium">{profile.experience_years} years</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Location/Timezone</label>
-                  <p className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4" />
-                    {profile.location_timezone}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Pronouns</label>
-                  <p className="font-medium">{profile.pronouns || 'Not specified'}</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Languages</label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {(profile.languages || []).map((lang: string, idx: number) => (
-                    <Badge key={idx} variant="outline">{lang}</Badge>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Industry</label>
-                <p className="font-medium">{profile.industry}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Life Experiences */}
-          {profile.life_experiences && profile.life_experiences.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Heart className="w-5 h-5" />
-                  Life Experiences
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {profile.life_experiences.map((exp: string, idx: number) => (
-                    <Badge key={idx} variant="secondary" className="text-sm">{exp}</Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           )}
 
           {/* Topics */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Target className="w-5 h-5" />
-                {isMentee ? 'Topics to Learn' : 'Topics to Mentor'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {(profile[isMentee ? 'topics_to_learn' : 'topics_to_mentor'] || []).map((topic: string, idx: number) => (
-                  <Badge key={idx} variant="default" className="text-sm">{topic}</Badge>
+          {topics.length > 0 && (
+            <Section icon={<Target className="w-4 h-4" />} title={isMentee ? 'Wants to learn' : 'Can mentor in'}>
+              <div className="flex flex-wrap gap-1.5">
+                {topics.map((topic: string, idx: number) => (
+                  <Badge key={idx} variant="default" className="text-xs font-normal">{topic}</Badge>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Mentee-specific fields */}
-          {isMentee && (
-            <>
-              {/* Motivation & Goals */}
-              {(profile.motivation || profile.main_reason || profile.expectations) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <MessageCircle className="w-5 h-5" />
-                      Motivation & Goals
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {profile.motivation && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Why join mentorship program?</label>
-                        <p className="mt-1 text-sm">{profile.motivation}</p>
-                      </div>
-                    )}
-                    {profile.main_reason && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Main reason for wanting a mentor</label>
-                        <p className="mt-1 text-sm">{profile.main_reason}</p>
-                      </div>
-                    )}
-                    {profile.expectations && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Program expectations</label>
-                        <p className="mt-1 text-sm">{profile.expectations}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Mentor Preferences */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Mentor Preferences</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    {profile.preferred_style && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Preferred mentor style</label>
-                        <p className="text-sm">{profile.preferred_style}</p>
-                      </div>
-                    )}
-                    {profile.preferred_energy && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Preferred mentor energy</label>
-                        <p className="text-sm">{profile.preferred_energy}</p>
-                      </div>
-                    )}
-                    {profile.feedback_preference && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Feedback preference</label>
-                        <p className="text-sm">{profile.feedback_preference}</p>
-                      </div>
-                    )}
-                    {profile.mentor_experience_importance && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Mentor experience importance</label>
-                        <p className="text-sm">{profile.mentor_experience_importance}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {profile.mentor_qualities && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Desired mentor qualities</label>
-                      <p className="text-sm">{profile.mentor_qualities}</p>
-                    </div>
-                  )}
-
-                  {profile.unwanted_qualities && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        What NOT wanted in a mentor
-                      </label>
-                      <p className="text-sm text-red-600">{profile.unwanted_qualities}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </>
+            </Section>
           )}
 
-          {/* Mentor-specific fields */}
-          {!isMentee && (
-            <>
-              {/* Mentoring Approach */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Mentoring Approach</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Capacity Remaining</label>
-                      <p className="font-medium text-lg">{profile.capacity_remaining}</p>
-                    </div>
-                    {profile.has_mentored_before !== undefined && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Has mentored before?</label>
-                        <p className="font-medium">{profile.has_mentored_before ? 'Yes' : 'No'}</p>
-                      </div>
-                    )}
-                    {profile.mentoring_style && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Mentoring style</label>
-                        <p className="text-sm">{profile.mentoring_style}</p>
-                      </div>
-                    )}
-                    {profile.meeting_style && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Meeting style</label>
-                        <p className="text-sm">{profile.meeting_style}</p>
-                      </div>
-                    )}
-                    {profile.mentor_energy && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Mentor energy</label>
-                        <p className="text-sm">{profile.mentor_energy}</p>
-                      </div>
-                    )}
-                    {profile.feedback_style && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Feedback style</label>
-                        <p className="text-sm">{profile.feedback_style}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {profile.preferred_mentee_level && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">Preferred mentee levels</label>
-                      <p className="text-sm">{profile.preferred_mentee_level}</p>
-                    </div>
-                  )}
-
-                  {profile.topics_not_to_mentor && (
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        Topics NOT to mentor
-                      </label>
-                      <p className="text-sm text-red-600">{profile.topics_not_to_mentor}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Motivation */}
-              {(profile.motivation || profile.expectations) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <MessageCircle className="w-5 h-5" />
-                      Motivation & Expectations
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {profile.motivation && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">What do you hope to gain from being a mentor?</label>
-                        <p className="mt-1 text-sm">{profile.motivation}</p>
-                      </div>
-                    )}
-                    {profile.expectations && (
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">Program expectations</label>
-                        <p className="mt-1 text-sm">{profile.expectations}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
-
-          {/* Meeting Preferences */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Meeting Preferences
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Meeting frequency</label>
-                <p className="font-medium">{profile.meeting_frequency}</p>
+          {/* Life Experiences */}
+          {lifeExperiences.length > 0 && (
+            <Section icon={<Heart className="w-4 h-4" />} title="Life experiences">
+              <div className="flex flex-wrap gap-1.5">
+                {lifeExperiences.map((exp: string, idx: number) => (
+                  <Badge key={idx} variant="secondary" className="text-xs font-normal">{exp}</Badge>
+                ))}
               </div>
-            </CardContent>
-          </Card>
+            </Section>
+          )}
 
-          {/* Metadata */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">System Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="text-sm text-muted-foreground">
-                {profile.full_name && <p>Name: {profile.full_name}</p>}
-                <p>ID: {profile[isMentee ? 'mentee_id' : 'mentor_id']}</p>
-                <p>Cohort: {profile.cohort_id}</p>
-                {profile.created_at && (
-                  <p>Created: {new Date(profile.created_at).toLocaleDateString()}</p>
+          {/* Mentee: Motivation & Goals */}
+          {isMentee && (profile.motivation || profile.main_reason || profile.expectations) && (
+            <Section icon={<MessageCircle className="w-4 h-4" />} title="Motivation & goals">
+              <div className="space-y-2 text-sm">
+                {profile.motivation && <p><span className="text-muted-foreground">Why:</span> {profile.motivation}</p>}
+                {profile.main_reason && <p><span className="text-muted-foreground">Main reason:</span> {profile.main_reason}</p>}
+                {profile.expectations && <p><span className="text-muted-foreground">Expects:</span> {profile.expectations}</p>}
+              </div>
+            </Section>
+          )}
+
+          {/* Mentee: Preferences */}
+          {isMentee && (preferredStyle || preferredEnergy || feedbackPref || desiredQualities) && (
+            <Section icon={<Star className="w-4 h-4" />} title="Mentor preferences">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                {preferredStyle && <InfoItem label="Style" value={preferredStyle} />}
+                {preferredEnergy && <InfoItem label="Energy" value={preferredEnergy} />}
+                {feedbackPref && <InfoItem label="Feedback" value={feedbackPref} />}
+                {mentorExpImportance && <InfoItem label="Experience importance" value={mentorExpImportance} />}
+              </div>
+              {desiredQualities && (
+                <p className="text-sm mt-2"><span className="text-muted-foreground">Wants:</span> {desiredQualities}</p>
+              )}
+              {unwanted && (
+                <p className="text-sm mt-1 text-red-600 flex items-start gap-1">
+                  <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  {unwanted}
+                </p>
+              )}
+            </Section>
+          )}
+
+          {/* Mentor: Approach */}
+          {!isMentee && (
+            <Section icon={<Zap className="w-4 h-4" />} title="Mentoring approach">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                {profile.mentoring_style && <InfoItem label="Style" value={profile.mentoring_style} />}
+                {profile.meeting_style && <InfoItem label="Meetings" value={profile.meeting_style} />}
+                {profile.mentor_energy && <InfoItem label="Energy" value={profile.mentor_energy} />}
+                {profile.feedback_style && <InfoItem label="Feedback" value={profile.feedback_style} />}
+                {profile.has_mentored_before !== undefined && (
+                  <InfoItem label="Mentored before" value={profile.has_mentored_before ? 'Yes' : 'No'} />
                 )}
               </div>
-            </CardContent>
-          </Card>
+              {preferredMenteeLevels && (
+                <p className="text-sm mt-2">
+                  <span className="text-muted-foreground">Prefers:</span>{' '}
+                  {Array.isArray(preferredMenteeLevels) ? preferredMenteeLevels.join(', ') : preferredMenteeLevels}
+                </p>
+              )}
+              {topicsNotToMentor && (
+                <p className="text-sm mt-1 text-red-600 flex items-start gap-1">
+                  <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  Won't mentor: {Array.isArray(topicsNotToMentor) ? topicsNotToMentor.join(', ') : topicsNotToMentor}
+                </p>
+              )}
+            </Section>
+          )}
+
+          {/* Mentor: Motivation */}
+          {!isMentee && (profile.motivation || profile.expectations) && (
+            <Section icon={<MessageCircle className="w-4 h-4" />} title="Motivation">
+              <div className="space-y-2 text-sm">
+                {profile.motivation && <p>{profile.motivation}</p>}
+                {profile.expectations && <p><span className="text-muted-foreground">Expects:</span> {profile.expectations}</p>}
+              </div>
+            </Section>
+          )}
+
+          {/* Bio text if available */}
+          {profile.bio_text && (
+            <Section icon={<MessageCircle className="w-4 h-4" />} title="Bio">
+              <p className="text-sm leading-relaxed">{profile.bio_text}</p>
+            </Section>
+          )}
+
+          {/* Footer */}
+          <div className="text-xs text-muted-foreground/60 pt-2 border-t">
+            {profile.created_at && <>Joined {new Date(profile.created_at).toLocaleDateString()}</>}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Compact section with icon + title + content, no card wrapper
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wide">
+        {icon}
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+// Label: value pair
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="text-muted-foreground">{label}:</span>{' '}
+      <span>{value}</span>
+    </div>
   );
 }
