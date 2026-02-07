@@ -1,15 +1,24 @@
 import React, { useState } from "react";
 import { MentorData, MenteeData } from "@/types/mentoring";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Plus, Save, XCircle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  User,
+  Target,
+  Heart,
+  MessageCircle,
+  Star,
+  Zap,
+  Globe,
+  X,
+  Plus,
+  Save,
+  XCircle,
+} from "lucide-react";
 
 interface ProfileEditFormProps {
   profile: MentorData | MenteeData;
@@ -19,406 +28,269 @@ interface ProfileEditFormProps {
 }
 
 export function ProfileEditForm({ profile, type, onSave, onCancel }: ProfileEditFormProps) {
-  const [formData, setFormData] = useState(profile);
-  const [newTopic, setNewTopic] = useState("");
-  const [newIndustry, setNewIndustry] = useState("");
-  const [newLanguage, setNewLanguage] = useState("");
-  const [newGoal, setNewGoal] = useState("");
-  const { toast } = useToast();
+  const [formData, setFormData] = useState<any>({ ...profile });
+  const isMentee = type === "mentee";
 
-  const handleInputChange = (field: string, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const addToArray = (field: keyof (MentorData | MenteeData), value: string, setValue: (val: string) => void) => {
-    if (!value.trim()) return;
-
-    const currentArray = (formData[field] as string[]) || [];
-    if (!currentArray.includes(value.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        [field]: [...currentArray, value.trim()]
-      }));
-    }
-    setValue("");
-  };
-
-  const removeFromArray = (field: keyof (MentorData | MenteeData), index: number) => {
-    const currentArray = (formData[field] as string[]) || [];
-    setFormData(prev => ({
-      ...prev,
-      [field]: currentArray.filter((_, i) => i !== index)
-    }));
+  const handleChange = (field: string, value: any) => {
+    setFormData((prev: any) => ({ ...prev, [field]: value }));
   };
 
   const handleSave = () => {
-    // Basic validation
-    if (!formData.name?.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
-        description: "Name is required",
-      });
-      return;
-    }
-
-    if (!formData.role?.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
-        description: "Role is required",
-      });
-      return;
-    }
-
     onSave(formData);
-    toast({
-      title: "Profile Updated",
-      description: "Profile has been successfully updated",
-    });
   };
 
-  const experienceLevels = ["Junior", "Mid-level", "Senior", "Staff", "Principal", "Director", "VP", "C-Level"];
-  const timezones = [
-    "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-    "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Tokyo", "Asia/Shanghai",
-    "Australia/Sydney", "Pacific/Auckland"
-  ];
+  return (
+    <div className="space-y-6">
+      {/* Basic Info Section */}
+      <Section icon={<User className="w-4 h-4" />} title="Basic information">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Name">
+            <Input value={formData.name || ""} onChange={(e) => handleChange("name", e.target.value)} />
+          </Field>
+          <Field label="Pronouns">
+            <Input value={formData.pronouns || ""} onChange={(e) => handleChange("pronouns", e.target.value)} />
+          </Field>
+          <Field label="Role">
+            <Input value={formData.role || ""} onChange={(e) => handleChange("role", e.target.value)} />
+          </Field>
+          <Field label="Experience">
+            <Input value={formData.experience_years || ""} onChange={(e) => handleChange("experience_years", e.target.value)} />
+          </Field>
+          <Field label="Location / Timezone">
+            <Input value={formData.location_timezone || ""} onChange={(e) => handleChange("location_timezone", e.target.value)} />
+          </Field>
+          <Field label="Meeting frequency">
+            <Input value={formData.meeting_frequency || ""} onChange={(e) => handleChange("meeting_frequency", e.target.value)} />
+          </Field>
+          <Field label="Industry">
+            <Input value={formData.industry || ""} onChange={(e) => handleChange("industry", e.target.value)} />
+          </Field>
+          {!isMentee && (
+            <Field label="Capacity (mentee slots)">
+              <Input
+                type="number"
+                min="0"
+                max="20"
+                value={formData.capacity_remaining ?? 0}
+                onChange={(e) => handleChange("capacity_remaining", parseInt(e.target.value) || 0)}
+              />
+            </Field>
+          )}
+        </div>
+      </Section>
+
+      {/* Languages */}
+      <Section icon={<Globe className="w-4 h-4" />} title="Languages">
+        <ArrayField
+          items={formData.languages || []}
+          placeholder="Add a language"
+          onChange={(items) => handleChange("languages", items)}
+        />
+      </Section>
+
+      {/* Topics */}
+      <Section icon={<Target className="w-4 h-4" />} title={isMentee ? "Topics to learn" : "Topics to mentor"}>
+        <ArrayField
+          items={formData[isMentee ? "topics_to_learn" : "topics_to_mentor"] || []}
+          placeholder="Add a topic"
+          onChange={(items) => handleChange(isMentee ? "topics_to_learn" : "topics_to_mentor", items)}
+        />
+      </Section>
+
+      {/* Life Experiences */}
+      <Section icon={<Heart className="w-4 h-4" />} title="Life experiences">
+        <ArrayField
+          items={formData.life_experiences || []}
+          placeholder="Add a life experience"
+          onChange={(items) => handleChange("life_experiences", items)}
+        />
+      </Section>
+
+      {/* Mentee: Motivation & Goals */}
+      {isMentee && (
+        <Section icon={<MessageCircle className="w-4 h-4" />} title="Motivation & goals">
+          <div className="space-y-3">
+            <Field label="Why join the mentorship program?">
+              <Textarea rows={2} value={formData.motivation || ""} onChange={(e) => handleChange("motivation", e.target.value)} />
+            </Field>
+            <Field label="Main reason for wanting a mentor">
+              <Textarea rows={2} value={formData.main_reason || ""} onChange={(e) => handleChange("main_reason", e.target.value)} />
+            </Field>
+            <Field label="Program expectations">
+              <Textarea rows={2} value={formData.expectations || ""} onChange={(e) => handleChange("expectations", e.target.value)} />
+            </Field>
+          </div>
+        </Section>
+      )}
+
+      {/* Mentee: Preferences */}
+      {isMentee && (
+        <Section icon={<Star className="w-4 h-4" />} title="Mentor preferences">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Preferred style">
+              <Input value={formData.preferred_mentor_style || ""} onChange={(e) => handleChange("preferred_mentor_style", e.target.value)} />
+            </Field>
+            <Field label="Preferred energy">
+              <Input value={formData.preferred_mentor_energy || ""} onChange={(e) => handleChange("preferred_mentor_energy", e.target.value)} />
+            </Field>
+            <Field label="Feedback preference">
+              <Input value={formData.feedback_preference || ""} onChange={(e) => handleChange("feedback_preference", e.target.value)} />
+            </Field>
+            <Field label="Mentor experience importance">
+              <Input value={formData.mentor_experience_importance || ""} onChange={(e) => handleChange("mentor_experience_importance", e.target.value)} />
+            </Field>
+          </div>
+          <div className="space-y-3 mt-3">
+            <Field label="Desired mentor qualities">
+              <Textarea rows={2} value={formData.desired_qualities || ""} onChange={(e) => handleChange("desired_qualities", e.target.value)} />
+            </Field>
+            <Field label="What NOT wanted in a mentor">
+              <Textarea rows={2} value={formData.what_not_wanted || ""} onChange={(e) => handleChange("what_not_wanted", e.target.value)} />
+            </Field>
+          </div>
+        </Section>
+      )}
+
+      {/* Mentor: Approach */}
+      {!isMentee && (
+        <Section icon={<Zap className="w-4 h-4" />} title="Mentoring approach">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Mentoring style">
+              <Input value={formData.mentoring_style || ""} onChange={(e) => handleChange("mentoring_style", e.target.value)} />
+            </Field>
+            <Field label="Meeting style">
+              <Input value={formData.meeting_style || ""} onChange={(e) => handleChange("meeting_style", e.target.value)} />
+            </Field>
+            <Field label="Mentor energy">
+              <Input value={formData.mentor_energy || ""} onChange={(e) => handleChange("mentor_energy", e.target.value)} />
+            </Field>
+            <Field label="Feedback style">
+              <Input value={formData.feedback_style || ""} onChange={(e) => handleChange("feedback_style", e.target.value)} />
+            </Field>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <Checkbox
+              id="has_mentored_before"
+              checked={formData.has_mentored_before || false}
+              onCheckedChange={(checked) => handleChange("has_mentored_before", !!checked)}
+            />
+            <Label htmlFor="has_mentored_before" className="text-sm cursor-pointer">Has mentored before</Label>
+          </div>
+          <div className="mt-3">
+            <Label className="text-xs text-muted-foreground">Preferred mentee levels</Label>
+            <ArrayField
+              items={formData.preferred_mentee_levels || []}
+              placeholder="e.g. Early-career, Mid-level"
+              onChange={(items) => handleChange("preferred_mentee_levels", items)}
+            />
+          </div>
+          <div className="mt-3">
+            <Label className="text-xs text-muted-foreground">Topics NOT to mentor</Label>
+            <ArrayField
+              items={formData.topics_not_to_mentor || []}
+              placeholder="Add a topic to exclude"
+              onChange={(items) => handleChange("topics_not_to_mentor", items)}
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* Mentor: Motivation */}
+      {!isMentee && (
+        <Section icon={<MessageCircle className="w-4 h-4" />} title="Motivation">
+          <div className="space-y-3">
+            <Field label="What do you hope to gain from being a mentor?">
+              <Textarea rows={2} value={formData.motivation || ""} onChange={(e) => handleChange("motivation", e.target.value)} />
+            </Field>
+            <Field label="Program expectations">
+              <Textarea rows={2} value={formData.expectations || ""} onChange={(e) => handleChange("expectations", e.target.value)} />
+            </Field>
+          </div>
+        </Section>
+      )}
+
+      {/* Actions */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <Button variant="outline" onClick={onCancel}>
+          <XCircle className="w-4 h-4 mr-2" />
+          Cancel
+        </Button>
+        <Button onClick={handleSave}>
+          <Save className="w-4 h-4 mr-2" />
+          Save Changes
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wide">
+        {icon}
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function ArrayField({ items, placeholder, onChange }: { items: string[]; placeholder: string; onChange: (items: string[]) => void }) {
+  const [inputValue, setInputValue] = useState("");
+
+  const addItem = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && !items.includes(trimmed)) {
+      onChange([...items, trimmed]);
+    }
+    setInputValue("");
+  };
+
+  const removeItem = (index: number) => {
+    onChange(items.filter((_, i) => i !== index));
+  };
 
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle>Edit {type === "mentor" ? "Mentor" : "Mentee"} Profile</CardTitle>
-        <CardDescription>
-          Update profile information and preferences
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-6">
-        {/* Basic Information */}
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
-              value={formData.name || ""}
-              onChange={(e) => handleInputChange("name", e.target.value)}
-              placeholder="Full name"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="role">Role *</Label>
-            <Input
-              id="role"
-              value={formData.role || ""}
-              onChange={(e) => handleInputChange("role", e.target.value)}
-              placeholder="Job title"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="company">Company</Label>
-            <Input
-              id="company"
-              value={formData.company || ""}
-              onChange={(e) => handleInputChange("company", e.target.value)}
-              placeholder="Company name"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="location">Location</Label>
-            <Input
-              id="location"
-              value={formData.location || ""}
-              onChange={(e) => handleInputChange("location", e.target.value)}
-              placeholder="City, Country"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="timezone">Timezone</Label>
-            <Select
-              value={formData.timezone || ""}
-              onValueChange={(value) => handleInputChange("timezone", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select timezone" />
-              </SelectTrigger>
-              <SelectContent>
-                {timezones.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz.replace(/_/g, ' ').replace(/\//g, ' / ')}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="experience_level">Experience Level</Label>
-            <Select
-              value={formData.experience_level || ""}
-              onValueChange={(value) => handleInputChange("experience_level", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select experience level" />
-              </SelectTrigger>
-              <SelectContent>
-                {experienceLevels.map((level) => (
-                  <SelectItem key={level} value={level}>
-                    {level}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder={placeholder}
+          className="text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addItem();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={addItem} className="shrink-0 px-2">
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((item, index) => (
+            <Badge key={index} variant="secondary" className="text-xs font-normal pr-1 gap-1">
+              {item}
+              <button onClick={() => removeItem(index)} className="ml-0.5 hover:bg-muted rounded-sm">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
         </div>
-
-        {/* Mentor-specific fields */}
-        {type === "mentor" && (
-          <div>
-            <Label htmlFor="capacity">Mentoring Capacity</Label>
-            <Input
-              id="capacity"
-              type="number"
-              value={(formData as MentorData).capacity || 0}
-              onChange={(e) => handleInputChange("capacity", parseInt(e.target.value) || 0)}
-              placeholder="Number of mentees"
-              min="0"
-              max="10"
-            />
-          </div>
-        )}
-
-        {/* Mentee-specific fields */}
-        {type === "mentee" && (
-          <div>
-            <Label htmlFor="manager">Manager</Label>
-            <Input
-              id="manager"
-              value={(formData as MenteeData).manager || ""}
-              onChange={(e) => handleInputChange("manager", e.target.value)}
-              placeholder="Manager name"
-            />
-          </div>
-        )}
-
-        <Separator />
-
-        {/* Description */}
-        <div>
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            value={formData.description || ""}
-            onChange={(e) => handleInputChange("description", e.target.value)}
-            placeholder={`Tell us about yourself and your ${type === "mentor" ? "mentoring approach" : "learning goals"}...`}
-            rows={4}
-          />
-        </div>
-
-        <Separator />
-
-        {/* Topics */}
-        <div>
-          <Label>Topics</Label>
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                value={newTopic}
-                onChange={(e) => setNewTopic(e.target.value)}
-                placeholder="Add a topic"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addToArray("topics", newTopic, setNewTopic);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => addToArray("topics", newTopic, setNewTopic)}
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(formData.topics || []).map((topic, index) => (
-                <Badge key={index} variant="outline" className="pr-1">
-                  {topic}
-                  <button
-                    onClick={() => removeFromArray("topics", index)}
-                    className="ml-1 hover:bg-muted rounded-sm"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Goals (for mentees) */}
-        {type === "mentee" && (
-          <div>
-            <Label>Learning Goals</Label>
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <Input
-                  value={newGoal}
-                  onChange={(e) => setNewGoal(e.target.value)}
-                  placeholder="Add a learning goal"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addToArray("goals", newGoal, setNewGoal);
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => addToArray("goals", newGoal, setNewGoal)}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {((formData as MenteeData).goals || []).map((goal, index) => (
-                  <Badge key={index} variant="outline" className="pr-1">
-                    {goal}
-                    <button
-                      onClick={() => removeFromArray("goals", index)}
-                      className="ml-1 hover:bg-muted rounded-sm"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Industries */}
-        <div>
-          <Label>Industries</Label>
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                value={newIndustry}
-                onChange={(e) => setNewIndustry(e.target.value)}
-                placeholder="Add an industry"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addToArray("industries", newIndustry, setNewIndustry);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => addToArray("industries", newIndustry, setNewIndustry)}
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(formData.industries || []).map((industry, index) => (
-                <Badge key={index} variant="secondary" className="pr-1">
-                  {industry}
-                  <button
-                    onClick={() => removeFromArray("industries", index)}
-                    className="ml-1 hover:bg-muted rounded-sm"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Languages */}
-        <div>
-          <Label>Languages</Label>
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                value={newLanguage}
-                onChange={(e) => setNewLanguage(e.target.value)}
-                placeholder="Add a language"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addToArray("languages", newLanguage, setNewLanguage);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => addToArray("languages", newLanguage, setNewLanguage)}
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(formData.languages || []).map((language, index) => (
-                <Badge key={index} variant="outline" className="pr-1">
-                  {language}
-                  <button
-                    onClick={() => removeFromArray("languages", index)}
-                    className="ml-1 hover:bg-muted rounded-sm"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Availability */}
-        <div>
-          <Label htmlFor="availability">Availability</Label>
-          <Textarea
-            id="availability"
-            value={formData.availability || ""}
-            onChange={(e) => handleInputChange("availability", e.target.value)}
-            placeholder="Describe your availability (days, times, frequency)"
-            rows={3}
-          />
-        </div>
-
-        {/* Additional Info */}
-        <div>
-          <Label htmlFor="additional_info">Additional Information</Label>
-          <Textarea
-            id="additional_info"
-            value={formData.additional_info || ""}
-            onChange={(e) => handleInputChange("additional_info", e.target.value)}
-            placeholder="Any additional information you'd like to share"
-            rows={3}
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-6">
-          <Button variant="outline" onClick={onCancel}>
-            <XCircle className="w-4 h-4 mr-2" />
-            Cancel
-          </Button>
-          <Button onClick={handleSave}>
-            <Save className="w-4 h-4 mr-2" />
-            Save Changes
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
