@@ -101,9 +101,6 @@ DECLARE
   v_david_id UUID;
   v_frank_id UUID;
   v_henry_id UUID;
-  v_bob_id UUID;
-  v_emily_id UUID;
-  v_grace_id UUID;
 BEGIN
   -- Get the cohort ID we just created
   SELECT id INTO v_cohort_id FROM program_cohorts WHERE name = 'Q1 2025 Mentoring Program' LIMIT 1;
@@ -114,10 +111,6 @@ BEGIN
   SELECT id INTO v_david_id FROM user_profiles WHERE email = 'david.kumar@example.com';
   SELECT id INTO v_frank_id FROM user_profiles WHERE email = 'frank.martinez@example.com';
   SELECT id INTO v_henry_id FROM user_profiles WHERE email = 'henry.patel@example.com';
-  SELECT id INTO v_bob_id FROM user_profiles WHERE email = 'bob.smith@example.com';
-  SELECT id INTO v_emily_id FROM user_profiles WHERE email = 'emily.chen@example.com';
-  SELECT id INTO v_grace_id FROM user_profiles WHERE email = 'grace.liu@example.com';
-
   -- Add mentors
   INSERT INTO program_participants (user_id, program_cohort_id, role_in_program, role_data, status)
   VALUES
@@ -176,27 +169,6 @@ BEGIN
   FROM skills s WHERE s.name = 'System Design'
   ON CONFLICT (user_id, skill_id) DO NOTHING;
 
-  -- Add host offerings
-  INSERT INTO host_offerings (host_user_id, title, description, skills_offered, topics_covered, what_shadow_will_do, availability, max_concurrent_shadows, slots_per_week, is_active, is_accepting_bookings)
-  VALUES
-    (v_bob_id,
-     'Product Strategy in Action',
-     'Shadow me during product roadmap planning, user interviews, and stakeholder meetings.',
-     ARRAY['Product Strategy', 'User Research', 'Stakeholder Management'],
-     ARRAY['Roadmap Planning', 'User Interviews', 'Data-Driven Decisions'],
-     'Observe user interviews, participate in planning discussions, review product metrics together',
-     '{"monday": [{"start": "09:00", "end": "12:00"}], "wednesday": [{"start": "14:00", "end": "17:00"}]}'::jsonb,
-     2, 3, true, true),
-
-    (v_emily_id,
-     'UX Design Process Deep Dive',
-     'Experience the full UX design process from research to final designs.',
-     ARRAY['UI Design', 'User Research', 'Figma'],
-     ARRAY['User Research', 'Wireframing', 'Prototyping', 'User Testing'],
-     'Participate in user research sessions, observe design critiques, learn Figma tips',
-     '{"tuesday": [{"start": "10:00", "end": "13:00"}], "thursday": [{"start": "10:00", "end": "13:00"}]}'::jsonb,
-     1, 2, true, true);
-
   -- Add recommendations
   INSERT INTO growth_recommendations (user_id, program_cohort_id, recommendation_key, title, description, icon, stage, display_order, is_completed, completed_at)
   VALUES
@@ -224,8 +196,6 @@ UNION ALL
 SELECT 'growth_events', COUNT(*) FROM growth_events
 UNION ALL
 SELECT 'user_skill_progress', COUNT(*) FROM user_skill_progress
-UNION ALL
-SELECT 'host_offerings', COUNT(*) FROM host_offerings
 UNION ALL
 SELECT 'growth_recommendations', COUNT(*) FROM growth_recommendations
 ORDER BY table_name;
