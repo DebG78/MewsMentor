@@ -13,7 +13,8 @@ import {
   Globe,
   Building,
   Award,
-  Edit
+  Edit,
+  Mail,
 } from "lucide-react";
 
 interface MentorProfileProps {
@@ -55,6 +56,12 @@ export function MentorProfile({ mentor, onEdit, variant = "default" }: MentorPro
             <div>
               <CardTitle className="text-xl">{mentor.name}</CardTitle>
               <CardDescription className="text-lg">{mentor.role}</CardDescription>
+              {mentor.email && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Mail className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{mentor.email}</span>
+                </div>
+              )}
               {mentor.company && (
                 <div className="flex items-center gap-1 mt-1">
                   <Building className="w-4 h-4 text-muted-foreground" />

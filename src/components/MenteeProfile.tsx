@@ -13,7 +13,8 @@ import {
   Globe,
   Building,
   BookOpen,
-  Edit
+  Edit,
+  Mail,
 } from "lucide-react";
 
 interface MenteeProfileProps {
@@ -55,6 +56,12 @@ export function MenteeProfile({ mentee, onEdit, variant = "default" }: MenteePro
             <div>
               <CardTitle className="text-xl">{mentee.name}</CardTitle>
               <CardDescription className="text-lg">{mentee.role}</CardDescription>
+              {mentee.email && (
+                <div className="flex items-center gap-1 mt-1">
+                  <Mail className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{mentee.email}</span>
+                </div>
+              )}
               {mentee.company && (
                 <div className="flex items-center gap-1 mt-1">
                   <Building className="w-4 h-4 text-muted-foreground" />
