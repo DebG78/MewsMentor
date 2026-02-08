@@ -30,6 +30,14 @@ export function calculateCohortStats(cohort: Cohort): CohortStats {
     matchesApproved = cohort.matches.results.filter(r => r.proposed_assignment?.mentor_id).length;
   }
 
+  // Include manual matches in the count
+  if (cohort.manual_matches?.matches?.length) {
+    matchesCreated += cohort.manual_matches.matches.length;
+    if (cohort.manual_matches.finalized) {
+      matchesApproved += cohort.manual_matches.matches.length;
+    }
+  }
+
   return {
     total_mentees: cohort.mentees.length,
     total_mentors: cohort.mentors.length,

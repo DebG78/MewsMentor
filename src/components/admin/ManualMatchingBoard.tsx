@@ -98,6 +98,7 @@ export function ManualMatchingBoard({
   );
   const [selectedMenteeId, setSelectedMenteeId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isFinalized, setIsFinalized] = useState(existingManualMatches?.finalized ?? false);
 
   // Search state
   const [menteeSearch, setMenteeSearch] = useState('');
@@ -335,6 +336,7 @@ export function ManualMatchingBoard({
         finalized,
       };
       await onSave(output);
+      setIsFinalized(finalized);
       toast({
         title: finalized ? 'Manual matches finalized' : 'Draft saved',
         description: `${pairs.length} pair${pairs.length !== 1 ? 's' : ''} saved`,
@@ -985,7 +987,13 @@ export function ManualMatchingBoard({
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {isFinalized && (
+            <Badge className="bg-green-100 text-green-800 border-green-200 mr-2">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              Finalized
+            </Badge>
+          )}
           <Button
             variant="outline"
             onClick={() => handleSave(false)}
@@ -997,9 +1005,10 @@ export function ManualMatchingBoard({
           <Button
             onClick={() => handleSave(true)}
             disabled={pairs.length === 0 || isSaving}
+            variant={isFinalized ? 'outline' : 'default'}
           >
             <CheckCircle className="w-4 h-4 mr-2" />
-            Finalize ({pairs.length} pair{pairs.length !== 1 ? 's' : ''})
+            {isFinalized ? 'Re-finalize' : 'Finalize'} ({pairs.length} pair{pairs.length !== 1 ? 's' : ''})
           </Button>
         </div>
       </div>
@@ -1128,6 +1137,11 @@ export function ManualMatchingBoard({
                   {m.job_grade && (
                     <div className="flex items-center gap-2">
                       <span className="font-medium">Job Grade:</span> {m.job_grade}
+                    </div>
+                  )}
+                  {m.email && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Email:</span> {m.email}
                     </div>
                   )}
                   {m.languages && m.languages.length > 0 && (
@@ -1297,6 +1311,11 @@ export function ManualMatchingBoard({
                   {m.job_grade && (
                     <div className="flex items-center gap-2">
                       <span className="font-medium">Job Grade:</span> {m.job_grade}
+                    </div>
+                  )}
+                  {m.email && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Email:</span> {m.email}
                     </div>
                   )}
                   {m.industry && (

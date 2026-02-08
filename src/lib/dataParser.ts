@@ -344,6 +344,13 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
   });
   const jobGradeValue = gradeKey ? row[gradeKey] : '';
 
+  // Find email column with flexible matching
+  const menteeEmailKey = Object.keys(row).find(key => {
+    const lk = key.toLowerCase();
+    return lk === 'email' || lk === 'work email' || lk === 'email address' || lk.includes('e-mail');
+  });
+  const menteeEmailValue = menteeEmailKey ? row[menteeEmailKey] : '';
+
   const result = {
     id,
     name,
@@ -353,6 +360,7 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     location_timezone: locationValue,
     department: departmentValue,
     job_grade: jobGradeValue,
+    email: menteeEmailValue && menteeEmailValue.includes('@') ? menteeEmailValue.trim() : undefined,
 
     // Store life experiences as collected array
     life_experiences: lifeExperiences,
@@ -623,6 +631,13 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
   });
   const mentorJobGrade = mentorGradeKey ? row[mentorGradeKey] : '';
 
+  // Find email column with flexible matching
+  const mentorEmailKey = Object.keys(row).find(key => {
+    const lk = key.toLowerCase();
+    return lk === 'email' || lk === 'work email' || lk === 'email address' || lk.includes('e-mail');
+  });
+  const mentorEmailValue = mentorEmailKey ? row[mentorEmailKey] : '';
+
   return {
     id,
     name,
@@ -632,6 +647,7 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
     location_timezone: mentorLocation,
     department: mentorDepartment,
     job_grade: mentorJobGrade,
+    email: mentorEmailValue && mentorEmailValue.includes('@') ? mentorEmailValue.trim() : undefined,
 
     // Life experiences
     returning_from_leave: !!row["Returning from maternity/paternity/parental leave"],

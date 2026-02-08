@@ -30,11 +30,14 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { respondent_name, date, duration_minutes, rating } = body;
+    const { respondent_name, respondent_email, date, duration_minutes, rating } = body;
 
-    // Validate required fields
-    if (!respondent_name || !date || !duration_minutes || !rating) {
-      return errorResponse(400, 'Missing required fields: respondent_name, date, duration_minutes, rating');
+    // Validate required fields — at least one of name or email is needed
+    if (!respondent_name && !respondent_email) {
+      return errorResponse(400, 'At least one of respondent_name or respondent_email is required');
+    }
+    if (!date || !duration_minutes || !rating) {
+      return errorResponse(400, 'Missing required fields: date, duration_minutes, rating');
     }
 
     // Validate rating
@@ -72,7 +75,8 @@ serve(async (req) => {
       return errorResponse(500, 'Failed to look up cohorts');
     }
 
-    const normalizedName = respondent_name.trim().toLowerCase();
+    const normalizedName = respondent_name?.trim().toLowerCase() || '';
+    const normalizedEmail = respondent_email?.trim().toLowerCase() || '';
     const candidates: Array<{
       mentor_id: string;
       mentee_id: string;
@@ -89,16 +93,18 @@ serve(async (req) => {
 
       // Fetch mentees and mentors for this cohort
       const [menteesResult, mentorsResult] = await Promise.all([
-        supabaseAdmin.from('mentees').select('mentee_id, full_name').eq('cohort_id', cohort.id),
-        supabaseAdmin.from('mentors').select('mentor_id, full_name').eq('cohort_id', cohort.id),
+        supabaseAdmin.from('mentees').select('mentee_id, full_name, email').eq('cohort_id', cohort.id),
+        supabaseAdmin.from('mentors').select('mentor_id, full_name, email').eq('cohort_id', cohort.id),
       ]);
 
       const mentees = menteesResult.data || [];
       const mentors = mentorsResult.data || [];
 
-      // Check mentees
+      // Check mentees — email match takes priority over name match
       for (const mentee of mentees) {
-        if (mentee.full_name?.trim().toLowerCase() === normalizedName) {
+        const emailMatch = normalizedEmail && mentee.email?.trim().toLowerCase() === normalizedEmail;
+        const nameMatch = normalizedName && mentee.full_name?.trim().toLowerCase() === normalizedName;
+        if (emailMatch || nameMatch) {
           const match = matches.results.find(
             (r: any) => r.mentee_id === mentee.mentee_id && r.proposed_assignment?.mentor_id
           );
@@ -117,9 +123,11 @@ serve(async (req) => {
         }
       }
 
-      // Check mentors
+      // Check mentors — email match takes priority over name match
       for (const mentor of mentors) {
-        if (mentor.full_name?.trim().toLowerCase() === normalizedName) {
+        const emailMatch = normalizedEmail && mentor.email?.trim().toLowerCase() === normalizedEmail;
+        const nameMatch = normalizedName && mentor.full_name?.trim().toLowerCase() === normalizedName;
+        if (emailMatch || nameMatch) {
           const mentorMatches = matches.results.filter(
             (r: any) => r.proposed_assignment?.mentor_id === mentor.mentor_id
           );
@@ -140,13 +148,15 @@ serve(async (req) => {
     }
 
     if (candidates.length === 0) {
-      return errorResponse(404, `No active pair found for "${respondent_name}". Ensure the name matches exactly as registered.`);
+      const identifier = normalizedEmail || respondent_name;
+      return errorResponse(404, `No active pair found for "${identifier}". Ensure the name or email matches exactly as registered.`);
     }
 
     if (candidates.length > 1) {
+      const identifier = normalizedEmail || respondent_name;
       return errorResponse(
         409,
-        `Multiple matches found for "${respondent_name}". Found in: ${candidates.map(c => `${c.cohort_name} (${c.mentee_name} & ${c.mentor_name})`).join(', ')}. Please resolve manually.`
+        `Multiple matches found for "${identifier}". Found in: ${candidates.map(c => `${c.cohort_name} (${c.mentee_name} & ${c.mentor_name})`).join(', ')}. Please resolve manually.`
       );
     }
 

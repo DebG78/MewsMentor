@@ -161,6 +161,11 @@ export function HelpGuide() {
                       <TableCell className="text-xs font-mono">"job grade", "job_grade", "grade", "level", "band"</TableCell>
                       <TableCell>Job grade or level</TableCell>
                     </TableRow>
+                    <TableRow>
+                      <TableCell>Email</TableCell>
+                      <TableCell className="text-xs font-mono">"email", "work email", "email address"</TableCell>
+                      <TableCell>Work email (used for webhook respondent matching)</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>
@@ -315,6 +320,11 @@ export function HelpGuide() {
                       <TableCell>Job Grade</TableCell>
                       <TableCell className="text-xs font-mono">"job grade", "job_grade", "grade", "level", "band"</TableCell>
                       <TableCell>Job grade or level</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Email</TableCell>
+                      <TableCell className="text-xs font-mono">"email", "work email", "email address"</TableCell>
+                      <TableCell>Work email (used for webhook respondent matching)</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
