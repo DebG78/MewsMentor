@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
@@ -11,7 +11,7 @@ function errorResponse(status: number, message: string) {
   );
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -64,11 +64,11 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Get all active cohorts with their mentees, mentors, and matches
+    // Get all non-completed cohorts with their mentees, mentors, and matches
     const { data: cohorts, error: cohortsError } = await supabaseAdmin
       .from('cohorts')
       .select('*')
-      .eq('status', 'active');
+      .in('status', ['active', 'draft']);
 
     if (cohortsError) {
       console.error('Error fetching cohorts:', cohortsError);
@@ -89,7 +89,10 @@ serve(async (req) => {
 
     for (const cohort of cohorts || []) {
       const matches = cohort.matches as any;
-      if (!matches?.results) continue;
+      const manualMatches = cohort.manual_matches as any;
+      const hasAlgoMatches = matches?.results?.length > 0;
+      const hasManualMatches = manualMatches?.matches?.length > 0;
+      if (!hasAlgoMatches && !hasManualMatches) continue;
 
       // Fetch mentees and mentors for this cohort
       const [menteesResult, mentorsResult] = await Promise.all([
@@ -100,18 +103,32 @@ serve(async (req) => {
       const mentees = menteesResult.data || [];
       const mentors = mentorsResult.data || [];
 
+      // Build a unified list of pairs from both algorithm and manual matches
+      const allPairs: Array<{ mentee_id: string; mentor_id: string }> = [];
+
+      if (hasAlgoMatches) {
+        for (const r of matches.results) {
+          if (r.proposed_assignment?.mentor_id) {
+            allPairs.push({ mentee_id: r.mentee_id, mentor_id: r.proposed_assignment.mentor_id });
+          }
+        }
+      }
+      if (hasManualMatches) {
+        for (const m of manualMatches.matches) {
+          allPairs.push({ mentee_id: m.mentee_id, mentor_id: m.mentor_id });
+        }
+      }
+
       // Check mentees — email match takes priority over name match
       for (const mentee of mentees) {
         const emailMatch = normalizedEmail && mentee.email?.trim().toLowerCase() === normalizedEmail;
         const nameMatch = normalizedName && mentee.full_name?.trim().toLowerCase() === normalizedName;
         if (emailMatch || nameMatch) {
-          const match = matches.results.find(
-            (r: any) => r.mentee_id === mentee.mentee_id && r.proposed_assignment?.mentor_id
-          );
-          if (match) {
-            const mentor = mentors.find((m: any) => m.mentor_id === match.proposed_assignment.mentor_id);
+          const pairedEntries = allPairs.filter(p => p.mentee_id === mentee.mentee_id);
+          for (const pair of pairedEntries) {
+            const mentor = mentors.find((m: any) => m.mentor_id === pair.mentor_id);
             candidates.push({
-              mentor_id: match.proposed_assignment.mentor_id,
+              mentor_id: pair.mentor_id,
               mentee_id: mentee.mentee_id,
               cohort_id: cohort.id,
               cohort_name: cohort.name,
@@ -128,18 +145,16 @@ serve(async (req) => {
         const emailMatch = normalizedEmail && mentor.email?.trim().toLowerCase() === normalizedEmail;
         const nameMatch = normalizedName && mentor.full_name?.trim().toLowerCase() === normalizedName;
         if (emailMatch || nameMatch) {
-          const mentorMatches = matches.results.filter(
-            (r: any) => r.proposed_assignment?.mentor_id === mentor.mentor_id
-          );
-          for (const match of mentorMatches) {
-            const mentee = mentees.find((m: any) => m.mentee_id === match.mentee_id);
+          const pairedEntries = allPairs.filter(p => p.mentor_id === mentor.mentor_id);
+          for (const pair of pairedEntries) {
+            const mentee = mentees.find((m: any) => m.mentee_id === pair.mentee_id);
             candidates.push({
               mentor_id: mentor.mentor_id,
-              mentee_id: match.mentee_id,
+              mentee_id: pair.mentee_id,
               cohort_id: cohort.id,
               cohort_name: cohort.name,
               mentor_name: mentor.full_name || mentor.mentor_id,
-              mentee_name: mentee?.full_name || match.mentee_name || 'Unknown',
+              mentee_name: mentee?.full_name || 'Unknown',
               respondent_role: 'mentor',
             });
           }
