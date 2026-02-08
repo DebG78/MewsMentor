@@ -58,13 +58,13 @@ const Settings = () => {
     },
     {
       id: "data-help",
-      title: "Data & Help",
+      title: "Mentor/Mentee Data Upload",
       icon: Database,
       description: "Learn how uploads, columns, matching, and exports work"
     },
     {
       id: "analytics-guide",
-      title: "Analytics Guide",
+      title: "Analytics Data Upload",
       icon: BarChart3,
       description: "Understand analytics pages, metrics, and admin workflows"
     }
@@ -139,13 +139,13 @@ const Settings = () => {
               </Card>
             </TabsContent>
 
-            {/* Data & Help */}
+            {/* Mentor/Mentee Data Upload */}
             <TabsContent value="data-help" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Database className="w-5 h-5" />
-                    Data & Help
+                    Mentor/Mentee Data Upload
                   </CardTitle>
                   <CardDescription>
                     Learn about spreadsheet columns, data uploads, and how the matching algorithm works.
@@ -157,17 +157,16 @@ const Settings = () => {
               </Card>
             </TabsContent>
 
-            {/* Analytics Guide */}
+            {/* Analytics Data Upload */}
             <TabsContent value="analytics-guide" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="w-5 h-5" />
-                    Analytics Guide
+                    Analytics Data Upload
                   </CardTitle>
                   <CardDescription>
-                    Understand every analytics page, what the metrics mean, how to read charts,
-                    and what actions to take as an admin.
+                    Understand analytics pages, metrics, and how to get session data in via Slack, Forms, or CSV.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
