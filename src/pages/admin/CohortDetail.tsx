@@ -28,6 +28,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   MoreHorizontal,
@@ -92,6 +95,10 @@ export default function CohortDetail() {
   const [viewingProfile, setViewingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
   const [editingProfile, setEditingProfile] = useState<{ profile: MenteeData | MentorData; type: 'mentee' | 'mentor' } | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<MatchingResult | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editManager, setEditManager] = useState("");
 
   useEffect(() => {
     loadCohort();
@@ -187,6 +194,40 @@ export default function CohortDetail() {
       toast({
         variant: "destructive",
         title: "Failed to update status",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+      });
+    }
+  };
+
+  const openEditDialog = () => {
+    if (!cohort) return;
+    setEditName(cohort.name);
+    setEditDescription(cohort.description || "");
+    setEditManager(cohort.program_manager || "");
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditCohort = async () => {
+    if (!cohort || !editName.trim()) return;
+
+    try {
+      const updatedCohort = await updateCohort(cohort.id, {
+        name: editName.trim(),
+        description: editDescription.trim(),
+        program_manager: editManager.trim() || undefined,
+      });
+      if (updatedCohort) {
+        setCohort(updatedCohort);
+        setIsEditDialogOpen(false);
+        toast({
+          title: "Cohort updated",
+          description: "Cohort details have been saved",
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update cohort",
         description: error instanceof Error ? error.message : "Unknown error occurred",
       });
     }
@@ -600,6 +641,11 @@ export default function CohortDetail() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={openEditDialog}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Cohort Details
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => handleStatusChange('active')}>
                 <Play className="h-4 w-4 mr-2" />
                 Mark Active
@@ -623,6 +669,55 @@ export default function CohortDetail() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Edit Cohort Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Cohort Details</DialogTitle>
+                <DialogDescription>
+                  Update the cohort name, description, or program manager.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-cohort-name">Cohort Name *</Label>
+                  <Input
+                    id="edit-cohort-name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Cohort name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-cohort-description">Description</Label>
+                  <Textarea
+                    id="edit-cohort-description"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    placeholder="Brief description of the program goals and focus areas"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-program-manager">Program Manager</Label>
+                  <Input
+                    id="edit-program-manager"
+                    value={editManager}
+                    onChange={(e) => setEditManager(e.target.value)}
+                    placeholder="Program manager name"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleEditCohort} disabled={!editName.trim()}>
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

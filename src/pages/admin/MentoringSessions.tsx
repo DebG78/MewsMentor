@@ -64,6 +64,7 @@ import {
   type SessionStatus,
 } from '@/lib/sessionService';
 import { getAllCohorts } from '@/lib/supabaseService';
+import { SessionLogImport } from '@/components/admin/SessionLogImport';
 
 const volumeChartConfig = {
   completed: { label: 'Completed', color: 'hsl(142, 71%, 45%)' },
@@ -236,10 +237,13 @@ export default function MentoringSessions() {
             Track and analyze mentoring sessions across cohorts
           </p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          New Session
-        </Button>
+        <div className="flex gap-2">
+          <SessionLogImport onImported={loadData} />
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Session
+          </Button>
+        </div>
       </div>
 
       {/* Cohort Selector */}

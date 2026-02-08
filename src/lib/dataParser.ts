@@ -4,12 +4,14 @@ import {
   ImportResult,
   DataValidationError,
   DEVELOPMENT_TOPICS,
-  EXPERIENCE_MAPPING
+  EXPERIENCE_MAPPING,
+  Cohort,
 } from "@/types/mentoring";
 import type { CreateCheckInInput, RiskFlag } from '@/types/checkIns';
 import type { CreateVIPScoreInput, PersonType } from '@/types/vip';
 import type { CreateMetricSnapshotInput } from '@/types/metrics';
 import type { CreateSessionInput, SessionStatus } from '@/lib/sessionService';
+import { resolvePairByName, type ResolvedPair } from '@/lib/personPairResolver';
 import * as XLSX from 'xlsx';
 
 // CSV parsing utility
@@ -1147,4 +1149,152 @@ function findColumnValue(row: Record<string, string>, candidates: string[]): str
   }
 
   return undefined;
+}
+
+// ============================================================================
+// SESSION LOG CSV PARSER (for MS Forms / external form exports)
+// ============================================================================
+
+export interface SessionLogRow {
+  respondent_name: string;
+  date: string;
+  duration_minutes: number;
+  rating: number;
+  raw_row_index: number;
+}
+
+export interface SessionLogMatch extends SessionLogRow {
+  pair: ResolvedPair;
+}
+
+export interface SessionLogUnmatched extends SessionLogRow {
+  error: string;
+  candidates: ResolvedPair[];
+}
+
+export interface SessionLogParseResult {
+  matched: SessionLogMatch[];
+  unmatched: SessionLogUnmatched[];
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Parse a session log CSV from MS Forms or similar external form.
+ * Columns expected: name/respondent, date, duration, rating.
+ * Automatically resolves respondent names to mentor-mentee pairs using active cohorts.
+ */
+export function parseSessionLogCSV(
+  csvText: string,
+  cohorts: Cohort[]
+): SessionLogParseResult {
+  const rows = parseCSV(csvText);
+  const matched: SessionLogMatch[] = [];
+  const unmatched: SessionLogUnmatched[] = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (rows.length === 0) {
+    errors.push('No data found in CSV');
+    return { matched, unmatched, errors, warnings };
+  }
+
+  // Check for required-ish columns (name + date at minimum)
+  const headers = Object.keys(rows[0]).map(h => h.toLowerCase().replace(/[\s_-]+/g, '_'));
+  const hasName = headers.some(h =>
+    ['name', 'respondent', 'full_name', 'respondent_name', 'your_name', 'your_full_name'].some(c => h.includes(c))
+  );
+  const hasDate = headers.some(h =>
+    ['date', 'session_date', 'meeting_date', 'when'].some(c => h.includes(c))
+  );
+
+  if (!hasName) {
+    errors.push('Missing name column. Expected one of: name, respondent, full_name, respondent_name');
+    return { matched, unmatched, errors, warnings };
+  }
+  if (!hasDate) {
+    errors.push('Missing date column. Expected one of: date, session_date, meeting_date');
+    return { matched, unmatched, errors, warnings };
+  }
+
+  const VALID_DURATIONS = [15, 30, 45, 60, 90, 120];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2; // +2 for header row + 0-index
+
+    const name = findColumnValue(row, ['respondent_name', 'your_name', 'your_full_name', 'full_name', 'respondent', 'name']);
+    const dateStr = findColumnValue(row, ['session_date', 'meeting_date', 'date', 'when', 'when_did_you_meet']);
+    const durationStr = findColumnValue(row, ['duration_minutes', 'duration', 'how_long', 'length']);
+    const ratingStr = findColumnValue(row, ['rating', 'score', 'how_was_it', 'how_did_it_go']);
+
+    if (!name) {
+      errors.push(`Row ${rowNum}: Missing respondent name`);
+      continue;
+    }
+
+    if (!dateStr) {
+      errors.push(`Row ${rowNum}: Missing date for "${name}"`);
+      continue;
+    }
+
+    const parsedDate = new Date(dateStr);
+    if (isNaN(parsedDate.getTime())) {
+      errors.push(`Row ${rowNum}: Invalid date "${dateStr}" for "${name}"`);
+      continue;
+    }
+
+    // Default duration to 60 if not provided
+    let duration = 60;
+    if (durationStr) {
+      const parsed = parseInt(durationStr, 10);
+      if (!isNaN(parsed)) {
+        // Snap to nearest valid duration
+        duration = VALID_DURATIONS.reduce((prev, curr) =>
+          Math.abs(curr - parsed) < Math.abs(prev - parsed) ? curr : prev
+        );
+        if (duration !== parsed) {
+          warnings.push(`Row ${rowNum}: Duration ${parsed} snapped to ${duration} minutes`);
+        }
+      }
+    } else {
+      warnings.push(`Row ${rowNum}: No duration provided for "${name}", defaulting to 60 minutes`);
+    }
+
+    // Default rating to 3 if not provided
+    let rating = 3;
+    if (ratingStr) {
+      const parsed = parseInt(ratingStr, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) {
+        rating = parsed;
+      } else {
+        warnings.push(`Row ${rowNum}: Invalid rating "${ratingStr}" for "${name}", defaulting to 3`);
+      }
+    } else {
+      warnings.push(`Row ${rowNum}: No rating provided for "${name}", defaulting to 3`);
+    }
+
+    const logRow: SessionLogRow = {
+      respondent_name: name,
+      date: parsedDate.toISOString(),
+      duration_minutes: duration,
+      rating,
+      raw_row_index: i,
+    };
+
+    // Resolve name to pair
+    const result = resolvePairByName(name, cohorts);
+
+    if (result.resolved) {
+      matched.push({ ...logRow, pair: result.resolved });
+    } else {
+      unmatched.push({
+        ...logRow,
+        error: result.error || 'No match found',
+        candidates: result.candidates,
+      });
+    }
+  }
+
+  return { matched, unmatched, errors, warnings };
 }
