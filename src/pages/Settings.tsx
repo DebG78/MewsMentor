@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -9,11 +8,8 @@ import {
   FileEdit,
   Users,
   Bell,
-  Shield,
   Globe,
-  Palette,
   Database,
-  HelpCircle,
   BarChart3,
 } from "lucide-react";
 import { SurveyTemplateManager } from "@/components/SurveyTemplateManager";
@@ -37,8 +33,7 @@ const Settings = () => {
       id: "survey-templates",
       title: "Survey Templates",
       icon: FileEdit,
-      description: "Create and manage survey templates",
-      badge: "Featured"
+      description: "Create and manage survey templates"
     },
     {
       id: "users",
@@ -55,13 +50,6 @@ const Settings = () => {
       badge: "Coming Soon"
     },
     {
-      id: "security",
-      title: "Security",
-      icon: Shield,
-      description: "Authentication and security settings",
-      badge: "Coming Soon"
-    },
-    {
       id: "integrations",
       title: "Integrations",
       icon: Globe,
@@ -69,24 +57,10 @@ const Settings = () => {
       badge: "Coming Soon"
     },
     {
-      id: "appearance",
-      title: "Appearance",
-      icon: Palette,
-      description: "Customize the look and feel",
-      badge: "Coming Soon"
-    },
-    {
-      id: "data",
-      title: "Data & Export",
+      id: "data-help",
+      title: "Data & Help",
       icon: Database,
-      description: "Backup and export options",
-      badge: "Coming Soon"
-    },
-    {
-      id: "help",
-      title: "Data & Matching",
-      icon: HelpCircle,
-      description: "Learn how uploads, columns, and matching work"
+      description: "Learn how uploads, columns, matching, and exports work"
     },
     {
       id: "analytics-guide",
@@ -122,7 +96,7 @@ const Settings = () => {
 
           {/* Settings Navigation */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 h-auto p-1">
+            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-auto p-1">
               {settingsCategories.map((category) => (
                 <TabsTrigger
                   key={category.id}
@@ -165,13 +139,13 @@ const Settings = () => {
               </Card>
             </TabsContent>
 
-            {/* Help Guide */}
-            <TabsContent value="help" className="space-y-6">
+            {/* Data & Help */}
+            <TabsContent value="data-help" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <HelpCircle className="w-5 h-5" />
-                    Help Guide
+                    <Database className="w-5 h-5" />
+                    Data & Help
                   </CardTitle>
                   <CardDescription>
                     Learn about spreadsheet columns, data uploads, and how the matching algorithm works.
@@ -203,7 +177,7 @@ const Settings = () => {
             </TabsContent>
 
             {/* Other Settings - Coming Soon */}
-            {settingsCategories.filter(cat => cat.id !== "survey-templates" && cat.id !== "help" && cat.id !== "analytics-guide").map((category) => (
+            {settingsCategories.filter(cat => cat.id !== "survey-templates" && cat.id !== "data-help" && cat.id !== "analytics-guide").map((category) => (
               <TabsContent key={category.id} value={category.id} className="space-y-6">
                 {renderComingSoon(category)}
               </TabsContent>
