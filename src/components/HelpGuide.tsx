@@ -20,7 +20,7 @@ import { Upload, FileSpreadsheet, Target, Brain, Zap, Users } from "lucide-react
 export function HelpGuide() {
   return (
     <div className="space-y-6">
-      <Accordion type="multiple" defaultValue={["uploading"]} className="space-y-4">
+      <Accordion type="multiple" defaultValue={[]} className="space-y-4">
         {/* Uploading Data */}
         <AccordionItem value="uploading" className="border rounded-lg px-4">
           <AccordionTrigger className="text-lg font-semibold">
