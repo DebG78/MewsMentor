@@ -200,8 +200,10 @@ export default function MentoringSessions() {
       ]);
       setSessions(sessionsData);
       setStats(statsData);
-    } catch {
-      toast({ title: 'Error', description: 'Failed to load sessions', variant: 'destructive' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (typeof err === 'object' && err !== null && 'message' in err) ? String((err as Record<string, unknown>).message) : JSON.stringify(err);
+      console.error('Failed to load sessions:', JSON.stringify(err, null, 2));
+      toast({ title: 'Error', description: `Failed to load sessions: ${msg}`, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
