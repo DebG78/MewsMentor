@@ -22,7 +22,7 @@ function dbCohortToCohort(dbCohort: CohortRow, mentees: MenteeData[], mentors: M
     mentors,
     matches: dbCohort.matches as MatchingOutput | undefined,
     matching_history: dbCohort.matching_history as MatchingHistoryEntry[] | undefined,
-    manual_matches: (dbCohort as any).manual_matches as ManualMatchingOutput | undefined,
+    manual_matches: dbCohort.manual_matches as unknown as ManualMatchingOutput | undefined,
     program_manager: dbCohort.program_manager || undefined,
     target_skills: dbCohort.target_skills || undefined,
     success_rate_target: dbCohort.success_rate_target || 85,

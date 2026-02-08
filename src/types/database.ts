@@ -23,6 +23,7 @@ export interface Database {
           success_rate_target: number | null
           matches: Json | null
           matching_history: Json | null
+          manual_matches: Json | null
           mentor_survey_id: string | null
           mentee_survey_id: string | null
           created_at: string
@@ -41,6 +42,7 @@ export interface Database {
           success_rate_target?: number | null
           matches?: Json | null
           matching_history?: Json | null
+          manual_matches?: Json | null
           mentor_survey_id?: string | null
           mentee_survey_id?: string | null
           created_at?: string
@@ -59,6 +61,7 @@ export interface Database {
           success_rate_target?: number | null
           matches?: Json | null
           matching_history?: Json | null
+          manual_matches?: Json | null
           mentor_survey_id?: string | null
           mentee_survey_id?: string | null
           created_at?: string

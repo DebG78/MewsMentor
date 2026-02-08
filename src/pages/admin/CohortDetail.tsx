@@ -1402,10 +1402,10 @@ export default function CohortDetail() {
             existingManualMatches={cohort.manual_matches}
             onSave={async (manualMatches) => {
               const updated = await saveManualMatches(cohort.id, manualMatches);
-              if (updated) {
-                setCohort(updated);
-                toast({ title: manualMatches.finalized ? 'Manual matches finalized' : 'Draft saved' });
+              if (!updated) {
+                throw new Error('Failed to save manual matches');
               }
+              setCohort(updated);
             }}
             onCancel={() => setActiveTab("mentees")}
           />
