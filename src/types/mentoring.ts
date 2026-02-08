@@ -41,6 +41,10 @@ export interface MenteeData {
   desired_qualities?: string;
   expectations?: string;
 
+  // Organisation fields
+  department?: string;
+  job_grade?: string;
+
   // Additional computed fields
   goals_text?: string; // Combined motivation + main_reason + expectations
   languages?: string[];
@@ -81,6 +85,10 @@ export interface MentorData {
   meeting_frequency: string;
   motivation: string;
   expectations: string;
+
+  // Organisation fields
+  department?: string;
+  job_grade?: string;
 
   // Additional computed fields
   bio_text?: string; // Combined motivation + expectations + experience
@@ -164,6 +172,24 @@ export interface MatchingHistoryEntry {
   average_score: number;
 }
 
+// Manual matching types
+export interface ManualMatch {
+  mentee_id: string;
+  mentee_name?: string;
+  mentor_id: string;
+  mentor_name?: string;
+  confidence: number;    // 1-5 admin gut-feel score
+  notes?: string;
+  created_at: string;
+}
+
+export interface ManualMatchingOutput {
+  matches: ManualMatch[];
+  created_at: string;
+  updated_at: string;
+  finalized: boolean;    // admin considers matching "done"
+}
+
 // Cohort management types
 export interface Cohort {
   id: string;
@@ -177,6 +203,7 @@ export interface Cohort {
   mentors: MentorData[];
   matches?: MatchingOutput;
   matching_history?: MatchingHistoryEntry[];
+  manual_matches?: ManualMatchingOutput;
   program_manager?: string;
   target_skills?: string[];
   success_rate_target?: number;

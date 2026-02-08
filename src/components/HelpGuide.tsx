@@ -151,6 +151,16 @@ export function HelpGuide() {
                       <TableCell className="text-xs font-mono">"Do you want to share your pronouns?"</TableCell>
                       <TableCell>Optional pronouns</TableCell>
                     </TableRow>
+                    <TableRow>
+                      <TableCell>Department</TableCell>
+                      <TableCell className="text-xs font-mono">"department", "team", "business unit"</TableCell>
+                      <TableCell>Department or team name</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Job Grade</TableCell>
+                      <TableCell className="text-xs font-mono">"job grade", "job_grade", "grade", "level", "band"</TableCell>
+                      <TableCell>Job grade or level</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>
@@ -295,6 +305,16 @@ export function HelpGuide() {
                       <TableCell>Capacity</TableCell>
                       <TableCell className="text-xs font-mono">"capacity", "how many mentees", "max mentees"</TableCell>
                       <TableCell>How many mentees this mentor can take. Defaults to 1.</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Department</TableCell>
+                      <TableCell className="text-xs font-mono">"department", "team", "business unit"</TableCell>
+                      <TableCell>Department or team name</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Job Grade</TableCell>
+                      <TableCell className="text-xs font-mono">"job grade", "job_grade", "grade", "level", "band"</TableCell>
+                      <TableCell>Job grade or level</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>

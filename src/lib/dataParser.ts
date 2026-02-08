@@ -330,6 +330,20 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     }
   }
 
+  // Find department column with flexible matching
+  const deptKey = Object.keys(row).find(key => {
+    const lk = key.toLowerCase();
+    return lk.includes('department') || lk.includes('team') || lk.includes('business unit');
+  });
+  const departmentValue = deptKey ? row[deptKey] : '';
+
+  // Find job grade column with flexible matching
+  const gradeKey = Object.keys(row).find(key => {
+    const lk = key.toLowerCase();
+    return lk.includes('job grade') || lk.includes('job_grade') || lk.includes('grade') || lk.includes('band');
+  });
+  const jobGradeValue = gradeKey ? row[gradeKey] : '';
+
   const result = {
     id,
     name,
@@ -337,6 +351,8 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     role: roleValue,
     experience_years: experienceValue,
     location_timezone: locationValue,
+    department: departmentValue,
+    job_grade: jobGradeValue,
 
     // Store life experiences as collected array
     life_experiences: lifeExperiences,
@@ -593,6 +609,20 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
     }
   }
 
+  // Find department column with flexible matching
+  const mentorDeptKey = Object.keys(row).find(key => {
+    const lk = key.toLowerCase();
+    return lk.includes('department') || lk.includes('team') || lk.includes('business unit');
+  });
+  const mentorDepartment = mentorDeptKey ? row[mentorDeptKey] : '';
+
+  // Find job grade column with flexible matching
+  const mentorGradeKey = Object.keys(row).find(key => {
+    const lk = key.toLowerCase();
+    return lk.includes('job grade') || lk.includes('job_grade') || lk.includes('grade') || lk.includes('band');
+  });
+  const mentorJobGrade = mentorGradeKey ? row[mentorGradeKey] : '';
+
   return {
     id,
     name,
@@ -600,6 +630,8 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
     role: mentorRole,
     experience_years: mentorExperience,
     location_timezone: mentorLocation,
+    department: mentorDepartment,
+    job_grade: mentorJobGrade,
 
     // Life experiences
     returning_from_leave: !!row["Returning from maternity/paternity/parental leave"],
