@@ -293,6 +293,7 @@ export function ManualMatchingBoard({
     };
 
     setPairs(prev => [...prev, newPair]);
+    setIsFinalized(false);
     setSelectedMenteeId(null);
     setPendingMentorId(null);
     setConfidence(3);
@@ -302,6 +303,7 @@ export function ManualMatchingBoard({
   // Remove a pair
   const removePair = (index: number) => {
     setPairs(prev => prev.filter((_, i) => i !== index));
+    setIsFinalized(false);
   };
 
   // Start editing a pair
@@ -1002,14 +1004,15 @@ export function ManualMatchingBoard({
             <Save className="w-4 h-4 mr-2" />
             Save Draft
           </Button>
-          <Button
-            onClick={() => handleSave(true)}
-            disabled={pairs.length === 0 || isSaving}
-            variant={isFinalized ? 'outline' : 'default'}
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            {isFinalized ? 'Re-finalize' : 'Finalize'} ({pairs.length} pair{pairs.length !== 1 ? 's' : ''})
-          </Button>
+          {!isFinalized && (
+            <Button
+              onClick={() => handleSave(true)}
+              disabled={pairs.length === 0 || isSaving}
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Finalize ({pairs.length} pair{pairs.length !== 1 ? 's' : ''})
+            </Button>
+          )}
         </div>
       </div>
 
