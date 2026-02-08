@@ -60,6 +60,7 @@ import {
   getCheckInSummary,
 } from '@/lib/checkInService';
 import { getAllCohorts } from '@/lib/supabaseService';
+import type { Cohort } from '@/types/mentoring';
 import { cn } from '@/lib/utils';
 
 const riskDonutConfig = {
@@ -76,12 +77,17 @@ const riskTrendConfig = {
 
 export default function CheckInsTracker() {
   const { toast } = useToast();
-  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
+  const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [selectedCohort, setSelectedCohort] = useState<string>('');
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [summary, setSummary] = useState<CheckInSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filterRisk, setFilterRisk] = useState<RiskFlag | 'all'>('all');
+
+  // Demographic filters
+  const [deptFilter, setDeptFilter] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingCheckIn, setEditingCheckIn] = useState<CheckIn | null>(null);
 
@@ -94,23 +100,79 @@ export default function CheckInsTracker() {
   const [formRiskReason, setFormRiskReason] = useState('');
   const [formNextAction, setFormNextAction] = useState('');
 
-  // Chart data computed from check-ins
+  // Person lookup for demographic filtering
+  const personLookup = useMemo(() => {
+    const cohort = cohorts.find(c => c.id === selectedCohort);
+    if (!cohort) return new Map<string, { department?: string; job_grade?: string; location?: string }>();
+    const map = new Map<string, { department?: string; job_grade?: string; location?: string }>();
+    [...cohort.mentees, ...cohort.mentors].forEach(p => {
+      map.set(p.id, { department: p.department, job_grade: p.job_grade, location: p.location_timezone });
+    });
+    return map;
+  }, [cohorts, selectedCohort]);
+
+  // Filter options from current cohort
+  const demoFilterOptions = useMemo(() => {
+    const cohort = cohorts.find(c => c.id === selectedCohort);
+    if (!cohort) return { departments: [], grades: [], locations: [] };
+    const depts = new Set<string>();
+    const grades = new Set<string>();
+    const locs = new Set<string>();
+    [...cohort.mentees, ...cohort.mentors].forEach(p => {
+      if (p.department) depts.add(p.department);
+      if (p.job_grade) grades.add(p.job_grade);
+      if (p.location_timezone) locs.add(p.location_timezone);
+    });
+    return {
+      departments: [...depts].sort(),
+      grades: [...grades].sort(),
+      locations: [...locs].sort(),
+    };
+  }, [cohorts, selectedCohort]);
+
+  // Apply all filters (risk + demographics) to check-ins
+  const filteredCheckIns = useMemo(() => {
+    let list = checkIns;
+    if (filterRisk !== 'all') list = list.filter(c => c.risk_flag === filterRisk);
+    if (deptFilter) list = list.filter(c => {
+      const mentor = personLookup.get(c.mentor_id);
+      const mentee = personLookup.get(c.mentee_id);
+      return mentor?.department === deptFilter || mentee?.department === deptFilter;
+    });
+    if (gradeFilter) list = list.filter(c => {
+      const mentor = personLookup.get(c.mentor_id);
+      const mentee = personLookup.get(c.mentee_id);
+      return mentor?.job_grade === gradeFilter || mentee?.job_grade === gradeFilter;
+    });
+    if (locationFilter) list = list.filter(c => {
+      const mentor = personLookup.get(c.mentor_id);
+      const mentee = personLookup.get(c.mentee_id);
+      return mentor?.location === locationFilter || mentee?.location === locationFilter;
+    });
+    return list;
+  }, [checkIns, filterRisk, deptFilter, gradeFilter, locationFilter, personLookup]);
+
+  // Chart data computed from filtered check-ins
   const riskDonutData = useMemo(() => {
-    if (!summary) return [];
+    let green = 0, amber = 0, red = 0;
+    filteredCheckIns.forEach(c => {
+      if (c.risk_flag === 'green') green++;
+      else if (c.risk_flag === 'amber') amber++;
+      else if (c.risk_flag === 'red') red++;
+    });
     return [
-      { name: 'Green', value: summary.green, fill: 'var(--color-green)' },
-      { name: 'Amber', value: summary.amber, fill: 'var(--color-amber)' },
-      { name: 'Red', value: summary.red, fill: 'var(--color-red)' },
+      { name: 'Green', value: green, fill: 'var(--color-green)' },
+      { name: 'Amber', value: amber, fill: 'var(--color-amber)' },
+      { name: 'Red', value: red, fill: 'var(--color-red)' },
     ].filter(d => d.value > 0);
-  }, [summary]);
+  }, [filteredCheckIns]);
 
   const riskTrendData = useMemo(() => {
-    if (checkIns.length === 0) return [];
+    if (filteredCheckIns.length === 0) return [];
 
-    // Group check-ins by date and count risk flags
     const dateMap = new Map<string, { date: string; green: number; amber: number; red: number }>();
 
-    const sorted = [...checkIns].sort(
+    const sorted = [...filteredCheckIns].sort(
       (a, b) => new Date(a.check_in_date).getTime() - new Date(b.check_in_date).getTime()
     );
 
@@ -126,7 +188,7 @@ export default function CheckInsTracker() {
     }
 
     return Array.from(dateMap.values());
-  }, [checkIns]);
+  }, [filteredCheckIns]);
 
   useEffect(() => {
     loadCohorts();
@@ -141,7 +203,7 @@ export default function CheckInsTracker() {
   const loadCohorts = async () => {
     try {
       const data = await getAllCohorts();
-      setCohorts(data.map(c => ({ id: c.id, name: c.name })));
+      setCohorts(data);
       if (data.length > 0) {
         setSelectedCohort(data[0].id);
       }
@@ -284,10 +346,6 @@ export default function CheckInsTracker() {
         return null;
     }
   };
-
-  const filteredCheckIns = filterRisk === 'all'
-    ? checkIns
-    : checkIns.filter(c => c.risk_flag === filterRisk);
 
   if (isLoading && cohorts.length === 0) {
     return (
@@ -469,21 +527,60 @@ export default function CheckInsTracker() {
         </div>
       )}
 
-      {/* Filter */}
-      <div className="flex items-center gap-2">
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Filter className="w-4 h-4 text-muted-foreground" />
-        <Label className="text-sm">Filter by risk:</Label>
+        <Label className="text-sm">Filter:</Label>
         <Select value={filterRisk} onValueChange={(v) => setFilterRisk(v as RiskFlag | 'all')}>
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="all">All Risks</SelectItem>
             <SelectItem value="green">Green</SelectItem>
             <SelectItem value="amber">Amber</SelectItem>
             <SelectItem value="red">Red</SelectItem>
           </SelectContent>
         </Select>
+        {demoFilterOptions.departments.length > 1 && (
+          <Select value={deptFilter} onValueChange={v => setDeptFilter(v === '_all' ? '' : v)}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="All Departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Departments</SelectItem>
+              {demoFilterOptions.departments.map(d => (
+                <SelectItem key={d} value={d}>{d}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {demoFilterOptions.grades.length > 1 && (
+          <Select value={gradeFilter} onValueChange={v => setGradeFilter(v === '_all' ? '' : v)}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Job Grades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Job Grades</SelectItem>
+              {demoFilterOptions.grades.map(g => (
+                <SelectItem key={g} value={g}>{g}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {demoFilterOptions.locations.length > 1 && (
+          <Select value={locationFilter} onValueChange={v => setLocationFilter(v === '_all' ? '' : v)}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="All Locations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Locations</SelectItem>
+              {demoFilterOptions.locations.map(l => (
+                <SelectItem key={l} value={l}>{l}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Check-ins Table */}

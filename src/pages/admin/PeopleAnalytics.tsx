@@ -20,11 +20,15 @@ import {
 } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 import {
   Loader2,
   Users,
   BookOpen,
   Target,
+  Filter,
+  X,
+  Building,
 } from 'lucide-react';
 import {
   BarChart,
@@ -78,11 +82,21 @@ const utilizationChartConfig = {
   remaining: { label: 'Remaining', color: 'hsl(0, 0%, 80%)' },
 } satisfies ChartConfig;
 
+const orgChartConfig = {
+  mentees: { label: 'Mentees', color: 'hsl(221, 83%, 53%)' },
+  mentors: { label: 'Mentors', color: 'hsl(142, 71%, 45%)' },
+} satisfies ChartConfig;
+
 export default function PeopleAnalytics() {
   const { toast } = useToast();
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCohortForMatch, setSelectedCohortForMatch] = useState<string>('');
+
+  // Demographic filters
+  const [deptFilter, setDeptFilter] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
 
   useEffect(() => {
     loadData();
@@ -101,12 +115,101 @@ export default function PeopleAnalytics() {
     }
   };
 
-  const populationStats = useMemo(() => getPopulationStats(cohorts), [cohorts]);
-  const topicData = useMemo(() => getTopicDemandSupply(cohorts), [cohorts]);
-  const experienceData = useMemo(() => getExperienceDistribution(cohorts), [cohorts]);
-  const lifeExpData = useMemo(() => getLifeExperienceDistribution(cohorts), [cohorts]);
-  const utilizationData = useMemo(() => getMentorUtilization(cohorts), [cohorts]);
-  const cohortQualities = useMemo(() => getCohortMatchQualities(cohorts), [cohorts]);
+  // Unique filter options from all cohorts
+  const filterOptions = useMemo(() => {
+    const depts = new Set<string>();
+    const grades = new Set<string>();
+    const locs = new Set<string>();
+    cohorts.forEach(c => {
+      [...c.mentees, ...c.mentors].forEach(p => {
+        if (p.department) depts.add(p.department);
+        if (p.job_grade) grades.add(p.job_grade);
+        if (p.location_timezone) locs.add(p.location_timezone);
+      });
+    });
+    return {
+      departments: [...depts].sort(),
+      grades: [...grades].sort(),
+      locations: [...locs].sort(),
+    };
+  }, [cohorts]);
+
+  const activeFilterCount = [deptFilter, gradeFilter, locationFilter].filter(Boolean).length;
+
+  // Apply demographic filters to create filtered cohort views
+  const filteredCohorts = useMemo(() => {
+    if (!deptFilter && !gradeFilter && !locationFilter) return cohorts;
+    return cohorts.map(c => ({
+      ...c,
+      mentees: c.mentees.filter(m =>
+        (!deptFilter || m.department === deptFilter) &&
+        (!gradeFilter || m.job_grade === gradeFilter) &&
+        (!locationFilter || m.location_timezone === locationFilter)
+      ),
+      mentors: c.mentors.filter(m =>
+        (!deptFilter || m.department === deptFilter) &&
+        (!gradeFilter || m.job_grade === gradeFilter) &&
+        (!locationFilter || m.location_timezone === locationFilter)
+      ),
+    }));
+  }, [cohorts, deptFilter, gradeFilter, locationFilter]);
+
+  // Organisation distribution data (always uses unfiltered cohorts)
+  const orgData = useMemo(() => {
+    const deptMap = new Map<string, { department: string; mentees: number; mentors: number }>();
+    const gradeMap = new Map<string, { grade: string; mentees: number; mentors: number }>();
+    const locMap = new Map<string, { location: string; mentees: number; mentors: number }>();
+
+    cohorts.forEach(c => {
+      c.mentees.forEach(m => {
+        if (m.department) {
+          const e = deptMap.get(m.department) || { department: m.department, mentees: 0, mentors: 0 };
+          e.mentees++;
+          deptMap.set(m.department, e);
+        }
+        if (m.job_grade) {
+          const e = gradeMap.get(m.job_grade) || { grade: m.job_grade, mentees: 0, mentors: 0 };
+          e.mentees++;
+          gradeMap.set(m.job_grade, e);
+        }
+        if (m.location_timezone) {
+          const e = locMap.get(m.location_timezone) || { location: m.location_timezone, mentees: 0, mentors: 0 };
+          e.mentees++;
+          locMap.set(m.location_timezone, e);
+        }
+      });
+      c.mentors.forEach(m => {
+        if (m.department) {
+          const e = deptMap.get(m.department) || { department: m.department, mentees: 0, mentors: 0 };
+          e.mentors++;
+          deptMap.set(m.department, e);
+        }
+        if (m.job_grade) {
+          const e = gradeMap.get(m.job_grade) || { grade: m.job_grade, mentees: 0, mentors: 0 };
+          e.mentors++;
+          gradeMap.set(m.job_grade, e);
+        }
+        if (m.location_timezone) {
+          const e = locMap.get(m.location_timezone) || { location: m.location_timezone, mentees: 0, mentors: 0 };
+          e.mentors++;
+          locMap.set(m.location_timezone, e);
+        }
+      });
+    });
+
+    return {
+      departments: [...deptMap.values()].sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors)),
+      grades: [...gradeMap.values()].sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors)),
+      locations: [...locMap.values()].sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors)),
+    };
+  }, [cohorts]);
+
+  const populationStats = useMemo(() => getPopulationStats(filteredCohorts), [filteredCohorts]);
+  const topicData = useMemo(() => getTopicDemandSupply(filteredCohorts), [filteredCohorts]);
+  const experienceData = useMemo(() => getExperienceDistribution(filteredCohorts), [filteredCohorts]);
+  const lifeExpData = useMemo(() => getLifeExperienceDistribution(filteredCohorts), [filteredCohorts]);
+  const utilizationData = useMemo(() => getMentorUtilization(filteredCohorts), [filteredCohorts]);
+  const cohortQualities = useMemo(() => getCohortMatchQualities(filteredCohorts), [filteredCohorts]);
 
   const selectedCohort = cohorts.find(c => c.id === selectedCohortForMatch);
   const matchScoreDist = useMemo(
@@ -184,10 +287,72 @@ export default function PeopleAnalytics() {
         </Card>
       </div>
 
+      {/* Demographic Filters */}
+      {(filterOptions.departments.length > 1 || filterOptions.grades.length > 1 || filterOptions.locations.length > 1) && (
+        <Card className="p-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Filter className="w-4 h-4" />
+              Filter by:
+            </div>
+            {filterOptions.departments.length > 1 && (
+              <Select value={deptFilter} onValueChange={v => setDeptFilter(v === '_all' ? '' : v)}>
+                <SelectTrigger className="w-44 h-9 text-sm">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All Departments</SelectItem>
+                  {filterOptions.departments.map(d => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {filterOptions.grades.length > 1 && (
+              <Select value={gradeFilter} onValueChange={v => setGradeFilter(v === '_all' ? '' : v)}>
+                <SelectTrigger className="w-40 h-9 text-sm">
+                  <SelectValue placeholder="All Job Grades" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All Job Grades</SelectItem>
+                  {filterOptions.grades.map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {filterOptions.locations.length > 1 && (
+              <Select value={locationFilter} onValueChange={v => setLocationFilter(v === '_all' ? '' : v)}>
+                <SelectTrigger className="w-44 h-9 text-sm">
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All Locations</SelectItem>
+                  {filterOptions.locations.map(l => (
+                    <SelectItem key={l} value={l}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-sm"
+                onClick={() => { setDeptFilter(''); setGradeFilter(''); setLocationFilter(''); }}
+              >
+                <X className="w-4 h-4 mr-1" /> Clear ({activeFilterCount})
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
       <Tabs defaultValue="topics">
         <TabsList>
           <TabsTrigger value="topics">Topic Demand vs Supply</TabsTrigger>
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
+          <TabsTrigger value="organisation">Organisation</TabsTrigger>
           <TabsTrigger value="match-quality">Match Quality</TabsTrigger>
           <TabsTrigger value="utilization">Mentor Utilization</TabsTrigger>
         </TabsList>
@@ -316,6 +481,93 @@ export default function PeopleAnalytics() {
                 ) : (
                   <div className="flex items-center justify-center h-[250px] text-muted-foreground">
                     No life experience data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Organisation */}
+        <TabsContent value="organisation" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building className="w-4 h-4" />
+                Department Distribution
+              </CardTitle>
+              <CardDescription>Mentee and mentor counts by department</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {orgData.departments.length > 0 ? (
+                <ChartContainer config={orgChartConfig} className="w-full" style={{ height: Math.max(200, orgData.departments.length * 35) }}>
+                  <BarChart data={orgData.departments} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" allowDecimals={false} fontSize={12} />
+                    <YAxis type="category" dataKey="department" width={140} fontSize={11} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="mentees" fill="var(--color-mentees)" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="mentors" fill="var(--color-mentors)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[200px] text-muted-foreground">
+                  <div className="text-center">
+                    <Building className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No department data available</p>
+                    <p className="text-sm mt-1">Add a "Department" column to your CSV imports</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Job Grade Distribution</CardTitle>
+                <CardDescription>Mentee and mentor counts by job grade</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {orgData.grades.length > 0 ? (
+                  <ChartContainer config={orgChartConfig} className="h-[300px] w-full">
+                    <BarChart data={orgData.grades} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" allowDecimals={false} fontSize={12} />
+                      <YAxis type="category" dataKey="grade" width={100} fontSize={11} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="mentees" fill="var(--color-mentees)" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="mentors" fill="var(--color-mentors)" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                    No job grade data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Location Distribution</CardTitle>
+                <CardDescription>Mentee and mentor counts by location</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {orgData.locations.length > 0 ? (
+                  <ChartContainer config={orgChartConfig} className="h-[300px] w-full">
+                    <BarChart data={orgData.locations} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" allowDecimals={false} fontSize={12} />
+                      <YAxis type="category" dataKey="location" width={140} fontSize={11} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="mentees" fill="var(--color-mentees)" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="mentors" fill="var(--color-mentors)" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                    No location data available
                   </div>
                 )}
               </CardContent>

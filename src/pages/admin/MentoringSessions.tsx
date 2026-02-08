@@ -64,6 +64,7 @@ import {
   type SessionStatus,
 } from '@/lib/sessionService';
 import { getAllCohorts } from '@/lib/supabaseService';
+import type { Cohort } from '@/types/mentoring';
 import { SessionLogImport } from '@/components/admin/SessionLogImport';
 
 const volumeChartConfig = {
@@ -84,12 +85,17 @@ const pairChartConfig = {
 
 export default function MentoringSessions() {
   const { toast } = useToast();
-  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
+  const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [selectedCohort, setSelectedCohort] = useState<string>('');
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<SessionStatus | 'all'>('all');
+
+  // Demographic filters
+  const [deptFilter, setDeptFilter] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
 
   // Create dialog
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -100,10 +106,62 @@ export default function MentoringSessions() {
   const [formDuration, setFormDuration] = useState('60');
   const [formNotes, setFormNotes] = useState('');
 
-  // Computed chart data
-  const volumeData = useMemo(() => computeSessionVolume(sessions), [sessions]);
-  const pairSummaries = useMemo(() => computePairSessionSummaries(sessions), [sessions]);
-  const ratingDist = useMemo(() => computeRatingDistribution(sessions), [sessions]);
+  // Person lookup for demographic filtering
+  const personLookup = useMemo(() => {
+    const cohort = cohorts.find(c => c.id === selectedCohort);
+    if (!cohort) return new Map<string, { department?: string; job_grade?: string; location?: string }>();
+    const map = new Map<string, { department?: string; job_grade?: string; location?: string }>();
+    [...cohort.mentees, ...cohort.mentors].forEach(p => {
+      map.set(p.id, { department: p.department, job_grade: p.job_grade, location: p.location_timezone });
+    });
+    return map;
+  }, [cohorts, selectedCohort]);
+
+  // Filter options from current cohort
+  const demoFilterOptions = useMemo(() => {
+    const cohort = cohorts.find(c => c.id === selectedCohort);
+    if (!cohort) return { departments: [], grades: [], locations: [] };
+    const depts = new Set<string>();
+    const grades = new Set<string>();
+    const locs = new Set<string>();
+    [...cohort.mentees, ...cohort.mentors].forEach(p => {
+      if (p.department) depts.add(p.department);
+      if (p.job_grade) grades.add(p.job_grade);
+      if (p.location_timezone) locs.add(p.location_timezone);
+    });
+    return {
+      departments: [...depts].sort(),
+      grades: [...grades].sort(),
+      locations: [...locs].sort(),
+    };
+  }, [cohorts, selectedCohort]);
+
+  // Apply all filters (status + demographics) to sessions
+  const filteredSessions = useMemo(() => {
+    let list = sessions;
+    if (filterStatus !== 'all') list = list.filter(s => s.status === filterStatus);
+    if (deptFilter) list = list.filter(s => {
+      const mentor = personLookup.get(s.mentor_id);
+      const mentee = personLookup.get(s.mentee_id);
+      return mentor?.department === deptFilter || mentee?.department === deptFilter;
+    });
+    if (gradeFilter) list = list.filter(s => {
+      const mentor = personLookup.get(s.mentor_id);
+      const mentee = personLookup.get(s.mentee_id);
+      return mentor?.job_grade === gradeFilter || mentee?.job_grade === gradeFilter;
+    });
+    if (locationFilter) list = list.filter(s => {
+      const mentor = personLookup.get(s.mentor_id);
+      const mentee = personLookup.get(s.mentee_id);
+      return mentor?.location === locationFilter || mentee?.location === locationFilter;
+    });
+    return list;
+  }, [sessions, filterStatus, deptFilter, gradeFilter, locationFilter, personLookup]);
+
+  // Computed chart data (from filtered sessions)
+  const volumeData = useMemo(() => computeSessionVolume(filteredSessions), [filteredSessions]);
+  const pairSummaries = useMemo(() => computePairSessionSummaries(filteredSessions), [filteredSessions]);
+  const ratingDist = useMemo(() => computeRatingDistribution(filteredSessions), [filteredSessions]);
 
   const pairChartData = useMemo(() => {
     return pairSummaries.slice(0, 15).map(p => ({
@@ -123,7 +181,7 @@ export default function MentoringSessions() {
   const loadCohorts = async () => {
     try {
       const data = await getAllCohorts();
-      setCohorts(data.map(c => ({ id: c.id, name: c.name })));
+      setCohorts(data);
       if (data.length > 0) setSelectedCohort(data[0].id);
     } catch {
       toast({ title: 'Error', description: 'Failed to load cohorts', variant: 'destructive' });
@@ -214,10 +272,6 @@ export default function MentoringSessions() {
         return <Badge className="bg-red-500">No Show</Badge>;
     }
   };
-
-  const filteredSessions = filterStatus === 'all'
-    ? sessions
-    : sessions.filter(s => s.status === filterStatus);
 
   if (isLoading && cohorts.length === 0) {
     return (
@@ -406,20 +460,59 @@ export default function MentoringSessions() {
 
             {/* All Sessions Tab */}
             <TabsContent value="sessions" className="space-y-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Label className="text-sm">Filter:</Label>
                 <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as SessionStatus | 'all')}>
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="scheduled">Scheduled</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                     <SelectItem value="no_show">No Show</SelectItem>
                   </SelectContent>
                 </Select>
+                {demoFilterOptions.departments.length > 1 && (
+                  <Select value={deptFilter} onValueChange={v => setDeptFilter(v === '_all' ? '' : v)}>
+                    <SelectTrigger className="w-44">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">All Departments</SelectItem>
+                      {demoFilterOptions.departments.map(d => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {demoFilterOptions.grades.length > 1 && (
+                  <Select value={gradeFilter} onValueChange={v => setGradeFilter(v === '_all' ? '' : v)}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="All Job Grades" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">All Job Grades</SelectItem>
+                      {demoFilterOptions.grades.map(g => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {demoFilterOptions.locations.length > 1 && (
+                  <Select value={locationFilter} onValueChange={v => setLocationFilter(v === '_all' ? '' : v)}>
+                    <SelectTrigger className="w-44">
+                      <SelectValue placeholder="All Locations" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">All Locations</SelectItem>
+                      {demoFilterOptions.locations.map(l => (
+                        <SelectItem key={l} value={l}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <Card>
