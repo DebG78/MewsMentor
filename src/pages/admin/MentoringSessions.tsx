@@ -106,13 +106,13 @@ export default function MentoringSessions() {
   const [formDuration, setFormDuration] = useState('60');
   const [formNotes, setFormNotes] = useState('');
 
-  // Person lookup for demographic filtering
+  // Person lookup for demographic filtering and name display
   const personLookup = useMemo(() => {
     const cohort = cohorts.find(c => c.id === selectedCohort);
-    if (!cohort) return new Map<string, { department?: string; job_grade?: string; location?: string }>();
-    const map = new Map<string, { department?: string; job_grade?: string; location?: string }>();
+    if (!cohort) return new Map<string, { name?: string; department?: string; job_grade?: string; location?: string }>();
+    const map = new Map<string, { name?: string; department?: string; job_grade?: string; location?: string }>();
     [...cohort.mentees, ...cohort.mentors].forEach(p => {
-      map.set(p.id, { department: p.department, job_grade: p.job_grade, location: p.location_timezone });
+      map.set(p.id, { name: p.name, department: p.department, job_grade: p.job_grade, location: p.location_timezone });
     });
     return map;
   }, [cohorts, selectedCohort]);
@@ -550,8 +550,8 @@ export default function MentoringSessions() {
                             <TableCell className="font-medium max-w-xs truncate">
                               {session.title}
                             </TableCell>
-                            <TableCell>{session.mentor_id.slice(0, 8)}...</TableCell>
-                            <TableCell>{session.mentee_id.slice(0, 8)}...</TableCell>
+                            <TableCell>{personLookup.get(session.mentor_id)?.name || session.mentor_id.slice(0, 8) + '...'}</TableCell>
+                            <TableCell>{personLookup.get(session.mentee_id)?.name || session.mentee_id.slice(0, 8) + '...'}</TableCell>
                             <TableCell>{session.duration_minutes}min</TableCell>
                             <TableCell>{getStatusBadge(session.status)}</TableCell>
                             <TableCell className="text-center">
@@ -652,8 +652,8 @@ export default function MentoringSessions() {
                       <TableBody>
                         {pairSummaries.map(pair => (
                           <TableRow key={`${pair.mentor_id}:${pair.mentee_id}`}>
-                            <TableCell>{pair.mentor_id.slice(0, 8)}...</TableCell>
-                            <TableCell>{pair.mentee_id.slice(0, 8)}...</TableCell>
+                            <TableCell>{personLookup.get(pair.mentor_id)?.name || pair.mentor_id.slice(0, 8) + '...'}</TableCell>
+                            <TableCell>{personLookup.get(pair.mentee_id)?.name || pair.mentee_id.slice(0, 8) + '...'}</TableCell>
                             <TableCell className="text-center font-bold">{pair.sessionCount}</TableCell>
                             <TableCell className="text-center">{pair.completedCount}</TableCell>
                             <TableCell>
