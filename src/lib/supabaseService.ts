@@ -55,6 +55,7 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     expectations: dbMentee.expectations || undefined,
     department: (dbMentee as any).department || undefined,
     job_grade: (dbMentee as any).job_grade || undefined,
+    email: (dbMentee as any).email || undefined,
     languages: dbMentee.languages,
     industry: dbMentee.industry
   }
@@ -88,6 +89,7 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     capacity_remaining: dbMentor.capacity_remaining,
     department: (dbMentor as any).department || undefined,
     job_grade: (dbMentor as any).job_grade || undefined,
+    email: (dbMentor as any).email || undefined,
     languages: dbMentor.languages,
     industry: dbMentor.industry
   }
@@ -455,7 +457,8 @@ export async function addImportDataToCohort(
         ...(mentorQualities ? { mentor_qualities: mentorQualities } : {}),
         ...(expectations ? { expectations } : {}),
         ...(mentee.department ? { department: sanitizeText(mentee.department) } : {}),
-        ...(mentee.job_grade ? { job_grade: sanitizeText(mentee.job_grade) } : {})
+        ...(mentee.job_grade ? { job_grade: sanitizeText(mentee.job_grade) } : {}),
+        ...(mentee.email ? { email: sanitizeText(mentee.email) } : {})
       }
     })
 
@@ -615,7 +618,8 @@ export async function addImportDataToCohort(
         ...(motivation ? { motivation } : {}),
         ...(expectations ? { expectations } : {}),
         ...(mentor.department ? { department: sanitizeText(mentor.department) } : {}),
-        ...(mentor.job_grade ? { job_grade: sanitizeText(mentor.job_grade) } : {})
+        ...(mentor.job_grade ? { job_grade: sanitizeText(mentor.job_grade) } : {}),
+        ...(mentor.email ? { email: sanitizeText(mentor.email) } : {})
       }
     })
 

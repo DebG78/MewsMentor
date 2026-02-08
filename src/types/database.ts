@@ -96,6 +96,7 @@ export interface Database {
           industry: string
           profile_goals: Json
           private_notes: string | null
+          email: string | null
           created_at: string
           updated_at: string
         }
@@ -126,6 +127,7 @@ export interface Database {
           industry: string
           profile_goals?: Json
           private_notes?: string | null
+          email?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -156,6 +158,7 @@ export interface Database {
           industry?: string
           profile_goals?: Json
           private_notes?: string | null
+          email?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -189,6 +192,7 @@ export interface Database {
           industry: string
           profile_goals: Json
           private_notes: string | null
+          email: string | null
           created_at: string
           updated_at: string
         }
@@ -220,6 +224,7 @@ export interface Database {
           industry: string
           profile_goals?: Json
           private_notes?: string | null
+          email?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -251,6 +256,7 @@ export interface Database {
           industry?: string
           profile_goals?: Json
           private_notes?: string | null
+          email?: string | null
           created_at?: string
           updated_at?: string
         }

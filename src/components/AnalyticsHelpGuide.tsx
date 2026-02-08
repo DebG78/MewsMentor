@@ -72,8 +72,13 @@ export function AnalyticsHelpGuide() {
                   <TableBody>
                     <TableRow>
                       <TableCell className="font-mono text-xs">name / respondent / full_name</TableCell>
-                      <TableCell><Badge className="bg-red-100 text-red-700">Yes</Badge></TableCell>
-                      <TableCell>The person's full name (must match their profile name exactly)</TableCell>
+                      <TableCell><Badge className="bg-red-100 text-red-700">Yes*</Badge></TableCell>
+                      <TableCell>The person's full name (must match their profile name exactly). *Required if no email column.</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">email / respondent_email</TableCell>
+                      <TableCell>No</TableCell>
+                      <TableCell>The person's email (preferred — more reliable than name matching for common names)</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-mono text-xs">date / session_date / meeting_date</TableCell>
@@ -371,14 +376,15 @@ export function AnalyticsHelpGuide() {
                 </p>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Validates the API key and input data</li>
-                  <li>Looks up the respondent's name across all active cohorts</li>
+                  <li>Looks up the respondent by email or name across all active cohorts</li>
                   <li>Finds their mentoring pair from the approved matches</li>
                   <li>Creates a completed session in the sessions table</li>
                 </ol>
                 <p className="text-muted-foreground mt-2">
-                  The name must match exactly as it appears in the participant's profile
-                  (case-insensitive). If a name matches multiple people across cohorts, the
-                  request returns an error for manual resolution.
+                  At least one of <code>respondent_name</code> or <code>respondent_email</code> is required.
+                  Email matching takes priority over name matching and is more reliable for
+                  common names. If a match is found in multiple cohorts, the request returns
+                  an error for manual resolution.
                 </p>
               </CardContent>
             </Card>
@@ -412,7 +418,7 @@ export function AnalyticsHelpGuide() {
                       <li>URL: your Edge Function URL (<code>https://&lt;project&gt;.supabase.co/functions/v1/log-session</code>)</li>
                       <li>Method: POST</li>
                       <li>Headers: <code>x-api-key: your-api-key</code> and <code>Content-Type: application/json</code></li>
-                      <li>Body: map the form fields to <code>respondent_name</code>, <code>date</code>, <code>duration_minutes</code>, <code>rating</code></li>
+                      <li>Body: map the form fields to <code>respondent_name</code>, <code>respondent_email</code>, <code>date</code>, <code>duration_minutes</code>, <code>rating</code></li>
                     </ul>
                   </li>
                   <li><strong>Publish</strong> the workflow and pin the shortcut in your mentoring Slack channel</li>
@@ -472,11 +478,16 @@ export function AnalyticsHelpGuide() {
                 <div className="bg-muted rounded-md p-3 font-mono text-xs">
                   {`{`}<br />
                   &nbsp;&nbsp;{`"respondent_name": "Alice Smith",`}<br />
+                  &nbsp;&nbsp;{`"respondent_email": "alice.smith@mews.com",`}<br />
                   &nbsp;&nbsp;{`"date": "2026-02-08",`}<br />
                   &nbsp;&nbsp;{`"duration_minutes": 30,`}<br />
                   &nbsp;&nbsp;{`"rating": 4`}<br />
                   {`}`}
                 </div>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  At least one of <code>respondent_name</code> or <code>respondent_email</code> is required.
+                  Email matching is preferred as it avoids issues with common names.
+                </p>
                 <p><strong>Response (success):</strong></p>
                 <div className="bg-muted rounded-md p-3 font-mono text-xs">
                   {`{`}<br />
