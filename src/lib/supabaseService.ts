@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { Cohort, MenteeData, MentorData, ImportResult, MatchingOutput, MatchingHistoryEntry } from '@/types/mentoring'
+import { Cohort, MenteeData, MentorData, ImportResult, MatchingOutput, MatchingHistoryEntry, ManualMatchingOutput } from '@/types/mentoring'
 import type { Database } from '@/types/database'
 
 type CohortRow = Database['public']['Tables']['cohorts']['Row']
@@ -22,6 +22,7 @@ function dbCohortToCohort(dbCohort: CohortRow, mentees: MenteeData[], mentors: M
     mentors,
     matches: dbCohort.matches as MatchingOutput | undefined,
     matching_history: dbCohort.matching_history as MatchingHistoryEntry[] | undefined,
+    manual_matches: (dbCohort as any).manual_matches as ManualMatchingOutput | undefined,
     program_manager: dbCohort.program_manager || undefined,
     target_skills: dbCohort.target_skills || undefined,
     success_rate_target: dbCohort.success_rate_target || 85,
@@ -52,6 +53,8 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     meeting_frequency: dbMentee.meeting_frequency,
     desired_qualities: dbMentee.mentor_qualities || undefined,
     expectations: dbMentee.expectations || undefined,
+    department: (dbMentee as any).department || undefined,
+    job_grade: (dbMentee as any).job_grade || undefined,
     languages: dbMentee.languages,
     industry: dbMentee.industry
   }
@@ -83,6 +86,8 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     motivation: dbMentor.motivation || '',
     expectations: dbMentor.expectations || '',
     capacity_remaining: dbMentor.capacity_remaining,
+    department: (dbMentor as any).department || undefined,
+    job_grade: (dbMentor as any).job_grade || undefined,
     languages: dbMentor.languages,
     industry: dbMentor.industry
   }
@@ -196,6 +201,7 @@ export async function updateCohort(id: string, updates: Partial<Cohort>): Promis
     ...(updates.success_rate_target && { success_rate_target: updates.success_rate_target }),
     ...(updates.matches && { matches: updates.matches as any }),
     ...(updates.matching_history && { matching_history: updates.matching_history as any }),
+    ...(updates.manual_matches !== undefined && { manual_matches: updates.manual_matches as any }),
     ...(updates.mentor_survey_id !== undefined && { mentor_survey_id: updates.mentor_survey_id }),
     ...(updates.mentee_survey_id !== undefined && { mentee_survey_id: updates.mentee_survey_id }),
     updated_at: new Date().toISOString()
@@ -447,7 +453,9 @@ export async function addImportDataToCohort(
         ...(mentorExperienceImportance ? { mentor_experience_importance: mentorExperienceImportance } : {}),
         ...(unwantedQualities ? { unwanted_qualities: unwantedQualities } : {}),
         ...(mentorQualities ? { mentor_qualities: mentorQualities } : {}),
-        ...(expectations ? { expectations } : {})
+        ...(expectations ? { expectations } : {}),
+        ...(mentee.department ? { department: sanitizeText(mentee.department) } : {}),
+        ...(mentee.job_grade ? { job_grade: sanitizeText(mentee.job_grade) } : {})
       }
     })
 
@@ -605,7 +613,9 @@ export async function addImportDataToCohort(
         ...(preferredLevels ? { preferred_mentee_level: preferredLevels } : {}),
         ...(topicsNotToMentor ? { topics_not_to_mentor: topicsNotToMentor } : {}),
         ...(motivation ? { motivation } : {}),
-        ...(expectations ? { expectations } : {})
+        ...(expectations ? { expectations } : {}),
+        ...(mentor.department ? { department: sanitizeText(mentor.department) } : {}),
+        ...(mentor.job_grade ? { job_grade: sanitizeText(mentor.job_grade) } : {})
       }
     })
 
@@ -753,6 +763,14 @@ export async function saveMatchesToCohort(cohortId: string, matches: MatchingOut
     console.error('Error in saveMatchesToCohort:', error);
     return null;
   }
+}
+
+// Save manual matches to cohort
+export async function saveManualMatches(
+  cohortId: string,
+  manualMatches: ManualMatchingOutput
+): Promise<Cohort | null> {
+  return updateCohort(cohortId, { manual_matches: manualMatches });
 }
 
 // Delete/unassign a mentor-mentee pair

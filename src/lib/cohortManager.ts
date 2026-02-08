@@ -7,6 +7,7 @@ export {
   deleteCohort,
   addImportDataToCohort,
   saveMatchesToCohort,
+  saveManualMatches,
   addMatchingToHistory,
   signupMentee,
   signupMentor,

@@ -62,6 +62,7 @@ import {
   getCohortStatusInfo,
   addImportDataToCohort,
   saveMatchesToCohort,
+  saveManualMatches,
 } from "@/lib/cohortManager";
 import { updateMenteeProfile, updateMentorProfile } from "@/lib/supabaseService";
 import { Cohort, ImportResult, MatchingResult } from "@/types/mentoring";
@@ -74,6 +75,8 @@ import { ProfileModal } from "@/components/ProfileModal";
 import { ProfileEditForm } from "@/components/ProfileEditForm";
 import { MenteeData, MentorData } from "@/types/mentoring";
 import { ScoreBreakdownVisual, ScoreBadge } from "@/components/ScoreBreakdownVisual";
+import { ManualMatchingBoard } from "@/components/admin/ManualMatchingBoard";
+import { MatchComparison } from "@/components/admin/MatchComparison";
 
 export default function CohortDetail() {
   const { cohortId, tab } = useParams<{ cohortId: string; tab?: string }>();
@@ -792,6 +795,17 @@ export default function CohortDetail() {
                 Matches ({cohort.matches.results.length})
               </TabsTrigger>
             )}
+            {cohort.mentees.length > 0 && cohort.mentors.length > 0 && (
+              <TabsTrigger value="manual-matching">
+                Manual Matching
+                {cohort.manual_matches?.matches?.length ? ` (${cohort.manual_matches.matches.length})` : ''}
+              </TabsTrigger>
+            )}
+            {cohort.manual_matches?.matches?.length && cohort.matches?.results?.length ? (
+              <TabsTrigger value="compare">
+                Compare
+              </TabsTrigger>
+            ) : null}
           </TabsList>
         )}
 
@@ -1380,6 +1394,33 @@ export default function CohortDetail() {
             )}
           </TabsContent>
         )}
+
+        {/* Manual Matching Tab */}
+        <TabsContent value="manual-matching">
+          <ManualMatchingBoard
+            cohort={cohort}
+            existingManualMatches={cohort.manual_matches}
+            onSave={async (manualMatches) => {
+              const updated = await saveManualMatches(cohort.id, manualMatches);
+              if (updated) {
+                setCohort(updated);
+                toast({ title: manualMatches.finalized ? 'Manual matches finalized' : 'Draft saved' });
+              }
+            }}
+            onCancel={() => setActiveTab("mentees")}
+          />
+        </TabsContent>
+
+        {/* Compare Tab */}
+        {cohort.manual_matches?.matches?.length && cohort.matches?.results?.length ? (
+          <TabsContent value="compare">
+            <MatchComparison
+              cohort={cohort}
+              manualMatches={cohort.manual_matches}
+              aiMatches={cohort.matches}
+            />
+          </TabsContent>
+        ) : null}
       </Tabs>
       )}
 
