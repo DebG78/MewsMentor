@@ -15,7 +15,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  BarChart3,
   Target,
   ClipboardCheck,
   Crown,
@@ -27,7 +26,6 @@ import {
   ListChecks,
   LayoutDashboard,
   Webhook,
-  MessageSquare,
 } from "lucide-react";
 
 export function AnalyticsHelpGuide() {
@@ -45,7 +43,7 @@ export function AnalyticsHelpGuide() {
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-4">
             <p>
-              Data enters through CSV imports, external forms (Slack/MS Forms via webhook), or manual entry.
+              Data enters through CSV imports, external forms (MS Forms via webhook), or manual entry.
               Below are the supported import formats.
             </p>
 
@@ -356,7 +354,7 @@ export function AnalyticsHelpGuide() {
           <AccordionTrigger className="text-lg font-semibold">
             <div className="flex items-center gap-2">
               <Webhook className="w-5 h-5" />
-              External Ingestion (Slack, MS Forms, Webhooks)
+              External Ingestion (MS Forms, Webhooks)
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-4">
@@ -391,47 +389,6 @@ export function AnalyticsHelpGuide() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  Setting Up Slack Workflow Builder
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-3">
-                <p><strong>Prerequisites:</strong> Slack Workflow Builder must be enabled in your workspace.</p>
-                <ol className="list-decimal list-inside space-y-2">
-                  <li>
-                    <strong>Create a new Workflow</strong> in Slack &rarr; choose "Shortcut" as the trigger
-                    (name it something like "Log Mentoring Session")
-                  </li>
-                  <li>
-                    <strong>Add a "Collect information" step</strong> with these fields:
-                    <ul className="list-disc list-inside ml-6 mt-1 space-y-0.5 text-muted-foreground">
-                      <li>Text input: "Your full name"</li>
-                      <li>Date picker: "When did you meet?"</li>
-                      <li>Select menu: Duration — options: 15, 30, 45, 60, 90, 120 (minutes)</li>
-                      <li>Select menu: Rating — options: 1, 2, 3, 4, 5</li>
-                    </ul>
-                  </li>
-                  <li>
-                    <strong>Add a "Send a webhook" step</strong> with:
-                    <ul className="list-disc list-inside ml-6 mt-1 space-y-0.5 text-muted-foreground">
-                      <li>URL: your Edge Function URL (<code>https://&lt;project&gt;.supabase.co/functions/v1/log-session</code>)</li>
-                      <li>Method: POST</li>
-                      <li>Headers: <code>x-api-key: your-api-key</code> and <code>Content-Type: application/json</code></li>
-                      <li>Body: map the form fields to <code>respondent_name</code>, <code>respondent_email</code>, <code>date</code>, <code>duration_minutes</code>, <code>rating</code></li>
-                    </ul>
-                  </li>
-                  <li><strong>Publish</strong> the workflow and pin the shortcut in your mentoring Slack channel</li>
-                </ol>
-                <p className="text-muted-foreground mt-2">
-                  Participants can then use the shortcut right in Slack after each session — no
-                  external pages, no login, takes about 15 seconds.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
                 <CardTitle className="text-base">Setting Up MS Forms + Power Automate</CardTitle>
               </CardHeader>
               <CardContent className="text-sm space-y-3">
@@ -454,7 +411,7 @@ export function AnalyticsHelpGuide() {
                       <li>Headers: <code>x-api-key: your-api-key</code></li>
                     </ul>
                   </li>
-                  <li>Share the form link with participants (or embed it in Slack/email)</li>
+                  <li>Share the form link with participants (or embed it in email/Teams)</li>
                 </ol>
                 <p className="text-muted-foreground mt-2">
                   Alternatively, skip Power Automate and just export the form responses as CSV periodically,
@@ -498,8 +455,7 @@ export function AnalyticsHelpGuide() {
                 </div>
                 <p className="text-muted-foreground mt-2">
                   The API key is a shared secret you configure as a Supabase secret
-                  (<code>LOG_SESSION_API_KEY</code>). Use the same key in Slack Workflow Builder
-                  and Power Automate.
+                  (<code>LOG_SESSION_API_KEY</code>). Use the same key in Power Automate.
                 </p>
               </CardContent>
             </Card>
@@ -542,7 +498,7 @@ export function AnalyticsHelpGuide() {
                   <li>Run matching and review the Match Quality Analytics page</li>
                   <li>Approve matches, noting any overrides from algorithm recommendations</li>
                   <li>Check People Analytics topic demand vs supply for the new cohort</li>
-                  <li>Set up a Slack Workflow or MS Form for session logging and share with participants</li>
+                  <li>Set up an MS Form for session logging and share with participants</li>
                 </ul>
               </CardContent>
             </Card>
@@ -554,7 +510,7 @@ export function AnalyticsHelpGuide() {
               <CardContent className="text-sm space-y-1">
                 <ul className="list-disc list-inside space-y-1">
                   <li>Log check-ins for each pair (or bulk import via CSV)</li>
-                  <li>Session data arrives automatically if Slack/Forms webhook is configured — check the Mentoring Sessions page for new entries</li>
+                  <li>Session data arrives automatically if MS Forms webhook is configured — check the Mentoring Sessions page for new entries</li>
                   <li>If using manual CSV: export from MS Forms and use "Import Session Logs" to upload</li>
                   <li>Review at-risk pairs (amber/red flags) and take action</li>
                   <li>Check the Admin Overview dashboard for a quick health snapshot</li>
@@ -606,7 +562,6 @@ export function AnalyticsHelpGuide() {
               MewsMentor analytics are powered by the data you enter or import. Data can come through{" "}
               <Badge variant="outline">CSV imports</Badge>,{" "}
               <Badge variant="outline">manual entry</Badge>,{" "}
-              <Badge variant="outline">Slack Workflows</Badge>, or{" "}
               <Badge variant="outline">MS Forms + Power Automate</Badge>.
             </p>
 
@@ -628,7 +583,7 @@ export function AnalyticsHelpGuide() {
                 </div>
                 <p className="font-medium mt-1">Session data can also arrive via external channels:</p>
                 <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-                  <Badge>Slack Workflow / MS Forms</Badge>
+                  <Badge>MS Forms / Power Automate</Badge>
                   <span>&rarr;</span>
                   <Badge variant="secondary">Webhook (Edge Function)</Badge>
                   <span>&rarr;</span>
@@ -637,8 +592,8 @@ export function AnalyticsHelpGuide() {
                   <Badge>Analytics &amp; Insights</Badge>
                 </div>
                 <p className="mt-2">
-                  Analytics are only as good as the data you feed them. Automated ingestion via Slack
-                  or Forms reduces the manual burden and keeps dashboards accurate.
+                  Analytics are only as good as the data you feed them. Automated ingestion via
+                  MS Forms reduces the manual burden and keeps dashboards accurate.
                 </p>
               </CardContent>
             </Card>
@@ -742,7 +697,6 @@ export function AnalyticsHelpGuide() {
               <CardContent className="text-sm space-y-2">
                 <p>Sessions can be logged through multiple channels:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li><strong>Slack Workflow:</strong> Participants use a shortcut in Slack to log sessions after each meeting. Data flows automatically via webhook.</li>
                   <li><strong>MS Forms + Power Automate:</strong> Participants fill out a Microsoft Form. Power Automate sends responses to the webhook automatically.</li>
                   <li><strong>"Import Session Logs" button:</strong> Upload a CSV export from MS Forms (or any form tool). The system auto-matches respondent names to pairs — no internal IDs needed.</li>
                   <li><strong>"New Session" button:</strong> Manually create sessions with specific mentor/mentee IDs.</li>
@@ -760,7 +714,7 @@ export function AnalyticsHelpGuide() {
               </CardHeader>
               <CardContent className="text-sm space-y-2">
                 <ol className="list-decimal list-inside space-y-2">
-                  <li>Set up a Slack Workflow or MS Form for participants to self-report sessions (see External Ingestion section above)</li>
+                  <li>Set up an MS Form for participants to self-report sessions (see External Ingestion section above)</li>
                   <li>Monitor completion rates and no-show patterns</li>
                   <li>Follow up on pairs with low session frequency (visible in the Pair Analysis tab)</li>
                   <li>Track rating trends to catch declining satisfaction early</li>
