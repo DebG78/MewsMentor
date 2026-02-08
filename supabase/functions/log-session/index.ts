@@ -75,8 +75,16 @@ Deno.serve(async (req) => {
       return errorResponse(500, 'Failed to look up cohorts');
     }
 
-    const normalizedName = respondent_name?.trim().toLowerCase() || '';
-    const normalizedEmail = respondent_email?.trim().toLowerCase() || '';
+    // Auto-detect: if respondent_name looks like an email, treat it as one
+    let effectiveName = respondent_name?.trim() || '';
+    let effectiveEmail = respondent_email?.trim() || '';
+    if (effectiveName.includes('@') && !effectiveEmail) {
+      effectiveEmail = effectiveName;
+      effectiveName = '';
+    }
+
+    const normalizedName = effectiveName.toLowerCase();
+    const normalizedEmail = effectiveEmail.toLowerCase();
     const candidates: Array<{
       mentor_id: string;
       mentee_id: string;
@@ -87,11 +95,19 @@ Deno.serve(async (req) => {
       respondent_role: 'mentor' | 'mentee';
     }> = [];
 
+    console.log(`[debug] Found ${cohorts?.length || 0} cohorts, searching for email="${normalizedEmail}" name="${normalizedName}"`);
+
     for (const cohort of cohorts || []) {
       const matches = cohort.matches as any;
       const manualMatches = cohort.manual_matches as any;
       const hasAlgoMatches = matches?.results?.length > 0;
       const hasManualMatches = manualMatches?.matches?.length > 0;
+
+      console.log(`[debug] Cohort "${cohort.name}" (${cohort.id}) status=${cohort.status} algoMatches=${hasAlgoMatches} manualMatches=${hasManualMatches}`);
+      if (hasManualMatches) {
+        console.log(`[debug] Manual matches:`, JSON.stringify(manualMatches.matches.map((m: any) => ({ mentee_id: m.mentee_id, mentor_id: m.mentor_id }))));
+      }
+
       if (!hasAlgoMatches && !hasManualMatches) continue;
 
       // Fetch mentees and mentors for this cohort
@@ -102,6 +118,9 @@ Deno.serve(async (req) => {
 
       const mentees = menteesResult.data || [];
       const mentors = mentorsResult.data || [];
+
+      console.log(`[debug] Mentees:`, mentees.map(m => ({ id: m.mentee_id, name: m.full_name, email: m.email })));
+      console.log(`[debug] Mentors:`, mentors.map(m => ({ id: m.mentor_id, name: m.full_name, email: m.email })));
 
       // Build a unified list of pairs from both algorithm and manual matches
       const allPairs: Array<{ mentee_id: string; mentor_id: string }> = [];
@@ -118,6 +137,8 @@ Deno.serve(async (req) => {
           allPairs.push({ mentee_id: m.mentee_id, mentor_id: m.mentor_id });
         }
       }
+
+      console.log(`[debug] All pairs:`, JSON.stringify(allPairs));
 
       // Check mentees — email match takes priority over name match
       for (const mentee of mentees) {
