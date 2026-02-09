@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/accordion";
 import {
   Target,
-  ClipboardCheck,
+
   Crown,
   Users,
   Calendar,
@@ -214,62 +214,6 @@ export function AnalyticsHelpGuide() {
                       <TableCell className="font-mono text-xs">would_recommend</TableCell>
                       <TableCell>No</TableCell>
                       <TableCell>yes/no or 1/0</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Check-In CSV</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-2">
-                <p><strong>Where to import:</strong> Check-Ins Tracker page</p>
-                <p><strong>Frequency:</strong> After each check-in round (every 2-4 weeks)</p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Column</TableHead>
-                      <TableHead>Required</TableHead>
-                      <TableHead>Description</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">mentor_id</TableCell>
-                      <TableCell><Badge className="bg-red-100 text-red-700">Yes</Badge></TableCell>
-                      <TableCell>Mentor's ID from the system</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">mentee_id</TableCell>
-                      <TableCell><Badge className="bg-red-100 text-red-700">Yes</Badge></TableCell>
-                      <TableCell>Mentee's ID from the system</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">cohort_id</TableCell>
-                      <TableCell><Badge className="bg-red-100 text-red-700">Yes</Badge></TableCell>
-                      <TableCell>Cohort ID</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">check_in_date</TableCell>
-                      <TableCell>No</TableCell>
-                      <TableCell>Date (YYYY-MM-DD, default: today)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">risk_flag</TableCell>
-                      <TableCell>No</TableCell>
-                      <TableCell>green, amber, or red (default: green)</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">notes</TableCell>
-                      <TableCell>No</TableCell>
-                      <TableCell>Free-text notes about the check-in</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-mono text-xs">next_action</TableCell>
-                      <TableCell>No</TableCell>
-                      <TableCell>Follow-up action item</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -509,10 +453,9 @@ export function AnalyticsHelpGuide() {
               </CardHeader>
               <CardContent className="text-sm space-y-1">
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Log check-ins for each pair (or bulk import via CSV)</li>
                   <li>Session data arrives automatically if MS Forms webhook is configured — check the Mentoring Sessions page for new entries</li>
                   <li>If using manual CSV: export from MS Forms and use "Import Session Logs" to upload</li>
-                  <li>Review at-risk pairs (amber/red flags) and take action</li>
+                  <li>Review pairs with low session frequency and take action</li>
                   <li>Check the Admin Overview dashboard for a quick health snapshot</li>
                 </ul>
               </CardContent>
@@ -577,7 +520,7 @@ export function AnalyticsHelpGuide() {
                   <span>&rarr;</span>
                   <Badge variant="secondary">Matching</Badge>
                   <span>&rarr;</span>
-                  <Badge variant="secondary">Tracking (Sessions, Check-ins, VIP)</Badge>
+                  <Badge variant="secondary">Tracking (Sessions, VIP)</Badge>
                   <span>&rarr;</span>
                   <Badge>Analytics &amp; Insights</Badge>
                 </div>
@@ -615,17 +558,12 @@ export function AnalyticsHelpGuide() {
                     <TableRow>
                       <TableCell className="font-medium">Admin Overview</TableCell>
                       <TableCell>High-level program health snapshot</TableCell>
-                      <TableCell>Cohorts, matches, check-ins</TableCell>
+                      <TableCell>Cohorts, matches, sessions</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-medium">Success Metrics</TableCell>
                       <TableCell>Track KPIs against targets over time</TableCell>
                       <TableCell>Manual entry + survey CSV import</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Check-Ins Tracker</TableCell>
-                      <TableCell>Monitor pair health and risk flags</TableCell>
-                      <TableCell>Manual entry + check-in CSV import</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-medium">VIP Management</TableCell>
@@ -759,7 +697,7 @@ export function AnalyticsHelpGuide() {
               </CardHeader>
               <CardContent className="text-sm space-y-3">
                 <div>
-                  <strong>Engagement:</strong> Session attendance rate, check-in completion, active
+                  <strong>Engagement:</strong> Session attendance rate, active
                   participation in the program. Higher is better.
                 </div>
                 <div>
@@ -827,85 +765,7 @@ export function AnalyticsHelpGuide() {
           </AccordionContent>
         </AccordionItem>
 
-        {/* 7. Check-Ins Tracker */}
-        <AccordionItem value="check-ins" className="border rounded-lg px-4">
-          <AccordionTrigger className="text-lg font-semibold">
-            <div className="flex items-center gap-2">
-              <ClipboardCheck className="w-5 h-5" />
-              Check-Ins Tracker
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-4 pb-4">
-            <p>
-              Tracks mentor-mentee pair health through periodic check-ins with{" "}
-              <Badge className="bg-green-500 text-white">Green</Badge>,{" "}
-              <Badge className="bg-yellow-500 text-white">Amber</Badge>, and{" "}
-              <Badge className="bg-red-500 text-white">Red</Badge> risk flags.
-            </p>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Risk Flags Explained</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Flag</TableHead>
-                      <TableHead>Meaning</TableHead>
-                      <TableHead>Example Situations</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell><Badge className="bg-green-500 text-white">Green</Badge></TableCell>
-                      <TableCell>Pair is healthy, on track</TableCell>
-                      <TableCell>Meeting regularly, positive feedback, making progress</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><Badge className="bg-yellow-500 text-white">Amber</Badge></TableCell>
-                      <TableCell>Minor concerns</TableCell>
-                      <TableCell>Missed meetings, slow communication, misaligned expectations</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><Badge className="bg-red-500 text-white">Red</Badge></TableCell>
-                      <TableCell>Pair at risk</TableCell>
-                      <TableCell>Not meeting, one party disengaged, conflict, wants to discontinue</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">What You Need to Do</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-2">
-                <ol className="list-decimal list-inside space-y-2">
-                  <li>Schedule regular check-in rounds (every 2-4 weeks recommended)</li>
-                  <li>After each check-in conversation, log the result with a risk flag</li>
-                  <li>For amber/red pairs: add a "next action" and follow up by the specified date</li>
-                  <li>Bulk import check-ins via CSV if tracking in an external spreadsheet</li>
-                </ol>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">How to Read the Charts</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm space-y-1">
-                <ul className="list-disc list-inside space-y-1">
-                  <li><strong>Risk distribution donut:</strong> Current snapshot of green/amber/red proportions</li>
-                  <li><strong>Risk trend over time:</strong> Stacked area chart showing how risk flags change. A growing red area means program health is declining.</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* 8. VIP Management */}
+        {/* 7. VIP Management */}
         <AccordionItem value="vip" className="border rounded-lg px-4">
           <AccordionTrigger className="text-lg font-semibold">
             <div className="flex items-center gap-2">

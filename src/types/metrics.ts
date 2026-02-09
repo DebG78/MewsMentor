@@ -143,7 +143,7 @@ export const METRIC_CATEGORY_METADATA: Record<MetricCategory, { label: string; i
 export const METRIC_LABELS: Record<string, string> = {
   session_completion_rate: 'Session Completion Rate',
   average_sessions_per_pair: 'Avg Sessions per Pair',
-  check_in_response_rate: 'Check-in Response Rate',
+
   mentee_satisfaction_score: 'Mentee Satisfaction',
   mentor_satisfaction_score: 'Mentor Satisfaction',
   nps_score: 'NPS Score',

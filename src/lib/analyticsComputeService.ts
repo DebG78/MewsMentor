@@ -1,5 +1,4 @@
 import type { Cohort } from '@/types/mentoring';
-import type { CheckIn } from '@/types/checkIns';
 import type { SessionRow } from './sessionService';
 
 // ============================================================================
@@ -10,9 +9,8 @@ export interface PairHealthScore {
   mentor_id: string;
   mentee_id: string;
   cohort_id: string;
-  riskScore: number;       // 0-100, from check-in risk flags
   sessionScore: number;    // 0-100, from session frequency/completion
-  recencyScore: number;    // 0-100, how recent the last check-in is
+  recencyScore: number;    // 0-100, how recent the last session is
   totalScore: number;      // 0-100, weighted composite
   status: 'healthy' | 'at_risk' | 'critical';
 }
@@ -48,17 +46,10 @@ export interface PairSurvivalRate {
 // ============================================================================
 
 export function computePairHealthScores(
-  checkIns: CheckIn[],
   sessions: SessionRow[],
   cohortId: string
 ): PairHealthScore[] {
-  // Group check-ins and sessions by pair
   const pairKeys = new Set<string>();
-  for (const ci of checkIns) {
-    if (ci.cohort_id === cohortId) {
-      pairKeys.add(`${ci.mentor_id}:${ci.mentee_id}`);
-    }
-  }
   for (const s of sessions) {
     if (s.cohort_id === cohortId) {
       pairKeys.add(`${s.mentor_id}:${s.mentee_id}`);
@@ -71,21 +62,7 @@ export function computePairHealthScores(
   for (const key of pairKeys) {
     const [mentor_id, mentee_id] = key.split(':');
 
-    // Risk score from check-ins (40% weight)
-    const pairCheckIns = checkIns.filter(
-      ci => ci.cohort_id === cohortId && ci.mentor_id === mentor_id && ci.mentee_id === mentee_id
-    );
-    let riskScore = 50; // default if no check-ins
-    if (pairCheckIns.length > 0) {
-      const latestCI = pairCheckIns.sort(
-        (a, b) => new Date(b.check_in_date).getTime() - new Date(a.check_in_date).getTime()
-      )[0];
-      riskScore = latestCI.risk_flag === 'green' ? 100
-        : latestCI.risk_flag === 'amber' ? 50
-        : 10;
-    }
-
-    // Session score (30% weight)
+    // Session score (50% weight)
     const pairSessions = sessions.filter(
       s => s.cohort_id === cohortId && s.mentor_id === mentor_id && s.mentee_id === mentee_id
     );
@@ -94,14 +71,11 @@ export function computePairHealthScores(
       ? Math.min(100, (completedSessions / Math.max(pairSessions.length, 1)) * 100)
       : 0;
 
-    // Recency score (30% weight) - how recent is the last activity
-    const allDates = [
-      ...pairCheckIns.map(ci => new Date(ci.check_in_date).getTime()),
-      ...pairSessions.map(s => new Date(s.scheduled_datetime).getTime()),
-    ];
+    // Recency score (50% weight) - how recent is the last session
+    const sessionDates = pairSessions.map(s => new Date(s.scheduled_datetime).getTime());
     let recencyScore = 0;
-    if (allDates.length > 0) {
-      const mostRecent = Math.max(...allDates);
+    if (sessionDates.length > 0) {
+      const mostRecent = Math.max(...sessionDates);
       const daysSince = (now - mostRecent) / (1000 * 60 * 60 * 24);
       recencyScore = daysSince <= 7 ? 100
         : daysSince <= 14 ? 80
@@ -110,14 +84,13 @@ export function computePairHealthScores(
         : 10;
     }
 
-    const totalScore = Math.round(riskScore * 0.4 + sessionScore * 0.3 + recencyScore * 0.3);
+    const totalScore = Math.round(sessionScore * 0.5 + recencyScore * 0.5);
     const status = totalScore >= 70 ? 'healthy' : totalScore >= 40 ? 'at_risk' : 'critical';
 
     results.push({
       mentor_id,
       mentee_id,
       cohort_id: cohortId,
-      riskScore,
       sessionScore,
       recencyScore,
       totalScore,
@@ -212,36 +185,21 @@ export function computeTopicCoverage(cohorts: Cohort[]): TopicCoverageRate[] {
 // ============================================================================
 
 export function computePairSurvivalRate(
-  cohorts: Cohort[],
-  checkIns: CheckIn[]
+  cohorts: Cohort[]
 ): PairSurvivalRate[] {
   return cohorts
     .filter(c => c.matches?.results && c.matches.results.length > 0)
     .map(cohort => {
-      let totalPairs = 0;
-      let survivingPairs = 0;
-
-      for (const result of cohort.matches!.results) {
-        if (result.proposed_assignment?.mentor_id) {
-          totalPairs++;
-          const mentorId = result.proposed_assignment.mentor_id;
-          const menteeId = result.mentee_id;
-
-          // Check if this pair has any red flags
-          const pairCheckIns = checkIns.filter(
-            ci => ci.cohort_id === cohort.id && ci.mentor_id === mentorId && ci.mentee_id === menteeId
-          );
-          const hasRed = pairCheckIns.some(ci => ci.risk_flag === 'red');
-          if (!hasRed) survivingPairs++;
-        }
-      }
+      const totalPairs = cohort.matches!.results.filter(
+        r => r.proposed_assignment?.mentor_id
+      ).length;
 
       return {
         cohort_id: cohort.id,
         cohort_name: cohort.name,
         totalPairs,
-        survivingPairs,
-        survivalRate: totalPairs > 0 ? Math.round((survivingPairs / totalPairs) * 100) : 0,
+        survivingPairs: totalPairs,
+        survivalRate: 100,
       };
     });
 }

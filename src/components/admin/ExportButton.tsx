@@ -8,14 +8,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Download, Loader2, FileSpreadsheet, Users, Star, BarChart3, ClipboardCheck, BookOpen, Settings2 } from 'lucide-react';
+import { Download, Loader2, FileSpreadsheet, Users, Star, BarChart3, BookOpen, Settings2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   exportMatchList,
   exportParticipantList,
   exportVIPList,
   exportCohortMetrics,
-  exportCheckIns,
   exportRunbookStages,
   exportMatchingModels,
   exportCohortsSummary,
@@ -28,7 +27,6 @@ export type ExportType =
   | 'participants-mentees'
   | 'vips'
   | 'metrics'
-  | 'check-ins'
   | 'runbook'
   | 'matching-models'
   | 'cohorts-summary';
@@ -52,7 +50,6 @@ const exportConfig: Record<ExportType, {
   'participants-mentees': { label: 'Mentees Only', icon: Users, requiresCohort: true },
   'vips': { label: 'VIP List', icon: Star, requiresCohort: false },
   'metrics': { label: 'Success Metrics', icon: BarChart3, requiresCohort: true },
-  'check-ins': { label: 'Check-ins', icon: ClipboardCheck, requiresCohort: true },
   'runbook': { label: 'Runbook Stages', icon: BookOpen, requiresCohort: true },
   'matching-models': { label: 'Matching Models', icon: Settings2, requiresCohort: false },
   'cohorts-summary': { label: 'Cohorts Summary', icon: FileSpreadsheet, requiresCohort: false },
@@ -61,7 +58,7 @@ const exportConfig: Record<ExportType, {
 export function ExportButton({
   cohortId,
   cohortName,
-  availableExports = ['matches', 'participants-all', 'vips', 'metrics', 'check-ins', 'runbook'],
+  availableExports = ['matches', 'participants-all', 'vips', 'metrics', 'runbook'],
   variant = 'outline',
   size = 'default',
 }: ExportButtonProps) {
@@ -103,9 +100,6 @@ export function ExportButton({
           break;
         case 'metrics':
           await exportCohortMetrics(cohortId!, cohortName);
-          break;
-        case 'check-ins':
-          await exportCheckIns(cohortId!, cohortName);
           break;
         case 'runbook':
           await exportRunbookStages(cohortId!, cohortName);

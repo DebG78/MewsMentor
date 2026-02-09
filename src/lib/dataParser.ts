@@ -7,7 +7,6 @@ import {
   EXPERIENCE_MAPPING,
   Cohort,
 } from "@/types/mentoring";
-import type { CreateCheckInInput, RiskFlag } from '@/types/checkIns';
 import type { CreateVIPScoreInput, PersonType } from '@/types/vip';
 import type { CreateMetricSnapshotInput } from '@/types/metrics';
 import type { CreateSessionInput, SessionStatus } from '@/lib/sessionService';
@@ -1013,82 +1012,6 @@ export function parseSurveyCSV(csvText: string): CSVParseResult<CreateMetricSnap
         notes: `Imported from survey CSV (${agg.recommend.length} responses)`,
       });
     }
-  }
-
-  return { data, errors, warnings };
-}
-
-/**
- * Parse Check-in CSV
- * Expected columns: mentor_id, mentee_id, cohort_id, check_in_date, risk_flag, notes, next_action
- */
-export function parseCheckInCSV(csvText: string): CSVParseResult<CreateCheckInInput> {
-  const rows = parseCSV(csvText);
-  const data: CreateCheckInInput[] = [];
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  if (rows.length === 0) {
-    errors.push('No data found in CSV');
-    return { data, errors, warnings };
-  }
-
-  const headers = Object.keys(rows[0]).map(h => h.toLowerCase());
-  const requiredCols = ['mentor_id', 'mentee_id', 'cohort_id'];
-  const missingCols = requiredCols.filter(col =>
-    !headers.some(h => h.replace(/\s+/g, '_').includes(col))
-  );
-  if (missingCols.length > 0) {
-    errors.push(`Missing required columns: ${missingCols.join(', ')}`);
-    return { data, errors, warnings };
-  }
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const rowNum = i + 2;
-
-    const mentorId = findColumnValue(row, ['mentor_id']);
-    const menteeId = findColumnValue(row, ['mentee_id']);
-    const cohortId = findColumnValue(row, ['cohort_id']);
-    const checkInDate = findColumnValue(row, ['check_in_date', 'date']);
-    const riskFlagStr = findColumnValue(row, ['risk_flag', 'risk']);
-    const notes = findColumnValue(row, ['notes']);
-    const nextAction = findColumnValue(row, ['next_action']);
-    const riskReason = findColumnValue(row, ['risk_reason', 'reason']);
-
-    if (!mentorId || !menteeId || !cohortId) {
-      errors.push(`Row ${rowNum}: Missing mentor_id, mentee_id, or cohort_id`);
-      continue;
-    }
-
-    // Validate date
-    const date = checkInDate || new Date().toISOString().split('T')[0];
-    if (checkInDate) {
-      const parsed = new Date(checkInDate);
-      if (isNaN(parsed.getTime())) {
-        errors.push(`Row ${rowNum}: Invalid date "${checkInDate}"`);
-        continue;
-      }
-    }
-
-    // Validate risk flag
-    const validRisks: RiskFlag[] = ['green', 'amber', 'red'];
-    const riskFlag = riskFlagStr?.toLowerCase() as RiskFlag;
-    if (riskFlagStr && !validRisks.includes(riskFlag)) {
-      warnings.push(`Row ${rowNum}: Unknown risk_flag "${riskFlagStr}", defaulting to "green"`);
-    }
-
-    data.push({
-      cohort_id: cohortId,
-      mentor_id: mentorId,
-      mentee_id: menteeId,
-      check_in_date: date,
-      status: 'completed',
-      risk_flag: validRisks.includes(riskFlag) ? riskFlag : 'green',
-      notes: notes || undefined,
-      risk_reason: riskReason || undefined,
-      next_action: nextAction || undefined,
-    });
   }
 
   return { data, errors, warnings };

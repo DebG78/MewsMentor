@@ -694,7 +694,7 @@ export default function MentoringSessions() {
               <Input
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="e.g., Weekly check-in"
+                placeholder="e.g., Weekly session"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">

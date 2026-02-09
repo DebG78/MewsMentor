@@ -4,13 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import type { ChartConfig } from "@/components/ui/chart";
-import { Target, UserCog, Users, Calendar, ArrowRight, BarChart3, ShieldAlert, TrendingUp } from "lucide-react";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { Target, UserCog, Users, Calendar, ArrowRight, BarChart3, TrendingUp, ShieldAlert } from "lucide-react";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { getAllCohorts } from "@/lib/supabaseService";
-import { getAggregateCheckInSummary } from "@/lib/checkInService";
 import type { Cohort } from "@/types/mentoring";
-import type { CheckInSummary } from "@/types/checkIns";
 
 interface OverviewStats {
   activeCohorts: number;
@@ -27,15 +25,14 @@ const cohortStatusConfig = {
   paused: { label: "Paused", color: "hsl(38, 92%, 50%)" },
 } satisfies ChartConfig;
 
-const riskConfig = {
-  green: { label: "Healthy", color: "hsl(142, 76%, 46%)" },
-  amber: { label: "At Risk", color: "hsl(38, 92%, 50%)" },
-  red: { label: "Critical", color: "hsl(0, 84%, 60%)" },
-} satisfies ChartConfig;
-
 const capacityConfig = {
   assigned: { label: "Assigned", color: "hsl(214, 84%, 56%)" },
   available: { label: "Available", color: "hsl(214, 20%, 85%)" },
+} satisfies ChartConfig;
+
+const cohortSizeConfig = {
+  mentees: { label: "Mentees", color: "hsl(330, 65%, 55%)" },
+  mentors: { label: "Mentors", color: "hsl(262, 83%, 58%)" },
 } satisfies ChartConfig;
 
 export default function AdminOverview() {
@@ -48,7 +45,6 @@ export default function AdminOverview() {
     totalMentors: 0,
     totalMentees: 0,
   });
-  const [riskSummary, setRiskSummary] = useState<CheckInSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -89,15 +85,6 @@ export default function AdminOverview() {
           totalMentees,
         });
 
-        // Load aggregate risk summary for active cohorts
-        if (activeCohorts.length > 0) {
-          try {
-            const risk = await getAggregateCheckInSummary(activeCohorts.map(c => c.id));
-            setRiskSummary(risk);
-          } catch {
-            // Check-ins may not exist yet
-          }
-        }
       } catch (error) {
         console.error("Error loading overview data:", error);
       } finally {
@@ -135,14 +122,13 @@ export default function AdminOverview() {
     }).filter(d => d.assigned > 0 || d.available > 0);
   }, [cohorts]);
 
-  const riskData = useMemo(() => {
-    if (!riskSummary || riskSummary.total === 0) return [];
-    return [
-      { name: "green", value: riskSummary.green, fill: riskConfig.green.color },
-      { name: "amber", value: riskSummary.amber, fill: riskConfig.amber.color },
-      { name: "red", value: riskSummary.red, fill: riskConfig.red.color },
-    ].filter(d => d.value > 0);
-  }, [riskSummary]);
+  const cohortSizeData = useMemo(() => {
+    return cohorts.map(cohort => ({
+      name: cohort.name.length > 15 ? cohort.name.substring(0, 15) + '...' : cohort.name,
+      mentees: cohort.mentees?.length || 0,
+      mentors: cohort.mentors?.length || 0,
+    })).filter(d => d.mentees > 0 || d.mentors > 0);
+  }, [cohorts]);
 
   const getStatusBadge = (status: Cohort['status']) => {
     const variants: Record<string, { variant: "default" | "secondary" | "outline"; label: string }> = {
@@ -272,56 +258,35 @@ export default function AdminOverview() {
           </CardContent>
         </Card>
 
-        {/* Risk Summary Donut */}
+        {/* Cohort Sizes */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4" />
-              Check-in Risk
+              <Users className="w-4 h-4" />
+              Cohort Sizes
             </CardTitle>
-            <CardDescription>Across active cohorts</CardDescription>
+            <CardDescription>Mentees vs mentors per cohort</CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading || riskData.length === 0 ? (
+            {isLoading || cohortSizeData.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                {isLoading ? "Loading..." : "No check-ins recorded"}
+                {isLoading ? "Loading..." : "No cohorts yet"}
               </div>
             ) : (
-              <ChartContainer config={riskConfig} className="h-48 w-full">
-                <PieChart>
-                  <Pie
-                    data={riskData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={70}
-                    paddingAngle={3}
-                    dataKey="value"
-                    nameKey="name"
-                  >
-                    {riskData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip
-                    content={<ChartTooltipContent nameKey="name" />}
-                  />
-                </PieChart>
+              <ChartContainer config={cohortSizeConfig} className="h-48 w-full">
+                <BarChart data={cohortSizeData} margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" fontSize={11} />
+                  <YAxis fontSize={11} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="mentees" fill="var(--color-mentees)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="mentors" fill="var(--color-mentors)" radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ChartContainer>
-            )}
-            {!isLoading && riskData.length > 0 && (
-              <div className="flex flex-wrap gap-3 mt-2 justify-center">
-                {riskData.map(d => (
-                  <div key={d.name} className="flex items-center gap-1.5 text-xs">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.fill }} />
-                    <span>{riskConfig[d.name as keyof typeof riskConfig]?.label}</span>
-                    <span className="font-medium">{d.value}</span>
-                  </div>
-                ))}
-              </div>
             )}
           </CardContent>
         </Card>
+
       </div>
 
       {/* Quick Actions + Recent Cohorts */}
@@ -337,9 +302,6 @@ export default function AdminOverview() {
             </Button>
             <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate("/admin/analytics/metrics")}>
               <BarChart3 className="w-4 h-4 mr-2" /> View Success Metrics
-            </Button>
-            <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate("/admin/mentoring/check-ins")}>
-              <ShieldAlert className="w-4 h-4 mr-2" /> Check-in Tracker
             </Button>
             <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate("/admin/people/analytics")}>
               <TrendingUp className="w-4 h-4 mr-2" /> People Analytics
