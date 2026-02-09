@@ -134,7 +134,7 @@ export const DEFAULT_STAGE_TEMPLATES: Omit<CreateCohortStageInput, 'cohort_id'>[
     display_order: 5,
     checklist: [
       { id: '1', text: 'Send midpoint surveys', completed: false },
-      { id: '2', text: 'Conduct check-in calls', completed: false },
+      { id: '2', text: 'Review session activity per pair', completed: false },
       { id: '3', text: 'Review engagement metrics', completed: false },
       { id: '4', text: 'Address at-risk pairs', completed: false },
     ],

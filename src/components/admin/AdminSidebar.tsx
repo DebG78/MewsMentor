@@ -15,7 +15,6 @@ import {
   LogOut,
   Settings,
   Settings2,
-  ClipboardCheck,
   BookOpen,
   TrendingUp,
   Gauge,
@@ -60,11 +59,6 @@ const navItems = [
         title: 'Sessions',
         href: '/admin/mentoring/sessions',
         icon: Calendar,
-      },
-      {
-        title: 'Check-ins',
-        href: '/admin/mentoring/check-ins',
-        icon: ClipboardCheck,
       },
       {
         title: 'Runbook',

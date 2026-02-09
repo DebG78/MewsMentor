@@ -267,39 +267,6 @@ export async function exportCohortMetrics(cohortId: string, cohortName?: string)
 }
 
 /**
- * Export check-ins for a cohort
- */
-export async function exportCheckIns(cohortId: string, cohortName?: string): Promise<void> {
-  const { data, error } = await supabase
-    .from('check_ins')
-    .select('*')
-    .eq('cohort_id', cohortId)
-    .order('check_in_date', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching check-ins for export:', error);
-    throw error;
-  }
-
-  const columns = [
-    { key: 'id' as const, header: 'Check-in ID' },
-    { key: 'mentor_id' as const, header: 'Mentor ID' },
-    { key: 'mentee_id' as const, header: 'Mentee ID' },
-    { key: 'check_in_date' as const, header: 'Date' },
-    { key: 'status' as const, header: 'Status' },
-    { key: 'risk_flag' as const, header: 'Risk Flag' },
-    { key: 'risk_reason' as const, header: 'Risk Reason' },
-    { key: 'notes' as const, header: 'Notes' },
-    { key: 'next_action' as const, header: 'Next Action' },
-    { key: 'session_count' as const, header: 'Session Count' },
-  ];
-
-  const csv = objectsToCSV(data || [], columns);
-  const filename = `check_ins_${cohortName || cohortId}_${getDateString()}.csv`;
-  downloadCSV(csv, filename);
-}
-
-/**
  * Export runbook stages for a cohort
  */
 export async function exportRunbookStages(cohortId: string, cohortName?: string): Promise<void> {

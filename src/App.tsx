@@ -11,7 +11,6 @@ import CohortDetail from "./pages/admin/CohortDetail";
 import MentoringUnassigned from "./pages/admin/MentoringUnassigned";
 import MentoringSessions from "./pages/admin/MentoringSessions";
 import MatchingModelManager from "./pages/admin/MatchingModelManager";
-import CheckInsTracker from "./pages/admin/CheckInsTracker";
 import CohortRunbook from "./pages/admin/CohortRunbook";
 import SuccessMetricsDashboard from "./pages/admin/SuccessMetricsDashboard";
 import VIPManagement from "./pages/admin/VIPManagement";
@@ -108,16 +107,6 @@ const App = () => (
                   <ProtectedRoute>
                     <AdminLayout>
                       <MatchingModelManager />
-                    </AdminLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/mentoring/check-ins"
-                element={
-                  <ProtectedRoute>
-                    <AdminLayout>
-                      <CheckInsTracker />
                     </AdminLayout>
                   </ProtectedRoute>
                 }
