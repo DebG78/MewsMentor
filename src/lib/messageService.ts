@@ -173,12 +173,6 @@ export interface SendWelcomeResult {
  * Trigger welcome messages for a cohort via the edge function.
  */
 export async function sendWelcomeMessages(cohortId: string): Promise<SendWelcomeResult> {
-  const { data, error } = await supabase.functions.invoke('send-welcome-messages', {
-    body: {},
-    headers: {},
-  });
-
-  // The edge function uses query params, so we need to call it with the URL
   const { data: result, error: fnError } = await supabase.functions.invoke(
     `send-welcome-messages?cohort_id=${cohortId}`,
     { body: {} }

@@ -139,13 +139,6 @@ export const SurveyMigrationHelper = () => {
     );
   }
 
-  // If no data anywhere, show initialization message
-  return (
-    <Alert>
-      <Database className="h-4 w-4" />
-      <AlertDescription>
-        🎯 Survey templates will be automatically created in Supabase when you first access them.
-      </AlertDescription>
-    </Alert>
-  );
+  // If no data anywhere
+  return null;
 };

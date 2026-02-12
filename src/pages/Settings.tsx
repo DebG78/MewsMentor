@@ -53,7 +53,7 @@ const Settings = () => {
       id: "integrations",
       title: "Integrations",
       icon: Globe,
-      description: "Zapier and webhook configuration"
+      description: "Power Automate and Zapier setup guides"
     },
     {
       id: "data-help",
@@ -118,6 +118,24 @@ const Settings = () => {
 
             {/* Survey Templates */}
             <TabsContent value="survey-templates" className="space-y-6">
+              {/* MS Forms notice */}
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <Globe className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-blue-900">
+                        Surveys are currently administered via Microsoft Forms
+                      </p>
+                      <p className="text-sm text-blue-700">
+                        Responses are imported automatically via Power Automate flows from Microsoft Forms.
+                        The in-app survey builder below is not currently in use but is available for future cohorts.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Migration Helper */}
               <SurveyMigrationHelper />
 
@@ -152,7 +170,7 @@ const Settings = () => {
                     Integrations
                   </CardTitle>
                   <CardDescription>
-                    MewsMentor uses Zapier webhooks to connect Supabase edge functions with Slack and form tools.
+                    MewsMentor uses <strong>Power Automate</strong> to push Microsoft Forms data into the app, and <strong>Zapier</strong> to send messages from the app to Slack.
                     Below is the setup guide for each integration.
                   </CardDescription>
                 </CardHeader>
@@ -199,26 +217,27 @@ const Settings = () => {
                     </div>
                   </div>
 
-                  {/* Survey Import via Zapier */}
+                  {/* Survey Import via Power Automate */}
                   <div className="space-y-3">
                     <h3 className="text-base font-semibold flex items-center gap-2">
                       Survey Response Import
-                      <Badge variant="outline">Zapier</Badge>
+                      <Badge variant="outline">Power Automate</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Automatically import mentor/mentee survey responses from Google Forms or Typeform into MewsMentor.
+                      Automatically import mentor/mentee survey responses from Microsoft Forms into MewsMentor.
                       The <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code> edge function
                       parses form fields and upserts profiles.
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
                       <div>
-                        <span className="font-medium">Zapier Zap setup:</span>
+                        <span className="font-medium">Power Automate flow setup:</span>
                         <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
-                          <li>Trigger: <strong>Google Forms</strong> (New Response in Spreadsheet) or <strong>Typeform</strong> (New Entry)</li>
-                          <li>Action: <strong>Webhooks by Zapier</strong> → POST</li>
-                          <li>URL: your Supabase edge function URL + <code className="bg-background px-1 rounded">/import-survey-response?cohort_id=YOUR_COHORT_ID</code></li>
+                          <li>Trigger: <strong>When a new response is submitted</strong> (Microsoft Forms)</li>
+                          <li>Action: <strong>Get response details</strong> (Microsoft Forms)</li>
+                          <li>Action: <strong>HTTP</strong> → POST</li>
+                          <li>URI: your Supabase edge function URL + <code className="bg-background px-1 rounded">/import-survey-response?cohort_id=YOUR_COHORT_ID</code></li>
                           <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
-                          <li>Body: map all form fields as JSON key-value pairs</li>
+                          <li>Body: map form fields as JSON key-value pairs using dynamic content from "Get response details"</li>
                         </ol>
                       </div>
                       <div>
@@ -230,11 +249,11 @@ const Settings = () => {
                     </div>
                   </div>
 
-                  {/* Session Logging via Zapier */}
+                  {/* Session Logging via Power Automate */}
                   <div className="space-y-3">
                     <h3 className="text-base font-semibold flex items-center gap-2">
                       Session Logging
-                      <Badge variant="outline">Zapier</Badge>
+                      <Badge variant="outline">Power Automate</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
                       Participants can log mentoring sessions via a form. The <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> edge
@@ -242,11 +261,12 @@ const Settings = () => {
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
                       <div>
-                        <span className="font-medium">Zapier Zap setup:</span>
+                        <span className="font-medium">Power Automate flow setup:</span>
                         <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
-                          <li>Trigger: <strong>Google Forms</strong> or <strong>Typeform</strong> (session log form)</li>
-                          <li>Action: <strong>Webhooks by Zapier</strong> → POST</li>
-                          <li>URL: your Supabase edge function URL + <code className="bg-background px-1 rounded">/log-session</code></li>
+                          <li>Trigger: <strong>When a new response is submitted</strong> (Microsoft Forms — session log form)</li>
+                          <li>Action: <strong>Get response details</strong> (Microsoft Forms)</li>
+                          <li>Action: <strong>HTTP</strong> → POST</li>
+                          <li>URI: your Supabase edge function URL + <code className="bg-background px-1 rounded">/log-session</code></li>
                           <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
                           <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_email": "...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4, "journey_phase": "building" }`}</code></li>
                         </ol>
@@ -267,10 +287,10 @@ const Settings = () => {
                       Set these via <code className="text-xs bg-muted px-1 py-0.5 rounded">supabase secrets set KEY=value</code> in the CLI:
                     </p>
                     <div className="bg-muted rounded-md p-4 text-sm font-mono space-y-1 text-muted-foreground">
-                      <div><code>ZAPIER_SLACK_WEBHOOK_URL</code> — Zapier Catch Hook URL for Slack</div>
-                      <div><code>SLACK_MENTORING_CHANNEL</code> — e.g. #mentoring</div>
-                      <div><code>SURVEY_IMPORT_API_KEY</code> — API key for survey import webhook</div>
-                      <div><code>LOG_SESSION_API_KEY</code> — API key for session log webhook</div>
+                      <div><code>ZAPIER_SLACK_WEBHOOK_URL</code> — Zapier Catch Hook URL for Slack (used by Zap)</div>
+                      <div><code>SLACK_MENTORING_CHANNEL</code> — e.g. #mentoring (used by Zap)</div>
+                      <div><code>SURVEY_IMPORT_API_KEY</code> — API key for survey import (used by Power Automate)</div>
+                      <div><code>LOG_SESSION_API_KEY</code> — API key for session logging (used by Power Automate)</div>
                     </div>
                   </div>
                 </CardContent>
