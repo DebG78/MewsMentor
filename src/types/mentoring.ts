@@ -5,10 +5,10 @@ export interface MenteeData {
   name?: string; // From "Full Name" column
   pronouns?: string;
   role: string;
-  experience_years: string; // "3–5", "6–10", "10+", etc.
+  experience_years: string; // "3–5", "6–10", "10+", etc. (legacy)
   location_timezone: string;
 
-  // Life situations (boolean flags from CSV - legacy)
+  // Life situations (boolean flags from CSV - legacy, kept for old cohorts)
   returning_from_leave?: boolean;
   navigating_menopause?: boolean;
   career_break?: boolean;
@@ -20,16 +20,16 @@ export interface MenteeData {
   thinking_about_internal_move?: boolean;
   other_situation?: string;
 
-  // Life experiences array (for database storage)
+  // Life experiences array (for database storage - legacy)
   life_experiences?: string[];
 
-  // Development areas they want to learn
+  // Development areas they want to learn (legacy array, still populated from capabilities)
   topics_to_learn: string[];
 
   // Participation history
   has_participated_before?: boolean;
 
-  // Mentoring preferences
+  // Mentoring preferences (legacy fields kept for old cohorts)
   motivation?: string;
   main_reason?: string;
   preferred_mentor_style?: string;
@@ -49,7 +49,18 @@ export interface MenteeData {
   // Additional computed fields
   goals_text?: string; // Combined motivation + main_reason + expectations
   languages?: string[];
-  seniority_band?: string; // Computed from experience_years
+  seniority_band?: string; // Direct from survey (S1, S2, M1, M2, D1, D2, VP, SVP, LT)
+
+  // === New survey revamp fields (capability-based model) ===
+  bio?: string;
+  primary_capability?: string;
+  primary_capability_detail?: string;
+  secondary_capability?: string;
+  secondary_capability_detail?: string;
+  primary_proficiency?: number; // 1-4
+  secondary_proficiency?: number; // 1-4
+  mentoring_goal?: string;
+  practice_scenarios?: string[];
 }
 
 export interface MentorData {
@@ -57,10 +68,10 @@ export interface MentorData {
   name?: string; // From "Full Name" column
   pronouns?: string;
   role: string;
-  experience_years: string;
+  experience_years: string; // legacy
   location_timezone: string;
 
-  // Life experiences they can relate to
+  // Life experiences they can relate to (legacy, kept for old cohorts)
   returning_from_leave?: boolean;
   navigating_menopause?: boolean;
   career_break?: boolean;
@@ -72,16 +83,16 @@ export interface MentorData {
   internal_moves?: boolean;
   other_experience?: string;
 
-  // Areas they can mentor in
+  // Areas they can mentor in (legacy array, still populated from capabilities)
   topics_to_mentor: string[];
 
-  // Mentoring approach
+  // Mentoring approach (legacy fields kept for old cohorts)
   has_mentored_before: boolean;
   mentoring_style: string;
   meeting_style: string;
   mentor_energy: string;
   feedback_style: string;
-  preferred_mentee_levels: string[]; // "Early-career", "Mid-level", "Senior stretch role"
+  preferred_mentee_levels: string[];
   topics_not_to_mentor?: string[];
   meeting_frequency: string;
   motivation: string;
@@ -97,25 +108,45 @@ export interface MentorData {
   languages?: string[];
   capacity_remaining: number; // How many mentees they can take
   industry?: string;
-  role_band?: string; // Computed from role + experience
-  seniority_band?: string; // IC1-IC5, M1-M2 mapping
+  role_band?: string;
+  seniority_band?: string; // Direct from survey (S1, S2, M1, M2, D1, D2, VP, SVP, LT)
+
+  // === New survey revamp fields (capability-based model) ===
+  bio?: string;
+  mentor_motivation?: string;
+  mentoring_experience?: string; // Richer than boolean has_mentored_before
+  first_time_support?: string[];
+  primary_capability?: string;
+  primary_capability_detail?: string;
+  secondary_capabilities?: string[]; // Multi-select array
+  secondary_capability_detail?: string;
+  primary_proficiency?: number; // 1-5
+  practice_scenarios?: string[];
+  hard_earned_lesson?: string;
+  natural_strengths?: string[];
+  excluded_scenarios?: string[];
+  match_exclusions?: string;
 }
 
 // Matching algorithm types
 export interface MatchingFilters {
-  min_language_overlap: number;
-  max_timezone_difference: number; // in hours
+  max_timezone_difference: number; // in hours (6h hard block)
   require_available_capacity: boolean;
+  // Legacy fields kept for backward compat
+  min_language_overlap?: number;
 }
 
 export interface MatchingFeatures {
-  topics_overlap: number; // 0-1, Jaccard similarity
-  industry_overlap: number; // 0-1, binary match
-  role_seniority_fit: number; // 0-1, seniority appropriateness
-  semantic_similarity: number; // 0-1, text similarity of goals vs bio
-  tz_overlap_bonus: number; // 0-1, timezone proximity bonus
-  language_bonus: number; // 0-1, primary language match bonus
-  capacity_penalty: number; // 0-1, penalty for low capacity
+  capability_match: number; // 0-1, tiered capability scoring (45% weight)
+  semantic_similarity: number; // 0-1, text similarity of goals vs bio (30% weight)
+  domain_match: number; // 0-1, domain detail text similarity (5% weight)
+  role_seniority_fit: number; // 0-1, seniority appropriateness (10% weight)
+  tz_overlap_bonus: number; // 0-1, timezone proximity bonus (5% weight)
+  capacity_penalty: number; // 0-1, penalty for low capacity (-10% weight)
+  // Legacy fields kept for backward compat
+  topics_overlap?: number;
+  industry_overlap?: number;
+  language_bonus?: number;
 }
 
 export interface MatchScore {
@@ -253,7 +284,7 @@ export const DEVELOPMENT_TOPICS = [
 
 export type DevelopmentTopic = typeof DEVELOPMENT_TOPICS[number];
 
-// Experience level mappings for seniority calculation
+// Legacy experience level mappings (kept for old cohorts)
 export const EXPERIENCE_MAPPING = {
   "0-2": "IC1",
   "3–5": "IC2",
@@ -261,15 +292,40 @@ export const EXPERIENCE_MAPPING = {
   "10+": "IC4"
 } as const;
 
-export const SENIORITY_SCORES = {
+// Legacy seniority scores (for old cohorts using IC1-M2 bands)
+export const LEGACY_SENIORITY_SCORES: Record<string, number> = {
   "IC1": 1,
   "IC2": 2,
   "IC3": 3,
   "IC4": 4,
   "IC5": 5,
   "M1": 6,
-  "M2": 7
-} as const;
+  "M2": 7,
+};
+
+// New seniority levels from survey (S1–LT, direct from Col 9)
+// Mentor should be ≥1 level above mentee for a good fit
+export const SENIORITY_SCORES: Record<string, number> = {
+  "S1": 1,
+  "S2": 2,
+  "M1": 3,
+  "M2": 4,
+  "D1": 5,
+  "D2": 6,
+  "VP": 7,
+  "SVP": 8,
+  "LT": 9,
+};
+
+// Journey phases for session-based next-steps messaging
+export type JourneyPhase = 'getting_started' | 'building' | 'midpoint' | 'wrapping_up';
+
+export const JOURNEY_PHASES: { key: JourneyPhase; label: string }[] = [
+  { key: 'getting_started', label: 'Getting Started' },
+  { key: 'building', label: 'Building' },
+  { key: 'midpoint', label: 'Midpoint Check-in' },
+  { key: 'wrapping_up', label: 'Wrapping Up' },
+];
 
 // Session management types (simplified for meeting logging)
 export interface Session {
@@ -283,6 +339,7 @@ export interface Session {
   mentee_rating?: number; // Optional 1-5 rating
   mentor_feedback?: string;
   mentee_feedback?: string;
+  journey_phase?: JourneyPhase | null;
   created_at: string;
   updated_at: string;
   // Populated fields

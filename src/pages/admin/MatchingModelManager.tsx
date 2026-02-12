@@ -415,13 +415,13 @@ export default function MatchingModelManager() {
                 <>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span>Topics Match</span>
-                      <span className="font-medium">{editWeights.topics}%</span>
+                      <span>Capability Match</span>
+                      <span className="font-medium">{editWeights.capability}%</span>
                     </div>
                     <Slider
-                      value={[editWeights.topics]}
+                      value={[editWeights.capability]}
                       onValueChange={([v]) =>
-                        setEditWeights({ ...editWeights, topics: v })
+                        setEditWeights({ ...editWeights, capability: v })
                       }
                       max={100}
                       step={5}
@@ -443,13 +443,13 @@ export default function MatchingModelManager() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span>Industry Match</span>
-                      <span className="font-medium">{editWeights.industry}%</span>
+                      <span>Domain Detail Match</span>
+                      <span className="font-medium">{editWeights.domain}%</span>
                     </div>
                     <Slider
-                      value={[editWeights.industry]}
+                      value={[editWeights.domain]}
                       onValueChange={([v]) =>
-                        setEditWeights({ ...editWeights, industry: v })
+                        setEditWeights({ ...editWeights, domain: v })
                       }
                       max={100}
                       step={5}
@@ -485,20 +485,6 @@ export default function MatchingModelManager() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span>Language Bonus</span>
-                      <span className="font-medium">{editWeights.language}%</span>
-                    </div>
-                    <Slider
-                      value={[editWeights.language]}
-                      onValueChange={([v]) =>
-                        setEditWeights({ ...editWeights, language: v })
-                      }
-                      max={100}
-                      step={5}
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
                       <span>Capacity Penalty</span>
                       <span className="font-medium">{editWeights.capacity_penalty}%</span>
                     </div>
@@ -513,12 +499,11 @@ export default function MatchingModelManager() {
                   </div>
                   <div className="pt-2 text-sm text-muted-foreground">
                     Total:{' '}
-                    {editWeights.topics +
+                    {editWeights.capability +
                       editWeights.semantic +
-                      editWeights.industry +
+                      editWeights.domain +
                       editWeights.seniority +
-                      editWeights.timezone +
-                      editWeights.language}
+                      editWeights.timezone}
                     % (excluding penalty)
                   </div>
                 </>
@@ -528,23 +513,6 @@ export default function MatchingModelManager() {
             <TabsContent value="filters" className="space-y-4 mt-4">
               {editFilters && (
                 <>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span>Minimum Language Overlap</span>
-                      <span className="font-medium">
-                        {editFilters.min_language_overlap} language(s)
-                      </span>
-                    </div>
-                    <Slider
-                      value={[editFilters.min_language_overlap]}
-                      onValueChange={([v]) =>
-                        setEditFilters({ ...editFilters, min_language_overlap: v })
-                      }
-                      min={0}
-                      max={3}
-                      step={1}
-                    />
-                  </div>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span>Maximum Timezone Difference</span>

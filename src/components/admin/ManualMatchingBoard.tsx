@@ -564,20 +564,36 @@ export function ManualMatchingBoard({
                         </div>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {mentee.topics_to_learn.slice(0, 3).map(topic => (
-                          <Badge
-                            key={topic}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
-                            {topic}
-                          </Badge>
-                        ))}
-                        {mentee.topics_to_learn.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{mentee.topics_to_learn.length - 3}
-                          </Badge>
+                        {mentee.primary_capability ? (
+                          <>
+                            <Badge variant="default" className="text-xs">
+                              <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                              {mentee.primary_capability}
+                            </Badge>
+                            {mentee.secondary_capability && (
+                              <Badge variant="outline" className="text-xs">
+                                {mentee.secondary_capability}
+                              </Badge>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {mentee.topics_to_learn.slice(0, 3).map(topic => (
+                              <Badge
+                                key={topic}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                                {topic}
+                              </Badge>
+                            ))}
+                            {mentee.topics_to_learn.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{mentee.topics_to_learn.length - 3}
+                              </Badge>
+                            )}
+                          </>
                         )}
                       </div>
                       {mentee.location_timezone && (
@@ -730,7 +746,7 @@ export function ManualMatchingBoard({
               <div className="mt-2 p-2 bg-primary/5 rounded-md text-xs">
                 <span className="font-medium">Selecting for:</span>{' '}
                 {selectedMentee.name} — looking for:{' '}
-                {selectedMentee.topics_to_learn.join(', ')}
+                {selectedMentee.primary_capability || selectedMentee.topics_to_learn.join(', ')}
               </div>
             )}
           </CardHeader>
@@ -805,29 +821,58 @@ export function ManualMatchingBoard({
                             </div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1">
-                            {mentor.topics_to_mentor.slice(0, 3).map(topic => {
-                              const isShared = topicOverlap.some(
-                                t => t.toLowerCase() === topic.toLowerCase()
-                              );
-                              return (
+                            {mentor.primary_capability ? (
+                              <>
                                 <Badge
-                                  key={topic}
-                                  variant={isShared ? 'default' : 'outline'}
+                                  variant={topicOverlap.some(t => t.toLowerCase() === mentor.primary_capability!.toLowerCase()) ? 'default' : 'outline'}
                                   className={cn(
                                     'text-xs',
-                                    isShared &&
-                                      'bg-green-600 hover:bg-green-600'
+                                    topicOverlap.some(t => t.toLowerCase() === mentor.primary_capability!.toLowerCase()) && 'bg-green-600 hover:bg-green-600'
                                   )}
                                 >
                                   <Briefcase className="w-2.5 h-2.5 mr-0.5" />
-                                  {topic}
+                                  {mentor.primary_capability}
                                 </Badge>
-                              );
-                            })}
-                            {mentor.topics_to_mentor.length > 3 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{mentor.topics_to_mentor.length - 3}
-                              </Badge>
+                                {(mentor.secondary_capabilities || []).slice(0, 2).map(cap => {
+                                  const isShared = topicOverlap.some(t => t.toLowerCase() === cap.toLowerCase());
+                                  return (
+                                    <Badge key={cap} variant={isShared ? 'default' : 'outline'} className={cn('text-xs', isShared && 'bg-green-600 hover:bg-green-600')}>
+                                      {cap}
+                                    </Badge>
+                                  );
+                                })}
+                                {(mentor.secondary_capabilities || []).length > 2 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{mentor.secondary_capabilities!.length - 2}
+                                  </Badge>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {mentor.topics_to_mentor.slice(0, 3).map(topic => {
+                                  const isShared = topicOverlap.some(
+                                    t => t.toLowerCase() === topic.toLowerCase()
+                                  );
+                                  return (
+                                    <Badge
+                                      key={topic}
+                                      variant={isShared ? 'default' : 'outline'}
+                                      className={cn(
+                                        'text-xs',
+                                        isShared && 'bg-green-600 hover:bg-green-600'
+                                      )}
+                                    >
+                                      <Briefcase className="w-2.5 h-2.5 mr-0.5" />
+                                      {topic}
+                                    </Badge>
+                                  );
+                                })}
+                                {mentor.topics_to_mentor.length > 3 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{mentor.topics_to_mentor.length - 3}
+                                  </Badge>
+                                )}
+                              </>
                             )}
                           </div>
                           {mentor.location_timezone && (
@@ -1098,6 +1143,7 @@ export function ManualMatchingBoard({
           </DialogHeader>
           {previewProfile?.type === 'mentee' && (() => {
             const m = previewProfile.data as MenteeData;
+            const hasNewFields = !!(m.primary_capability || m.mentoring_goal);
             const lifeExperiences = [
               ...(m.life_experiences || []),
               ...(m.returning_from_leave ? ['Returning from leave'] : []),
@@ -1121,38 +1167,25 @@ export function ManualMatchingBoard({
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span><span className="font-medium">Experience:</span> {m.experience_years}</span>
-                  </div>
+                  {m.seniority_band && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span><span className="font-medium">Level:</span> {m.seniority_band}</span>
+                    </div>
+                  )}
+                  {!m.seniority_band && m.experience_years && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span><span className="font-medium">Experience:</span> {m.experience_years}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span>{m.location_timezone}</span>
                   </div>
-                  {m.seniority_band && (
-                    <div><Badge variant="secondary" className="text-xs">{m.seniority_band}</Badge></div>
-                  )}
-                  {m.department && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Department:</span> {m.department}
-                    </div>
-                  )}
-                  {m.job_grade && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Job Grade:</span> {m.job_grade}
-                    </div>
-                  )}
                   {m.email && (
                     <div className="flex items-center gap-2">
                       <span className="font-medium">Email:</span> {m.email}
-                    </div>
-                  )}
-                  {m.languages && m.languages.length > 0 && (
-                    <div className="col-span-2 sm:col-span-3 flex items-center gap-2 flex-wrap">
-                      <span className="font-medium">Languages:</span>
-                      {m.languages.map(lang => (
-                        <Badge key={lang} variant="outline" className="text-xs">{lang}</Badge>
-                      ))}
                     </div>
                   )}
                   {m.has_participated_before !== undefined && (
@@ -1164,16 +1197,77 @@ export function ManualMatchingBoard({
                   )}
                 </div>
 
-                <div>
-                  <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                    <BookOpen className="w-4 h-4" /> Topics to Learn
-                  </h4>
-                  <div className="flex flex-wrap gap-1">
-                    {m.topics_to_learn.map(topic => (
-                      <Badge key={topic} variant="outline">{topic}</Badge>
-                    ))}
+                {m.bio && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bio</span>
+                    <p className="text-sm mt-0.5">{m.bio}</p>
                   </div>
-                </div>
+                )}
+
+                {hasNewFields ? (
+                  <>
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4" /> Capabilities to Build
+                      </h4>
+                      <div className="space-y-2">
+                        {m.primary_capability && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="default">{m.primary_capability}</Badge>
+                            <span className="text-xs text-muted-foreground">Primary</span>
+                            {m.primary_proficiency && (
+                              <span className="text-xs text-muted-foreground">(Proficiency: {m.primary_proficiency}/4)</span>
+                            )}
+                          </div>
+                        )}
+                        {m.primary_capability_detail && (
+                          <p className="text-xs text-muted-foreground ml-2">{m.primary_capability_detail}</p>
+                        )}
+                        {m.secondary_capability && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline">{m.secondary_capability}</Badge>
+                            <span className="text-xs text-muted-foreground">Secondary</span>
+                            {m.secondary_proficiency && (
+                              <span className="text-xs text-muted-foreground">(Proficiency: {m.secondary_proficiency}/4)</span>
+                            )}
+                          </div>
+                        )}
+                        {m.secondary_capability_detail && (
+                          <p className="text-xs text-muted-foreground ml-2">{m.secondary_capability_detail}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {m.mentoring_goal && (
+                      <div>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Mentoring Goal</span>
+                        <p className="text-sm mt-0.5">{m.mentoring_goal}</p>
+                      </div>
+                    )}
+
+                    {m.practice_scenarios && m.practice_scenarios.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2">Practice Scenarios</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {m.practice_scenarios.map(s => (
+                            <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4" /> Topics to Learn
+                    </h4>
+                    <div className="flex flex-wrap gap-1">
+                      {m.topics_to_learn.map(topic => (
+                        <Badge key={topic} variant="outline">{topic}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {uniqueExperiences.length > 0 && (
                   <div>
@@ -1186,7 +1280,95 @@ export function ManualMatchingBoard({
                   </div>
                 )}
 
-                {(m.motivation || m.main_reason || m.goals_text || m.expectations) && (
+                {hasNewFields ? (
+                  (m.mentor_help_wanted || m.preferred_style || m.feedback_preference || m.mentor_experience_importance) && (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">Mentoring Preferences</h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        {m.preferred_style && (
+                          <div>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Session Style</span>
+                            <p className="mt-0.5">{m.preferred_style}</p>
+                          </div>
+                        )}
+                        {m.feedback_preference && (
+                          <div>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedback Style</span>
+                            <p className="mt-0.5">{m.feedback_preference}</p>
+                          </div>
+                        )}
+                        {m.mentor_experience_importance && (
+                          <div className="col-span-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Open to First-Time Mentor?</span>
+                            <p className="mt-0.5">{m.mentor_experience_importance}</p>
+                          </div>
+                        )}
+                        {m.mentor_help_wanted && m.mentor_help_wanted.length > 0 && (
+                          <div className="col-span-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Kind of Mentor Help Wanted</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {m.mentor_help_wanted.map(h => (
+                                <Badge key={h} variant="outline" className="text-xs">{h}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  (m.preferred_mentor_style || m.preferred_mentor_energy || m.feedback_preference || m.mentor_experience_importance || m.what_not_wanted || m.meeting_frequency || m.desired_qualities) && (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">Mentoring Preferences</h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        {m.preferred_mentor_style && (
+                          <div>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferred Style</span>
+                            <p className="mt-0.5">{m.preferred_mentor_style}</p>
+                          </div>
+                        )}
+                        {m.preferred_mentor_energy && (
+                          <div>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferred Energy</span>
+                            <p className="mt-0.5">{m.preferred_mentor_energy}</p>
+                          </div>
+                        )}
+                        {m.feedback_preference && (
+                          <div>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedback Preference</span>
+                            <p className="mt-0.5">{m.feedback_preference}</p>
+                          </div>
+                        )}
+                        {m.meeting_frequency && (
+                          <div>
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Meeting Frequency</span>
+                            <p className="mt-0.5">{m.meeting_frequency}</p>
+                          </div>
+                        )}
+                        {m.mentor_experience_importance && (
+                          <div className="col-span-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">How Important Is Mentor Experience?</span>
+                            <p className="mt-0.5">{m.mentor_experience_importance}</p>
+                          </div>
+                        )}
+                        {m.desired_qualities && (
+                          <div className="col-span-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Desired Qualities in a Mentor</span>
+                            <p className="mt-0.5">{m.desired_qualities}</p>
+                          </div>
+                        )}
+                        {m.what_not_wanted && (
+                          <div className="col-span-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">What They Don't Want</span>
+                            <p className="mt-0.5 text-red-700">{m.what_not_wanted}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {!hasNewFields && (m.motivation || m.main_reason || m.goals_text || m.expectations) && (
                   <div className="space-y-3">
                     <h4 className="font-semibold text-sm">What They Want</h4>
                     {m.motivation && (
@@ -1215,61 +1397,12 @@ export function ManualMatchingBoard({
                     )}
                   </div>
                 )}
-
-                {(m.preferred_mentor_style || m.preferred_mentor_energy || m.feedback_preference || m.mentor_experience_importance || m.what_not_wanted || m.meeting_frequency || m.desired_qualities) && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold text-sm">Mentoring Preferences</h4>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      {m.preferred_mentor_style && (
-                        <div>
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferred Style</span>
-                          <p className="mt-0.5">{m.preferred_mentor_style}</p>
-                        </div>
-                      )}
-                      {m.preferred_mentor_energy && (
-                        <div>
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferred Energy</span>
-                          <p className="mt-0.5">{m.preferred_mentor_energy}</p>
-                        </div>
-                      )}
-                      {m.feedback_preference && (
-                        <div>
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedback Preference</span>
-                          <p className="mt-0.5">{m.feedback_preference}</p>
-                        </div>
-                      )}
-                      {m.meeting_frequency && (
-                        <div>
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Meeting Frequency</span>
-                          <p className="mt-0.5">{m.meeting_frequency}</p>
-                        </div>
-                      )}
-                      {m.mentor_experience_importance && (
-                        <div className="col-span-2">
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">How Important Is Mentor Experience?</span>
-                          <p className="mt-0.5">{m.mentor_experience_importance}</p>
-                        </div>
-                      )}
-                      {m.desired_qualities && (
-                        <div className="col-span-2">
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Desired Qualities in a Mentor</span>
-                          <p className="mt-0.5">{m.desired_qualities}</p>
-                        </div>
-                      )}
-                      {m.what_not_wanted && (
-                        <div className="col-span-2">
-                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">What They Don't Want</span>
-                          <p className="mt-0.5 text-red-700">{m.what_not_wanted}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })()}
           {previewProfile?.type === 'mentor' && (() => {
             const m = previewProfile.data as MentorData;
+            const hasNewFields = !!(m.primary_capability || m.mentor_motivation);
             const lifeExperiences = [
               ...(m.returning_from_leave ? ['Returning from leave'] : []),
               ...(m.navigating_menopause ? ['Navigating menopause'] : []),
@@ -1291,10 +1424,18 @@ export function ManualMatchingBoard({
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span><span className="font-medium">Experience:</span> {m.experience_years}</span>
-                  </div>
+                  {m.seniority_band && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span><span className="font-medium">Level:</span> {m.seniority_band}</span>
+                    </div>
+                  )}
+                  {!m.seniority_band && m.experience_years && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span><span className="font-medium">Experience:</span> {m.experience_years}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span>{m.location_timezone}</span>
@@ -1303,27 +1444,9 @@ export function ManualMatchingBoard({
                     <Users className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span><span className="font-medium">Capacity:</span> {m.capacity_remaining} slots</span>
                   </div>
-                  {m.seniority_band && (
-                    <div><Badge variant="secondary" className="text-xs">{m.seniority_band}</Badge></div>
-                  )}
-                  {m.department && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Department:</span> {m.department}
-                    </div>
-                  )}
-                  {m.job_grade && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Job Grade:</span> {m.job_grade}
-                    </div>
-                  )}
                   {m.email && (
                     <div className="flex items-center gap-2">
                       <span className="font-medium">Email:</span> {m.email}
-                    </div>
-                  )}
-                  {m.industry && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Industry:</span> {m.industry}
                     </div>
                   )}
                   <div>
@@ -1331,36 +1454,131 @@ export function ManualMatchingBoard({
                       {m.has_mentored_before ? 'Experienced mentor' : 'First-time mentor'}
                     </Badge>
                   </div>
-                  {m.languages && m.languages.length > 0 && (
-                    <div className="col-span-2 sm:col-span-3 flex items-center gap-2 flex-wrap">
-                      <span className="font-medium">Languages:</span>
-                      {m.languages.map(lang => (
-                        <Badge key={lang} variant="outline" className="text-xs">{lang}</Badge>
-                      ))}
+                  {m.mentoring_experience && (
+                    <div className="col-span-2 sm:col-span-3 text-xs text-muted-foreground">
+                      {m.mentoring_experience}
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                    <BookOpen className="w-4 h-4" /> Topics to Mentor
-                  </h4>
-                  <div className="flex flex-wrap gap-1">
-                    {m.topics_to_mentor.map(topic => (
-                      <Badge key={topic} variant="outline">{topic}</Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {m.topics_not_to_mentor && m.topics_not_to_mentor.length > 0 && (
+                {(m.bio || m.bio_text) && (
                   <div>
-                    <h4 className="font-semibold text-sm mb-2 text-red-700">Topics They Don't Want to Mentor</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {m.topics_not_to_mentor.map(topic => (
-                        <Badge key={topic} variant="outline" className="border-red-200 text-red-700 text-xs">{topic}</Badge>
-                      ))}
-                    </div>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bio</span>
+                    <p className="text-sm mt-0.5">{m.bio || m.bio_text}</p>
                   </div>
+                )}
+
+                {hasNewFields ? (
+                  <>
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4" /> Capabilities to Mentor
+                      </h4>
+                      <div className="space-y-2">
+                        {m.primary_capability && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="default">{m.primary_capability}</Badge>
+                            <span className="text-xs text-muted-foreground">Primary</span>
+                            {m.primary_proficiency && (
+                              <span className="text-xs text-muted-foreground">(Proficiency: {m.primary_proficiency}/5)</span>
+                            )}
+                          </div>
+                        )}
+                        {m.primary_capability_detail && (
+                          <p className="text-xs text-muted-foreground ml-2">{m.primary_capability_detail}</p>
+                        )}
+                        {m.secondary_capabilities && m.secondary_capabilities.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {m.secondary_capabilities.map(cap => (
+                              <Badge key={cap} variant="outline">{cap}</Badge>
+                            ))}
+                            <span className="text-xs text-muted-foreground">Secondary</span>
+                          </div>
+                        )}
+                        {m.secondary_capability_detail && (
+                          <p className="text-xs text-muted-foreground ml-2">{m.secondary_capability_detail}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {m.mentor_motivation && (
+                      <div>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Why They Want to Mentor</span>
+                        <p className="text-sm mt-0.5">{m.mentor_motivation}</p>
+                      </div>
+                    )}
+
+                    {m.hard_earned_lesson && (
+                      <div>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hard-Earned Lesson</span>
+                        <p className="text-sm mt-0.5">{m.hard_earned_lesson}</p>
+                      </div>
+                    )}
+
+                    {m.natural_strengths && m.natural_strengths.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2">Natural Strengths</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {m.natural_strengths.map(s => (
+                            <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {m.practice_scenarios && m.practice_scenarios.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2">Practice Scenarios</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {m.practice_scenarios.map(s => (
+                            <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {m.excluded_scenarios && m.excluded_scenarios.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2 text-red-700">Scenarios They Prefer Not to Support</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {m.excluded_scenarios.map(s => (
+                            <Badge key={s} variant="outline" className="border-red-200 text-red-700 text-xs">{s}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {m.match_exclusions && (
+                      <div>
+                        <span className="text-xs font-medium text-red-700 uppercase tracking-wide">Match Exclusions</span>
+                        <p className="text-sm mt-0.5 text-red-700">{m.match_exclusions}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4" /> Topics to Mentor
+                      </h4>
+                      <div className="flex flex-wrap gap-1">
+                        {m.topics_to_mentor.map(topic => (
+                          <Badge key={topic} variant="outline">{topic}</Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {m.topics_not_to_mentor && m.topics_not_to_mentor.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm mb-2 text-red-700">Topics They Don't Want to Mentor</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {m.topics_not_to_mentor.map(topic => (
+                            <Badge key={topic} variant="outline" className="border-red-200 text-red-700 text-xs">{topic}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {lifeExperiences.length > 0 && (
@@ -1377,42 +1595,24 @@ export function ManualMatchingBoard({
                 <div className="space-y-3">
                   <h4 className="font-semibold text-sm">Mentoring Approach</h4>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                    {m.mentoring_style && (
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Style</span>
-                        <p className="mt-0.5">{m.mentoring_style}</p>
-                      </div>
-                    )}
-                    {m.mentor_energy && (
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Energy</span>
-                        <p className="mt-0.5">{m.mentor_energy}</p>
-                      </div>
-                    )}
                     {m.meeting_style && (
                       <div>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Meeting Style</span>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Session Style</span>
                         <p className="mt-0.5">{m.meeting_style}</p>
                       </div>
                     )}
-                    {m.feedback_style && (
+                    {m.mentoring_style && (
                       <div>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedback Style</span>
-                        <p className="mt-0.5">{m.feedback_style}</p>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Mentoring Style</span>
+                        <p className="mt-0.5">{m.mentoring_style}</p>
                       </div>
                     )}
-                    {m.meeting_frequency && (
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Meeting Frequency</span>
-                        <p className="mt-0.5">{m.meeting_frequency}</p>
-                      </div>
-                    )}
-                    {m.preferred_mentee_levels && m.preferred_mentee_levels.length > 0 && (
+                    {m.first_time_support && m.first_time_support.length > 0 && (
                       <div className="col-span-2">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferred Mentee Levels</span>
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">First-Time Support Needed</span>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {m.preferred_mentee_levels.map(level => (
-                            <Badge key={level} variant="outline" className="text-xs">{level}</Badge>
+                          {m.first_time_support.map(s => (
+                            <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
                           ))}
                         </div>
                       </div>
@@ -1420,15 +1620,9 @@ export function ManualMatchingBoard({
                   </div>
                 </div>
 
-                {(m.motivation || m.expectations || m.bio_text) && (
+                {!hasNewFields && (m.motivation || m.expectations) && (
                   <div className="space-y-3">
                     <h4 className="font-semibold text-sm">About</h4>
-                    {m.bio_text && (
-                      <div>
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bio</span>
-                        <p className="text-sm mt-0.5">{m.bio_text}</p>
-                      </div>
-                    )}
                     {m.motivation && (
                       <div>
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Motivation</span>

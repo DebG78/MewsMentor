@@ -11,6 +11,12 @@ import type { CreateVIPScoreInput, PersonType } from '@/types/vip';
 import type { CreateMetricSnapshotInput } from '@/types/metrics';
 import type { CreateSessionInput, SessionStatus } from '@/lib/sessionService';
 import { resolvePairByName, type ResolvedPair } from '@/lib/personPairResolver';
+import {
+  isNewSurveyFormat,
+  extractSharedFields,
+  extractMenteeFields,
+  extractMentorFields,
+} from '@/lib/surveyFieldMapping';
 import * as XLSX from 'xlsx';
 
 // CSV parsing utility
@@ -682,6 +688,140 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
   };
 }
 
+// ============================================================================
+// NEW SURVEY FORMAT PARSERS (Q2 2026+ capability-based model)
+// ============================================================================
+
+/**
+ * Parse a mentee from the new survey format (MS Forms with full question text headers).
+ * Extracts shared bio fields + mentee-specific capability fields.
+ * Also populates legacy fields (topics_to_learn) for backward compatibility.
+ */
+export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: number): MenteeData | null {
+  const shared = extractSharedFields(row);
+  const mentee = extractMenteeFields(row);
+
+  // For "both" respondents, mentee fields might be minimal but should still parse
+  if (!mentee && shared.role_selection === 'mentee') {
+    // Mentee with no capability data — still create record with shared fields
+  } else if (!mentee) {
+    return null;
+  }
+
+  // Build legacy topics_to_learn array from capabilities
+  const topicsToLearn: string[] = [];
+  if (mentee?.primary_capability) topicsToLearn.push(mentee.primary_capability);
+  if (mentee?.secondary_capability) topicsToLearn.push(mentee.secondary_capability);
+
+  // Build goals_text from mentoring goal
+  const goalsText = mentee?.mentoring_goal || '';
+
+  // Generate a stable ID from name + email
+  const nameForId = shared.name || shared.email || `row-${rowIndex}`;
+  const id = nameForId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+
+  return {
+    id,
+    name: shared.name,
+    role: shared.role,
+    experience_years: '', // Not asked in new survey
+    location_timezone: shared.location_timezone,
+    email: shared.email,
+    seniority_band: shared.seniority_band,
+
+    // Legacy fields (populated for backward compat)
+    life_experiences: [],
+    topics_to_learn: topicsToLearn,
+    meeting_frequency: '', // Not asked in new survey
+    languages: ['English'],
+    goals_text: goalsText,
+
+    // Preferences (mapped from new fields or kept from matching headers)
+    preferred_mentor_style: mentee?.preferred_style,
+    feedback_preference: mentee?.feedback_preference,
+    mentor_experience_importance: mentee?.mentor_experience_importance,
+    desired_qualities: mentee?.mentor_help_wanted?.join('; '),
+
+    // New survey revamp fields
+    bio: shared.bio,
+    primary_capability: mentee?.primary_capability,
+    primary_capability_detail: mentee?.primary_capability_detail,
+    secondary_capability: mentee?.secondary_capability,
+    secondary_capability_detail: mentee?.secondary_capability_detail,
+    primary_proficiency: mentee?.primary_proficiency,
+    secondary_proficiency: mentee?.secondary_proficiency,
+    mentoring_goal: mentee?.mentoring_goal,
+    practice_scenarios: mentee?.practice_scenarios || [],
+  };
+}
+
+/**
+ * Parse a mentor from the new survey format.
+ * Extracts shared bio fields + mentor-specific capability fields.
+ * Also populates legacy fields (topics_to_mentor) for backward compatibility.
+ */
+export function parseNewFormatMentorRow(row: Record<string, string>, rowIndex: number): MentorData | null {
+  const shared = extractSharedFields(row);
+  const mentor = extractMentorFields(row);
+
+  if (!mentor && shared.role_selection === 'mentor') {
+    // Mentor with no capability data — still create record with shared fields
+  } else if (!mentor) {
+    return null;
+  }
+
+  // Build legacy topics_to_mentor array from capabilities
+  const topicsToMentor: string[] = [];
+  if (mentor?.primary_capability) topicsToMentor.push(mentor.primary_capability);
+  if (mentor?.secondary_capabilities) topicsToMentor.push(...mentor.secondary_capabilities);
+
+  // Generate a stable ID from name + email
+  const nameForId = shared.name || shared.email || `row-${rowIndex}`;
+  const id = nameForId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+
+  return {
+    id,
+    name: shared.name,
+    role: shared.role,
+    experience_years: '', // Not asked in new survey
+    location_timezone: shared.location_timezone,
+    email: shared.email,
+    seniority_band: shared.seniority_band,
+    industry: shared.industry,
+
+    // Legacy fields (populated for backward compat)
+    topics_to_mentor: topicsToMentor,
+    has_mentored_before: mentor?.has_mentored_before ?? false,
+    mentoring_style: '',
+    meeting_style: mentor?.meeting_style || '',
+    mentor_energy: '',
+    feedback_style: '',
+    preferred_mentee_levels: [],
+    topics_not_to_mentor: mentor?.topics_not_to_mentor,
+    meeting_frequency: '', // Not asked in new survey
+    motivation: mentor?.mentor_motivation || '',
+    expectations: '',
+    capacity_remaining: mentor?.capacity_remaining ?? 1,
+    languages: ['English'],
+
+    // New survey revamp fields
+    bio: shared.bio,
+    mentor_motivation: mentor?.mentor_motivation,
+    mentoring_experience: mentor?.mentoring_experience,
+    first_time_support: mentor?.first_time_support || [],
+    primary_capability: mentor?.primary_capability,
+    primary_capability_detail: mentor?.primary_capability_detail,
+    secondary_capabilities: mentor?.secondary_capabilities || [],
+    secondary_capability_detail: mentor?.secondary_capability_detail,
+    primary_proficiency: mentor?.primary_proficiency,
+    practice_scenarios: mentor?.practice_scenarios || [],
+    hard_earned_lesson: mentor?.hard_earned_lesson,
+    natural_strengths: mentor?.natural_strengths || [],
+    excluded_scenarios: mentor?.excluded_scenarios || [],
+    match_exclusions: mentor?.match_exclusions,
+  };
+}
+
 // Parse Excel file to array of row objects
 async function parseExcelFile(file: File): Promise<Record<string, string>[]> {
   const arrayBuffer = await file.arrayBuffer();
@@ -739,46 +879,74 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
       return { mentees, mentors, errors, warnings };
     }
 
-    // Process each row
-    rows.forEach((row, index) => {
-      const rowType = identifyRowType(row);
+    // Auto-detect survey format: new (Q2 2026+ capability-based) vs legacy (topic-based)
+    const useNewFormat = isNewSurveyFormat(rows[0]);
+    console.log(`Survey format detected: ${useNewFormat ? 'NEW (capability-based)' : 'LEGACY (topic-based)'}`);
 
-      if (rowType === 'mentee' || rowType === 'both') {
-        const mentee = parseMenteeRow(row);
-        if (mentee) {
-          // Validate required fields
-          if (!mentee.role) {
-            warnings.push(`Row ${index + 2}: Mentee missing role`);
+    if (useNewFormat) {
+      // New survey format: one file with all respondents, role from "participate as" column
+      rows.forEach((row, index) => {
+        const shared = extractSharedFields(row);
+        const role = shared.role_selection; // 'mentee', 'mentor', or 'both'
+
+        if (role === 'mentee' || role === 'both') {
+          const mentee = parseNewFormatMenteeRow(row, index);
+          if (mentee) {
+            mentees.push(mentee);
+          } else {
+            warnings.push(`Row ${index + 2}: Could not parse mentee data`);
           }
-          if (mentee.topics_to_learn.length === 0) {
-            warnings.push(`Row ${index + 2}: Mentee has no development topics selected`);
-          }
-          mentees.push(mentee);
-        } else {
-          warnings.push(`Row ${index + 2}: Could not parse mentee data`);
         }
-      }
 
-      if (rowType === 'mentor' || rowType === 'both') {
-        const mentor = parseMentorRow(row);
-        if (mentor) {
-          // Validate required fields
-          if (!mentor.role) {
-            warnings.push(`Row ${index + 2}: Mentor missing role`);
+        if (role === 'mentor' || role === 'both') {
+          const mentor = parseNewFormatMentorRow(row, index);
+          if (mentor) {
+            mentors.push(mentor);
+          } else {
+            warnings.push(`Row ${index + 2}: Could not parse mentor data`);
           }
-          if (mentor.topics_to_mentor.length === 0) {
-            warnings.push(`Row ${index + 2}: Mentor has no mentoring topics selected`);
-          }
-          mentors.push(mentor);
-        } else {
-          warnings.push(`Row ${index + 2}: Could not parse mentor data`);
         }
-      }
+      });
+    } else {
+      // Legacy format: separate files per role, header-based detection
+      rows.forEach((row, index) => {
+        const rowType = identifyRowType(row);
 
-      if (rowType === 'unknown') {
-        warnings.push(`Row ${index + 2}: Could not identify as mentor or mentee`);
-      }
-    });
+        if (rowType === 'mentee' || rowType === 'both') {
+          const mentee = parseMenteeRow(row);
+          if (mentee) {
+            if (!mentee.role) {
+              warnings.push(`Row ${index + 2}: Mentee missing role`);
+            }
+            if (mentee.topics_to_learn.length === 0) {
+              warnings.push(`Row ${index + 2}: Mentee has no development topics selected`);
+            }
+            mentees.push(mentee);
+          } else {
+            warnings.push(`Row ${index + 2}: Could not parse mentee data`);
+          }
+        }
+
+        if (rowType === 'mentor' || rowType === 'both') {
+          const mentor = parseMentorRow(row);
+          if (mentor) {
+            if (!mentor.role) {
+              warnings.push(`Row ${index + 2}: Mentor missing role`);
+            }
+            if (mentor.topics_to_mentor.length === 0) {
+              warnings.push(`Row ${index + 2}: Mentor has no mentoring topics selected`);
+            }
+            mentors.push(mentor);
+          } else {
+            warnings.push(`Row ${index + 2}: Could not parse mentor data`);
+          }
+        }
+
+        if (rowType === 'unknown') {
+          warnings.push(`Row ${index + 2}: Could not identify as mentor or mentee`);
+        }
+      });
+    }
 
     if (mentees.length === 0 && mentors.length === 0) {
       errors.push("No valid mentor or mentee data found");

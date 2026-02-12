@@ -23,9 +23,22 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 
 /**
  * Build a text string for embedding a mentee's profile.
- * Concatenates the most semantically meaningful fields.
+ * New survey: mentoring_goal + bio are the primary semantic fields.
+ * Falls back to legacy fields for old cohorts.
  */
 export function buildMenteeEmbeddingText(mentee: MenteeData): string {
+  // Prefer new survey fields
+  if (mentee.mentoring_goal || mentee.bio) {
+    const parts = [
+      mentee.mentoring_goal || '',
+      mentee.bio || '',
+      mentee.primary_capability ? `Capability: ${mentee.primary_capability}` : '',
+      mentee.secondary_capability ? `Secondary: ${mentee.secondary_capability}` : '',
+    ].filter(Boolean);
+    return parts.join('. ');
+  }
+
+  // Legacy fallback
   const parts = [
     mentee.goals_text || '',
     mentee.main_reason || '',
@@ -40,9 +53,23 @@ export function buildMenteeEmbeddingText(mentee: MenteeData): string {
 
 /**
  * Build a text string for embedding a mentor's profile.
- * Concatenates the most semantically meaningful fields.
+ * New survey: mentor_motivation + hard_earned_lesson + bio are the primary semantic fields.
+ * Falls back to legacy fields for old cohorts.
  */
 export function buildMentorEmbeddingText(mentor: MentorData): string {
+  // Prefer new survey fields
+  if (mentor.mentor_motivation || mentor.hard_earned_lesson || mentor.bio) {
+    const parts = [
+      mentor.mentor_motivation || '',
+      mentor.hard_earned_lesson || '',
+      mentor.bio || '',
+      mentor.primary_capability ? `Capability: ${mentor.primary_capability}` : '',
+      mentor.secondary_capabilities?.length ? `Also: ${mentor.secondary_capabilities.join(', ')}` : '',
+    ].filter(Boolean);
+    return parts.join('. ');
+  }
+
+  // Legacy fallback
   const parts = [
     mentor.bio_text || '',
     mentor.motivation || '',

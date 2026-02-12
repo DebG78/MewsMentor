@@ -17,13 +17,31 @@ export function getTopicDemandSupply(cohorts: Cohort[]): TopicDemandSupply[] {
 
   for (const cohort of cohorts) {
     for (const mentee of cohort.mentees) {
-      for (const topic of mentee.topics_to_learn || []) {
-        demandMap.set(topic, (demandMap.get(topic) || 0) + 1);
+      // New survey: use primary/secondary capability
+      if (mentee.primary_capability) {
+        demandMap.set(mentee.primary_capability, (demandMap.get(mentee.primary_capability) || 0) + 1);
+        if (mentee.secondary_capability) {
+          demandMap.set(mentee.secondary_capability, (demandMap.get(mentee.secondary_capability) || 0) + 1);
+        }
+      } else {
+        // Legacy: use topics_to_learn
+        for (const topic of mentee.topics_to_learn || []) {
+          demandMap.set(topic, (demandMap.get(topic) || 0) + 1);
+        }
       }
     }
     for (const mentor of cohort.mentors) {
-      for (const topic of mentor.topics_to_mentor || []) {
-        supplyMap.set(topic, (supplyMap.get(topic) || 0) + 1);
+      // New survey: use primary capability + secondary capabilities array
+      if (mentor.primary_capability) {
+        supplyMap.set(mentor.primary_capability, (supplyMap.get(mentor.primary_capability) || 0) + 1);
+        for (const cap of mentor.secondary_capabilities || []) {
+          supplyMap.set(cap, (supplyMap.get(cap) || 0) + 1);
+        }
+      } else {
+        // Legacy: use topics_to_mentor
+        for (const topic of mentor.topics_to_mentor || []) {
+          supplyMap.set(topic, (supplyMap.get(topic) || 0) + 1);
+        }
       }
     }
   }
@@ -62,8 +80,45 @@ function getExperienceBand(years: string): string {
 
 export function getExperienceDistribution(cohorts: Cohort[]): ExperienceBand[] {
   const bands = new Map<string, { mentors: number; mentees: number }>();
-  const orderedBands = ['0-2 years', '3-5 years', '6-10 years', '11-15 years', '15+ years', 'Unknown'];
 
+  // Check if any cohort uses new seniority bands (S1, S2, M1, etc.)
+  const hasNewFormat = cohorts.some(c =>
+    c.mentees.some(m => m.seniority_band && /^[SMDVL]/.test(m.seniority_band)) ||
+    c.mentors.some(m => m.seniority_band && /^[SMDVL]/.test(m.seniority_band))
+  );
+
+  if (hasNewFormat) {
+    const orderedBands = ['S1', 'S2', 'M1', 'M2', 'D1', 'D2', 'VP', 'SVP', 'LT', 'Unknown'];
+    for (const band of orderedBands) {
+      bands.set(band, { mentors: 0, mentees: 0 });
+    }
+
+    for (const cohort of cohorts) {
+      for (const mentee of cohort.mentees) {
+        const band = mentee.seniority_band || 'Unknown';
+        const entry = bands.get(band) || { mentors: 0, mentees: 0 };
+        entry.mentees++;
+        bands.set(band, entry);
+      }
+      for (const mentor of cohort.mentors) {
+        const band = mentor.seniority_band || 'Unknown';
+        const entry = bands.get(band) || { mentors: 0, mentees: 0 };
+        entry.mentors++;
+        bands.set(band, entry);
+      }
+    }
+
+    return orderedBands
+      .map(band => ({
+        band,
+        mentors: bands.get(band)?.mentors || 0,
+        mentees: bands.get(band)?.mentees || 0,
+      }))
+      .filter(b => b.mentors > 0 || b.mentees > 0);
+  }
+
+  // Legacy format: use experience_years
+  const orderedBands = ['0-2 years', '3-5 years', '6-10 years', '11-15 years', '15+ years', 'Unknown'];
   for (const band of orderedBands) {
     bands.set(band, { mentors: 0, mentees: 0 });
   }
@@ -257,12 +312,11 @@ export function getFeatureContributions(cohort: Cohort): FeatureContribution[] {
   if (!cohort.matches?.results) return [];
 
   const featureSums: Record<string, { sum: number; count: number }> = {
-    topics_overlap: { sum: 0, count: 0 },
-    industry_overlap: { sum: 0, count: 0 },
-    role_seniority_fit: { sum: 0, count: 0 },
+    capability_match: { sum: 0, count: 0 },
     semantic_similarity: { sum: 0, count: 0 },
+    domain_match: { sum: 0, count: 0 },
+    role_seniority_fit: { sum: 0, count: 0 },
     tz_overlap_bonus: { sum: 0, count: 0 },
-    language_bonus: { sum: 0, count: 0 },
   };
 
   for (const result of cohort.matches.results) {
@@ -282,12 +336,11 @@ export function getFeatureContributions(cohort: Cohort): FeatureContribution[] {
   }
 
   const featureLabels: Record<string, string> = {
-    topics_overlap: 'Topics',
-    industry_overlap: 'Industry',
+    capability_match: 'Capability',
+    semantic_similarity: 'Goals Alignment',
+    domain_match: 'Domain Detail',
     role_seniority_fit: 'Seniority',
-    semantic_similarity: 'AI Similarity',
     tz_overlap_bonus: 'Timezone',
-    language_bonus: 'Language',
   };
 
   return Object.entries(featureSums)
@@ -356,10 +409,20 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
     if (cohort.status === 'active') activeCohorts++;
 
     for (const mentee of cohort.mentees) {
-      for (const t of mentee.topics_to_learn || []) topics.add(t);
+      if (mentee.primary_capability) {
+        topics.add(mentee.primary_capability);
+        if (mentee.secondary_capability) topics.add(mentee.secondary_capability);
+      } else {
+        for (const t of mentee.topics_to_learn || []) topics.add(t);
+      }
     }
     for (const mentor of cohort.mentors) {
-      for (const t of mentor.topics_to_mentor || []) topics.add(t);
+      if (mentor.primary_capability) {
+        topics.add(mentor.primary_capability);
+        for (const c of mentor.secondary_capabilities || []) topics.add(c);
+      } else {
+        for (const t of mentor.topics_to_mentor || []) topics.add(t);
+      }
     }
 
     if (cohort.matches?.results) {

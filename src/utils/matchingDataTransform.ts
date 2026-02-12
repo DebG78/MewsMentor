@@ -125,30 +125,30 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
 
   return [
     {
-      key: 'topics',
-      label: 'Topics',
-      description: 'How well the mentor\'s expertise matches what the mentee wants to learn',
-      value: Math.round(features.topics_overlap * 40),
-      maxValue: 40,
-      percentage: features.topics_overlap * 100,
+      key: 'capability',
+      label: 'Capability Match',
+      description: 'How well the mentor\'s capabilities match what the mentee wants to develop',
+      value: Math.round(features.capability_match * 45),
+      maxValue: 45,
+      percentage: features.capability_match * 100,
       color: 'bg-blue-500'
     },
     {
       key: 'semantic',
       label: score.is_embedding_based ? 'Goals Alignment (AI)' : 'Goals Alignment',
-      description: 'How closely the mentee\'s goals align with what the mentor offers',
-      value: Math.round(features.semantic_similarity * 20),
-      maxValue: 20,
+      description: 'How closely the mentee\'s goals align with the mentor\'s motivation and experience',
+      value: Math.round(features.semantic_similarity * 30),
+      maxValue: 30,
       percentage: features.semantic_similarity * 100,
       color: 'bg-purple-500'
     },
     {
-      key: 'industry',
-      label: 'Industry',
-      description: 'Whether mentor and mentee work in the same or related industries',
-      value: Math.round(features.industry_overlap * 15),
-      maxValue: 15,
-      percentage: features.industry_overlap * 100,
+      key: 'domain',
+      label: 'Domain Detail',
+      description: 'Overlap in specific domain expertise details',
+      value: Math.round(features.domain_match * 5),
+      maxValue: 5,
+      percentage: features.domain_match * 100,
       color: 'bg-green-500'
     },
     {
@@ -169,15 +169,6 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
       percentage: features.tz_overlap_bonus * 100,
       color: 'bg-cyan-500'
     },
-    {
-      key: 'language',
-      label: 'Language',
-      description: 'Whether they share a common language for communication',
-      value: Math.round(features.language_bonus * 5),
-      maxValue: 5,
-      percentage: features.language_bonus * 100,
-      color: 'bg-pink-500'
-    }
   ];
 }
 

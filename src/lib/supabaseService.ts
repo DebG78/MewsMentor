@@ -458,7 +458,17 @@ export async function addImportDataToCohort(
         ...(expectations ? { expectations } : {}),
         ...(mentee.department ? { department: sanitizeText(mentee.department) } : {}),
         ...(mentee.job_grade ? { job_grade: sanitizeText(mentee.job_grade) } : {}),
-        ...(mentee.email ? { email: sanitizeText(mentee.email) } : {})
+        ...(mentee.email ? { email: sanitizeText(mentee.email) } : {}),
+        // New survey revamp fields
+        ...(mentee.bio ? { bio: sanitizeText(mentee.bio) } : {}),
+        ...(mentee.primary_capability ? { primary_capability: sanitizeText(mentee.primary_capability) } : {}),
+        ...(mentee.primary_capability_detail ? { primary_capability_detail: sanitizeText(mentee.primary_capability_detail) } : {}),
+        ...(mentee.secondary_capability ? { secondary_capability: sanitizeText(mentee.secondary_capability) } : {}),
+        ...(mentee.secondary_capability_detail ? { secondary_capability_detail: sanitizeText(mentee.secondary_capability_detail) } : {}),
+        ...(mentee.primary_proficiency != null ? { primary_proficiency: mentee.primary_proficiency } : {}),
+        ...(mentee.secondary_proficiency != null ? { secondary_proficiency: mentee.secondary_proficiency } : {}),
+        ...(mentee.mentoring_goal ? { mentoring_goal: sanitizeText(mentee.mentoring_goal) } : {}),
+        ...(mentee.practice_scenarios && mentee.practice_scenarios.length > 0 ? { practice_scenarios: mentee.practice_scenarios } : {}),
       }
     })
 
@@ -619,7 +629,22 @@ export async function addImportDataToCohort(
         ...(expectations ? { expectations } : {}),
         ...(mentor.department ? { department: sanitizeText(mentor.department) } : {}),
         ...(mentor.job_grade ? { job_grade: sanitizeText(mentor.job_grade) } : {}),
-        ...(mentor.email ? { email: sanitizeText(mentor.email) } : {})
+        ...(mentor.email ? { email: sanitizeText(mentor.email) } : {}),
+        // New survey revamp fields
+        ...(mentor.bio ? { bio: sanitizeText(mentor.bio) } : {}),
+        ...(mentor.mentor_motivation ? { mentor_motivation: sanitizeText(mentor.mentor_motivation) } : {}),
+        ...(mentor.mentoring_experience ? { mentoring_experience: sanitizeText(mentor.mentoring_experience) } : {}),
+        ...(mentor.first_time_support && mentor.first_time_support.length > 0 ? { first_time_support: mentor.first_time_support } : {}),
+        ...(mentor.primary_capability ? { primary_capability: sanitizeText(mentor.primary_capability) } : {}),
+        ...(mentor.primary_capability_detail ? { primary_capability_detail: sanitizeText(mentor.primary_capability_detail) } : {}),
+        ...(mentor.secondary_capabilities && mentor.secondary_capabilities.length > 0 ? { secondary_capabilities: mentor.secondary_capabilities } : {}),
+        ...(mentor.secondary_capability_detail ? { secondary_capability_detail: sanitizeText(mentor.secondary_capability_detail) } : {}),
+        ...(mentor.primary_proficiency != null ? { primary_proficiency: mentor.primary_proficiency } : {}),
+        ...(mentor.practice_scenarios && mentor.practice_scenarios.length > 0 ? { practice_scenarios: mentor.practice_scenarios } : {}),
+        ...(mentor.hard_earned_lesson ? { hard_earned_lesson: sanitizeText(mentor.hard_earned_lesson) } : {}),
+        ...(mentor.natural_strengths && mentor.natural_strengths.length > 0 ? { natural_strengths: mentor.natural_strengths } : {}),
+        ...(mentor.excluded_scenarios && mentor.excluded_scenarios.length > 0 ? { excluded_scenarios: mentor.excluded_scenarios } : {}),
+        ...(mentor.match_exclusions ? { match_exclusions: sanitizeText(mentor.match_exclusions) } : {}),
       }
     })
 
