@@ -53,6 +53,8 @@ import {
   Play,
   Pause,
   RotateCcw,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import type { CohortStage, StageStatus, StageType, ChecklistItem, DocumentLink } from '@/types/runbook';
 import { STAGE_METADATA } from '@/types/runbook';
@@ -76,6 +78,11 @@ import {
 } from '@/lib/runbookService';
 import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
+import {
+  getMessageTemplates, getMessageLogSummary, sendWelcomeMessages,
+  TEMPLATE_TYPES,
+  type MessageTemplate, type MessageLogSummary,
+} from '@/lib/messageService';
 
 // Icon mapping for stage types
 const stageIcons: Record<StageType, React.ComponentType<{ className?: string }>> = {
@@ -126,6 +133,21 @@ export default function CohortRunbook() {
   const [isDeleteRunbookDialogOpen, setIsDeleteRunbookDialogOpen] = useState(false);
   const [isCompleteAllDialogOpen, setIsCompleteAllDialogOpen] = useState(false);
 
+  // Message template state
+  const [stageTemplates, setStageTemplates] = useState<MessageTemplate[]>([]);
+  const [stageMsgSummary, setStageMsgSummary] = useState<Record<string, MessageLogSummary>>({});
+  const [isSendingMessages, setIsSendingMessages] = useState(false);
+  const [isSendConfirmOpen, setIsSendConfirmOpen] = useState(false);
+  const [previewBody, setPreviewBody] = useState('');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Stage type → template type mapping
+  const STAGE_TEMPLATE_MAP: Record<string, { types: string[]; phase?: string; autoSent?: boolean }> = {
+    launch: { types: ['welcome_mentee', 'welcome_mentor', 'channel_announcement'] },
+    midpoint: { types: ['next_steps'], phase: 'midpoint', autoSent: true },
+    closure: { types: ['next_steps'], phase: 'wrapping_up', autoSent: true },
+  };
+
   useEffect(() => {
     loadCohorts();
   }, []);
@@ -157,12 +179,25 @@ export default function CohortRunbook() {
 
     setIsLoading(true);
     try {
-      const [stagesData, progressData] = await Promise.all([
+      const [stagesData, progressData, templatesData] = await Promise.all([
         getCohortStages(selectedCohort),
         getRunbookProgress(selectedCohort),
+        getMessageTemplates(selectedCohort),
       ]);
       setStages(stagesData);
       setProgress(progressData);
+      setStageTemplates(templatesData);
+
+      // Load message log summaries for stages that have templates
+      const summaryPromises: Record<string, Promise<MessageLogSummary>> = {};
+      for (const [stageType, config] of Object.entries(STAGE_TEMPLATE_MAP)) {
+        summaryPromises[stageType] = getMessageLogSummary(selectedCohort, config.types);
+      }
+      const summaryKeys = Object.keys(summaryPromises);
+      const summaryResults = await Promise.all(Object.values(summaryPromises));
+      const summaryMap: Record<string, MessageLogSummary> = {};
+      summaryKeys.forEach((key, i) => { summaryMap[key] = summaryResults[i]; });
+      setStageMsgSummary(summaryMap);
 
       // Expand in-progress stages by default
       const inProgressIds = stagesData
@@ -420,6 +455,65 @@ export default function CohortRunbook() {
         description: 'Failed to complete all stages',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Get templates relevant to a specific runbook stage
+  function getTemplatesForStage(stageType: StageType): MessageTemplate[] {
+    const config = STAGE_TEMPLATE_MAP[stageType];
+    if (!config) return [];
+
+    return stageTemplates.filter(t => {
+      if (!config.types.includes(t.template_type)) return false;
+      if (config.phase && t.template_type === 'next_steps' && t.journey_phase !== config.phase) return false;
+      return true;
+    });
+  }
+
+  function getTypeLabel(value: string): string {
+    return TEMPLATE_TYPES.find(t => t.value === value)?.label || value;
+  }
+
+  // Sample preview renderer
+  const SAMPLE_CONTEXT: Record<string, string> = {
+    FIRST_NAME: 'Alice', FULL_NAME: 'Alice Johnson', COHORT_NAME: cohorts.find(c => c.id === selectedCohort)?.name || 'Cohort',
+    MENTOR_FIRST_NAME: 'Bob', MENTEE_FIRST_NAME: 'Alice', PRIMARY_CAPABILITY: 'Strategic Thinking',
+    SHARED_CAPABILITY: 'Strategic Thinking', MENTOR_EMAIL: 'bob@mews.com', MENTEE_EMAIL: 'alice@mews.com',
+  };
+
+  function renderPreview(template: string): string {
+    return template.replace(/\{(\w+)\}/g, (match, key) => SAMPLE_CONTEXT[key] || match);
+  }
+
+  const handleSendWelcomeMessages = async () => {
+    if (!selectedCohort) return;
+    setIsSendConfirmOpen(false);
+    setIsSendingMessages(true);
+    try {
+      const result = await sendWelcomeMessages(selectedCohort);
+      toast({
+        title: 'Welcome messages sent',
+        description: `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`,
+      });
+      // Auto-check "Send match notifications" checklist item in the launch stage
+      const launchStage = stages.find(s => s.stage_type === 'launch');
+      if (launchStage) {
+        const sendItem = launchStage.checklist.find(
+          i => i.text.toLowerCase().includes('send match notification') && !i.completed
+        );
+        if (sendItem) {
+          await toggleChecklistItem(launchStage.id, sendItem.id);
+        }
+      }
+      loadStages();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to send messages',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingMessages(false);
     }
   };
 
@@ -776,6 +870,120 @@ export default function CohortRunbook() {
                           rows={2}
                         />
                       </div>
+
+                      {/* Messages section — only for launch, midpoint, closure */}
+                      {STAGE_TEMPLATE_MAP[stage.stage_type] && (() => {
+                        const config = STAGE_TEMPLATE_MAP[stage.stage_type];
+                        const relevantTemplates = getTemplatesForStage(stage.stage_type);
+                        const summary = stageMsgSummary[stage.stage_type];
+                        const isLaunch = stage.stage_type === 'launch';
+
+                        return (
+                          <div className="border-t pt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                              <Label className="text-xs">Messages</Label>
+                              {config.autoSent && (
+                                <Badge variant="secondary" className="text-[10px] h-5">Auto-sent</Badge>
+                              )}
+                            </div>
+
+                            {config.autoSent && (
+                              <p className="text-xs text-muted-foreground mb-3">
+                                Sent automatically when participants log a session in this phase.
+                              </p>
+                            )}
+
+                            {relevantTemplates.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No templates configured.{' '}
+                                <button
+                                  className="text-primary underline"
+                                  onClick={() => navigate('/admin/settings?tab=messages')}
+                                >
+                                  Create one
+                                </button>
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {relevantTemplates.map(tpl => (
+                                  <div
+                                    key={tpl.id}
+                                    className="flex items-start gap-3 p-2 bg-muted/50 rounded-md"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">{getTypeLabel(tpl.template_type)}</span>
+                                        {!tpl.is_active && (
+                                          <Badge variant="outline" className="text-[10px] h-4">Inactive</Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                        {tpl.body.substring(0, 100)}{tpl.body.length > 100 ? '...' : ''}
+                                      </p>
+                                    </div>
+                                    <div className="flex gap-1 shrink-0">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs"
+                                        onClick={() => { setPreviewBody(tpl.body); setIsPreviewOpen(true); }}
+                                      >
+                                        <Eye className="w-3 h-3 mr-1" />Preview
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs"
+                                        onClick={() => navigate('/admin/settings?tab=messages')}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Send button for launch stage */}
+                            {isLaunch && relevantTemplates.length > 0 && (
+                              <Button
+                                size="sm"
+                                className="mt-3"
+                                onClick={() => setIsSendConfirmOpen(true)}
+                                disabled={isSendingMessages}
+                              >
+                                {isSendingMessages ? (
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Send className="w-3 h-3 mr-1" />
+                                )}
+                                Send Welcome Messages
+                              </Button>
+                            )}
+
+                            {/* Delivery summary */}
+                            {summary && summary.total > 0 && (
+                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                <span>
+                                  {summary.sent} sent{summary.failed > 0 ? `, ${summary.failed} failed` : ''}
+                                </span>
+                                {summary.lastSentAt && (
+                                  <span>
+                                    &middot; Last: {new Date(summary.lastSentAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                                <button
+                                  className="text-primary underline ml-1"
+                                  onClick={() => navigate('/admin/settings?tab=messages')}
+                                >
+                                  View full log
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
@@ -917,6 +1125,44 @@ export default function CohortRunbook() {
               <CheckCircle2 className="w-4 h-4 mr-1" />
               Complete All
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Welcome Messages Confirmation Dialog */}
+      <Dialog open={isSendConfirmOpen} onOpenChange={setIsSendConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Welcome Messages</DialogTitle>
+            <DialogDescription>
+              This will send welcome DMs to all matched mentee-mentor pairs and post a channel
+              announcement via Slack. Make sure your Zapier webhook is configured.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSendConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={handleSendWelcomeMessages}>
+              <Send className="w-4 h-4 mr-1" />
+              Send Messages
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Message Preview Dialog */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Message Preview</DialogTitle>
+            <DialogDescription>
+              Rendered with sample data. Unresolved placeholders stay as-is.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted p-4 rounded-md whitespace-pre-wrap text-sm max-h-[50vh] overflow-y-auto">
+            {renderPreview(previewBody)}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

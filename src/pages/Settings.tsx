@@ -7,15 +7,16 @@ import {
   Settings as SettingsIcon,
   FileEdit,
   Users,
-  Bell,
   Globe,
   Database,
   BarChart3,
+  MessageSquare,
 } from "lucide-react";
 import { SurveyTemplateManager } from "@/components/SurveyTemplateManager";
 import { SurveyMigrationHelper } from "@/components/SurveyMigrationHelper";
 import { HelpGuide } from "@/components/HelpGuide";
 import { AnalyticsHelpGuide } from "@/components/AnalyticsHelpGuide";
+import MessageTemplates from "./admin/MessageTemplates";
 
 const Settings = () => {
   const [searchParams] = useSearchParams();
@@ -36,6 +37,12 @@ const Settings = () => {
       description: "Create and manage survey templates"
     },
     {
+      id: "messages",
+      title: "Message Templates",
+      icon: MessageSquare,
+      description: "Manage welcome, announcement, and session templates"
+    },
+    {
       id: "users",
       title: "User Management",
       icon: Users,
@@ -43,18 +50,10 @@ const Settings = () => {
       badge: "Coming Soon"
     },
     {
-      id: "notifications",
-      title: "Notifications",
-      icon: Bell,
-      description: "Configure email and system notifications",
-      badge: "Coming Soon"
-    },
-    {
       id: "integrations",
       title: "Integrations",
       icon: Globe,
-      description: "Connect with external services",
-      badge: "Coming Soon"
+      description: "Zapier and webhook configuration"
     },
     {
       id: "data-help",
@@ -81,8 +80,8 @@ const Settings = () => {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="mx-auto px-6 py-8">
+        <div className="max-w-[1600px] mx-auto">
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-2">
@@ -139,6 +138,145 @@ const Settings = () => {
               </Card>
             </TabsContent>
 
+            {/* Message Templates */}
+            <TabsContent value="messages" className="space-y-6">
+              <MessageTemplates />
+            </TabsContent>
+
+            {/* Integrations */}
+            <TabsContent value="integrations" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Globe className="w-5 h-5" />
+                    Integrations
+                  </CardTitle>
+                  <CardDescription>
+                    MewsMentor uses Zapier webhooks to connect Supabase edge functions with Slack and form tools.
+                    Below is the setup guide for each integration.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  {/* Slack Messaging via Zapier */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Slack Messaging
+                      <Badge variant="outline">Zapier</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Welcome DMs and channel announcements are sent via a Zapier webhook that posts to Slack.
+                      The <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code> edge function
+                      calls this webhook for each matched pair.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">Zapier Zap setup:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Create a new Zap with <strong>Webhooks by Zapier</strong> as the trigger (Catch Hook)</li>
+                          <li>Copy the webhook URL Zapier gives you</li>
+                          <li>Add a <strong>Filter</strong> step: continue only if <code className="bg-background px-1 rounded">type</code> exists</li>
+                          <li>Add <strong>Path</strong> step:
+                            <ul className="list-disc list-inside ml-4">
+                              <li>Path A: if <code className="bg-background px-1 rounded">type = dm</code> → Slack: Send Direct Message (use <code className="bg-background px-1 rounded">recipient_email</code> to find user, <code className="bg-background px-1 rounded">message_text</code> as message)</li>
+                              <li>Path B: if <code className="bg-background px-1 rounded">type = channel</code> → Slack: Send Channel Message (use <code className="bg-background px-1 rounded">channel</code> field, <code className="bg-background px-1 rounded">message_text</code> as message)</li>
+                            </ul>
+                          </li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Supabase secrets required:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><code className="bg-background px-1 rounded">ZAPIER_SLACK_WEBHOOK_URL</code> — the Zapier Catch Hook URL</li>
+                          <li><code className="bg-background px-1 rounded">SLACK_MENTORING_CHANNEL</code> — Slack channel for announcements (e.g. <code className="bg-background px-1 rounded">#mentoring</code>)</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium">Webhook payload fields:</span>
+                        <code className="block bg-background p-2 rounded mt-1 text-xs">
+                          {`{ "type": "dm"|"channel", "recipient_email": "...", "channel": "#...", "message_text": "...", "cohort_name": "..." }`}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Survey Import via Zapier */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Survey Response Import
+                      <Badge variant="outline">Zapier</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically import mentor/mentee survey responses from Google Forms or Typeform into MewsMentor.
+                      The <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code> edge function
+                      parses form fields and upserts profiles.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">Zapier Zap setup:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Trigger: <strong>Google Forms</strong> (New Response in Spreadsheet) or <strong>Typeform</strong> (New Entry)</li>
+                          <li>Action: <strong>Webhooks by Zapier</strong> → POST</li>
+                          <li>URL: your Supabase edge function URL + <code className="bg-background px-1 rounded">/import-survey-response?cohort_id=YOUR_COHORT_ID</code></li>
+                          <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
+                          <li>Body: map all form fields as JSON key-value pairs</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Supabase secret required:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><code className="bg-background px-1 rounded">SURVEY_IMPORT_API_KEY</code> — shared key for authenticating webhook calls</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Session Logging via Zapier */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Session Logging
+                      <Badge variant="outline">Zapier</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Participants can log mentoring sessions via a form. The <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> edge
+                      function records sessions and optionally triggers next-steps messages.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">Zapier Zap setup:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Trigger: <strong>Google Forms</strong> or <strong>Typeform</strong> (session log form)</li>
+                          <li>Action: <strong>Webhooks by Zapier</strong> → POST</li>
+                          <li>URL: your Supabase edge function URL + <code className="bg-background px-1 rounded">/log-session</code></li>
+                          <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
+                          <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_email": "...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4, "journey_phase": "building" }`}</code></li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Supabase secret required:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><code className="bg-background px-1 rounded">LOG_SESSION_API_KEY</code> — shared key for authenticating session log calls</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary of all secrets */}
+                  <div className="space-y-3 border-t pt-6">
+                    <h3 className="text-base font-semibold">All Supabase Secrets Summary</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Set these via <code className="text-xs bg-muted px-1 py-0.5 rounded">supabase secrets set KEY=value</code> in the CLI:
+                    </p>
+                    <div className="bg-muted rounded-md p-4 text-sm font-mono space-y-1 text-muted-foreground">
+                      <div><code>ZAPIER_SLACK_WEBHOOK_URL</code> — Zapier Catch Hook URL for Slack</div>
+                      <div><code>SLACK_MENTORING_CHANNEL</code> — e.g. #mentoring</div>
+                      <div><code>SURVEY_IMPORT_API_KEY</code> — API key for survey import webhook</div>
+                      <div><code>LOG_SESSION_API_KEY</code> — API key for session log webhook</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             {/* Mentor/Mentee Data Upload */}
             <TabsContent value="data-help" className="space-y-6">
               <Card>
@@ -176,7 +314,7 @@ const Settings = () => {
             </TabsContent>
 
             {/* Other Settings - Coming Soon */}
-            {settingsCategories.filter(cat => cat.id !== "survey-templates" && cat.id !== "data-help" && cat.id !== "analytics-guide").map((category) => (
+            {settingsCategories.filter(cat => ["users"].includes(cat.id)).map((category) => (
               <TabsContent key={category.id} value={category.id} className="space-y-6">
                 {renderComingSoon(category)}
               </TabsContent>

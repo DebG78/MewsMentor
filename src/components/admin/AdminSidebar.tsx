@@ -24,7 +24,6 @@ import {
   Sun,
   GitCompareArrows,
   Sparkles,
-  MessageSquare,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useUser } from '@/contexts/UserContext'
@@ -65,11 +64,6 @@ const navItems = [
         title: 'Runbook',
         href: '/admin/mentoring/runbook',
         icon: BookOpen,
-      },
-      {
-        title: 'Messages',
-        href: '/admin/settings/message-templates',
-        icon: MessageSquare,
       },
     ],
   },

@@ -18,7 +18,7 @@ import PeopleProfiles from "./pages/admin/PeopleProfiles";
 import PeopleAnalytics from "./pages/admin/PeopleAnalytics";
 import CohortComparison from "./pages/admin/CohortComparison";
 import MatchQualityAnalytics from "./pages/admin/MatchQualityAnalytics";
-import MessageTemplates from "./pages/admin/MessageTemplates";
+
 import NotFound from "./pages/NotFound";
 import { UserProvider } from "./contexts/UserContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -198,16 +198,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/admin/settings/message-templates"
-                element={
-                  <ProtectedRoute>
-                    <AdminLayout>
-                      <MessageTemplates />
-                    </AdminLayout>
-                  </ProtectedRoute>
-                }
-              />
+              {/* Message Templates now lives in Settings ?tab=messages */}
 
               {/* Catch-all route */}
               <Route path="*" element={<NotFound />} />
