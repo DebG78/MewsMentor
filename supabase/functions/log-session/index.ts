@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { respondent_name, respondent_email, date, duration_minutes, rating } = body;
+    const { respondent_name, respondent_email, date, duration_minutes, rating, journey_phase } = body;
 
     // Validate required fields — at least one of name or email is needed
     if (!respondent_name && !respondent_email) {
@@ -201,6 +201,12 @@ Deno.serve(async (req) => {
     // Determine which rating field to populate
     const ratingField = pair.respondent_role === 'mentee' ? 'mentee_rating' : 'mentor_rating';
 
+    // Validate journey_phase if provided
+    const validJourneyPhases = ['getting_started', 'building', 'midpoint', 'wrapping_up'];
+    const sessionJourneyPhase = journey_phase && validJourneyPhases.includes(journey_phase)
+      ? journey_phase
+      : null;
+
     // Insert session
     const { error: insertError } = await supabaseAdmin
       .from('sessions')
@@ -213,6 +219,7 @@ Deno.serve(async (req) => {
         duration_minutes: durationNum,
         status: 'completed',
         [ratingField]: ratingNum,
+        ...(sessionJourneyPhase ? { journey_phase: sessionJourneyPhase } : {}),
       });
 
     if (insertError) {

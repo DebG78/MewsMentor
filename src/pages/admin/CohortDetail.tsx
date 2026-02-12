@@ -65,6 +65,7 @@ import {
   saveManualMatches,
 } from "@/lib/cohortManager";
 import { updateMenteeProfile, updateMentorProfile } from "@/lib/supabaseService";
+import { sendWelcomeMessages } from "@/lib/messageService";
 import { Cohort, ImportResult, MatchingResult } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
@@ -173,7 +174,7 @@ export default function CohortDetail() {
     }
   };
 
-  const handleStatusChange = async (newStatus: Cohort['status']) => {
+  const handleStatusChange = async (newStatus: Cohort['status'], sendMessages = false) => {
     if (!cohort) return;
 
     try {
@@ -191,6 +192,24 @@ export default function CohortDetail() {
             title: "Status updated",
             description: `Cohort status changed to ${newStatus}`,
           });
+        }
+
+        // Send welcome messages if activating and user opted in
+        if (newStatus === 'active' && sendMessages) {
+          try {
+            const result = await sendWelcomeMessages(cohort.id);
+            toast({
+              title: "Welcome messages sent",
+              description: `${result.sent} messages sent${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
+            });
+          } catch (msgError) {
+            console.error('Welcome messages error:', msgError);
+            toast({
+              title: "Messages not sent",
+              description: "Cohort activated, but welcome messages failed. You can retry from the messaging section.",
+              variant: "destructive",
+            });
+          }
         }
       }
     } catch (error) {
@@ -649,7 +668,12 @@ export default function CohortDetail() {
                 Edit Cohort Details
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleStatusChange('active')}>
+              <DropdownMenuItem onClick={() => {
+                const sendMessages = window.confirm(
+                  'Mark cohort as active?\n\nClick OK to activate and send welcome messages via Slack to all matched participants.\n\nClick Cancel to activate without sending messages.'
+                );
+                handleStatusChange('active', sendMessages);
+              }}>
                 <Play className="h-4 w-4 mr-2" />
                 Mark Active
               </DropdownMenuItem>

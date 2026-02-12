@@ -1,19 +1,23 @@
 // Matching Model Types for Configurable Matching Criteria
 
 export interface MatchingWeights {
-  topics: number;
-  industry: number;
-  seniority: number;
+  capability: number;
   semantic: number;
+  domain: number;
+  seniority: number;
   timezone: number;
-  language: number;
   capacity_penalty: number;
+  // Legacy fields kept for backward compat with saved models
+  topics?: number;
+  industry?: number;
+  language?: number;
 }
 
 export interface MatchingFilters {
-  min_language_overlap: number;
   max_timezone_difference: number;
   require_available_capacity: boolean;
+  // Legacy field kept for backward compat
+  min_language_overlap?: number;
 }
 
 export interface MatchingModel {
@@ -165,18 +169,16 @@ export interface EnhancedMatchScore {
 
 // Default weights constant
 export const DEFAULT_MATCHING_WEIGHTS: MatchingWeights = {
-  topics: 40,
-  industry: 15,
+  capability: 45,
+  semantic: 30,
+  domain: 5,
   seniority: 10,
-  semantic: 20,
   timezone: 5,
-  language: 5,
   capacity_penalty: 10,
 };
 
 // Default filters constant
 export const DEFAULT_MATCHING_FILTERS: MatchingFilters = {
-  min_language_overlap: 1,
-  max_timezone_difference: 3,
+  max_timezone_difference: 6,
   require_available_capacity: true,
 };

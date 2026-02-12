@@ -7,7 +7,8 @@ import {
   MatchingResult,
   MatchingOutput,
   MatchingStats,
-  SENIORITY_SCORES
+  SENIORITY_SCORES,
+  LEGACY_SENIORITY_SCORES,
 } from "@/types/mentoring";
 import type {
   MatchingModel,
@@ -20,28 +21,18 @@ import type {
 } from "@/types/matching";
 import { cosineSimilarity } from "./embeddingUtils";
 import { getOrComputeEmbeddings, type EmbeddingCache } from "./embeddingService";
+import { areSameCluster } from "./capabilityClusters";
 
 // Hard filters implementation
 export function applyHardFilters(
   mentee: MenteeData,
   mentor: MentorData,
   filters: MatchingFilters = {
-    min_language_overlap: 1,
-    max_timezone_difference: 3,
+    max_timezone_difference: 6,
     require_available_capacity: true
   }
 ): boolean {
-  // Language overlap filter (≥1 shared language)
-  if (mentee.languages && mentor.languages && mentee.languages.length > 0 && mentor.languages.length > 0) {
-    const sharedLanguages = mentee.languages.filter(lang =>
-      mentor.languages!.includes(lang)
-    );
-    if (sharedLanguages.length < filters.min_language_overlap) {
-      return false;
-    }
-  }
-
-  // Timezone difference filter (≤3 hours)
+  // Timezone difference filter (>6h = hard block)
   if (mentee.location_timezone && mentor.location_timezone) {
     const timezoneDistance = calculateTimezoneDistance(
       mentee.location_timezone,
@@ -57,39 +48,176 @@ export function applyHardFilters(
     return false;
   }
 
+  // Excluded scenarios filter: if mentee's practice scenarios overlap with mentor's excluded scenarios
+  if (mentee.practice_scenarios?.length && mentor.excluded_scenarios?.length) {
+    const menteeScenarios = new Set(mentee.practice_scenarios.map(s => s.toLowerCase()));
+    const hasExcludedOverlap = mentor.excluded_scenarios.some(s =>
+      menteeScenarios.has(s.toLowerCase())
+    );
+    if (hasExcludedOverlap) {
+      return false;
+    }
+  }
+
   return true;
 }
 
 // Calculate timezone distance in hours
 function calculateTimezoneDistance(tz1: string, tz2: string): number {
-  // Simplified timezone mapping - in production would use proper timezone library
+  // Timezone mapping for both legacy and new survey labels
   const timezoneMap: Record<string, number> = {
+    // New survey labels (from MS Forms)
+    'Americas (CT)': -6,
+    'Europe (CET)': 1,
+    'Europe (GMT)': 0,
+    'Australia (AET)': 10,
+    'Europe - (CET / CEST)': 1,
+    'Europe - (GMT / BST)': 0,
+    'Americas - (CT / CDT)': -6,
+    'Australia - (AET / AEDT)': 10,
+    // Legacy labels
     'Central Europe (CET)': 1,
     'UK / Ireland (GMT)': 0,
     'US – Pacific Time (PST)': -8,
     'US – Central Time (CST)': -6,
     'Australia (AEST)': 10,
-    'US – Eastern Time (EST)': -5
+    'US – Eastern Time (EST)': -5,
   };
 
-  const offset1 = timezoneMap[tz1] || 0;
-  const offset2 = timezoneMap[tz2] || 0;
+  // Try exact match first, then keyword-based fallback
+  const resolveOffset = (tz: string): number => {
+    if (timezoneMap[tz] !== undefined) return timezoneMap[tz];
+    const lower = tz.toLowerCase();
+    if (lower.includes('cet') || lower.includes('cest')) return 1;
+    if (lower.includes('gmt') || lower.includes('bst')) return 0;
+    if (lower.includes('ct') || lower.includes('cdt') || lower.includes('cst')) return -6;
+    if (lower.includes('est') || lower.includes('edt')) return -5;
+    if (lower.includes('pst') || lower.includes('pdt')) return -8;
+    if (lower.includes('aet') || lower.includes('aedt') || lower.includes('aest')) return 10;
+    return 0;
+  };
 
-  return Math.abs(offset1 - offset2);
+  return Math.abs(resolveOffset(tz1) - resolveOffset(tz2));
 }
 
 // Feature score calculations
 export function calculateFeatures(mentee: MenteeData, mentor: MentorData): MatchingFeatures {
+  // Detect if we're using new survey data (has primary_capability)
+  const hasNewFields = !!(mentee.primary_capability || mentor.primary_capability);
+
+  if (hasNewFields) {
+    return {
+      capability_match: calculateCapabilityMatch(mentee, mentor),
+      domain_match: calculateDomainMatch(mentee, mentor),
+      role_seniority_fit: calculateRoleSeniorityFit(mentee, mentor),
+      semantic_similarity: calculateSemanticSimilarity(mentee, mentor),
+      tz_overlap_bonus: calculateTimezoneBonus(mentee.location_timezone, mentor.location_timezone),
+      capacity_penalty: calculateCapacityPenalty(mentor.capacity_remaining),
+    };
+  }
+
+  // Legacy fallback for old cohorts
   return {
-    topics_overlap: calculateTopicsOverlap(mentee.topics_to_learn, mentor.topics_to_mentor),
-    industry_overlap: calculateIndustryOverlap(mentee, mentor),
+    capability_match: calculateTopicsOverlap(mentee.topics_to_learn, mentor.topics_to_mentor),
+    domain_match: 0,
     role_seniority_fit: calculateRoleSeniorityFit(mentee, mentor),
     semantic_similarity: calculateSemanticSimilarity(mentee, mentor),
     tz_overlap_bonus: calculateTimezoneBonus(mentee.location_timezone, mentor.location_timezone),
-    language_bonus: calculateLanguageBonus(mentee, mentor),
-    capacity_penalty: calculateCapacityPenalty(mentor.capacity_remaining)
+    capacity_penalty: calculateCapacityPenalty(mentor.capacity_remaining),
+    // Legacy fields
+    topics_overlap: calculateTopicsOverlap(mentee.topics_to_learn, mentor.topics_to_mentor),
+    industry_overlap: 1,
+    language_bonus: 0,
   };
 }
+
+// ============================================================================
+// NEW CAPABILITY-BASED MATCHING (tiered scoring)
+// ============================================================================
+
+/**
+ * Tiered capability matching score (0-1 scale).
+ *
+ * Scoring tiers within the 45% capability bucket:
+ * - Mentee primary = Mentor primary: 100%
+ * - Mentee primary = one of Mentor secondary: 80%
+ * - Mentee primary in same cluster as Mentor primary: 55%
+ * - Mentee primary in same cluster as Mentor secondary: 40%
+ * - Mentee secondary matches Mentor primary or any secondary: +15% bonus
+ * - Practice scenario overlap: +10% bonus
+ * - No match: 0%
+ */
+function calculateCapabilityMatch(mentee: MenteeData, mentor: MentorData): number {
+  const menteePrimary = mentee.primary_capability?.toLowerCase() || '';
+  const menteeSecondary = mentee.secondary_capability?.toLowerCase() || '';
+  const mentorPrimary = mentor.primary_capability?.toLowerCase() || '';
+  const mentorSecondaries = (mentor.secondary_capabilities || []).map(s => s.toLowerCase());
+
+  if (!menteePrimary) return 0;
+
+  let score = 0;
+
+  // Primary capability matching
+  if (mentorPrimary && menteePrimary === mentorPrimary) {
+    score = 1.0; // 100% — exact primary match
+  } else if (mentorSecondaries.includes(menteePrimary)) {
+    score = 0.8; // 80% — in mentor's secondary list
+  } else if (mentorPrimary && mentee.primary_capability && mentor.primary_capability &&
+    areSameCluster(mentee.primary_capability, mentor.primary_capability)) {
+    score = 0.55; // 55% — same cluster as mentor primary
+  } else if (mentee.primary_capability && (mentor.secondary_capabilities || []).some(sec =>
+    areSameCluster(mentee.primary_capability!, sec))) {
+    score = 0.4; // 40% — same cluster as mentor secondary
+  }
+
+  // Secondary capability bonus (+15%)
+  if (menteeSecondary) {
+    const secondaryMatches = mentorPrimary === menteeSecondary ||
+      mentorSecondaries.includes(menteeSecondary);
+    if (secondaryMatches) {
+      score = Math.min(1.0, score + 0.15);
+    }
+  }
+
+  // Practice scenario overlap bonus (+10%)
+  if (mentee.practice_scenarios?.length && mentor.practice_scenarios?.length) {
+    const menteeScenarios = new Set(mentee.practice_scenarios.map(s => s.toLowerCase()));
+    const scenarioOverlap = mentor.practice_scenarios.some(s =>
+      menteeScenarios.has(s.toLowerCase())
+    );
+    if (scenarioOverlap) {
+      score = Math.min(1.0, score + 0.10);
+    }
+  }
+
+  return score;
+}
+
+/**
+ * Domain detail text similarity (5% weight).
+ * Compares free-text domain expertise detail fields for keyword overlap.
+ */
+function calculateDomainMatch(mentee: MenteeData, mentor: MentorData): number {
+  const menteeDetail = (mentee.primary_capability_detail || '').toLowerCase();
+  const mentorDetail = [
+    mentor.primary_capability_detail || '',
+    mentor.secondary_capability_detail || '',
+  ].join(' ').toLowerCase();
+
+  if (!menteeDetail || !mentorDetail) return 0;
+
+  const menteeWords = menteeDetail.split(/\s+/).filter(w => w.length > 3);
+  const mentorWords = mentorDetail.split(/\s+/).filter(w => w.length > 3);
+
+  if (menteeWords.length === 0 || mentorWords.length === 0) return 0;
+
+  const commonWords = menteeWords.filter(w => mentorWords.includes(w));
+  return Math.min(1, commonWords.length / Math.max(menteeWords.length, 1));
+}
+
+// ============================================================================
+// LEGACY TOPIC MATCHING (for old cohorts)
+// ============================================================================
 
 // Topics overlap using Jaccard similarity
 function calculateTopicsOverlap(menteeTopics: string[], mentorTopics: string[]): number {
@@ -101,34 +229,47 @@ function calculateTopicsOverlap(menteeTopics: string[], mentorTopics: string[]):
   return intersection.length / union.length;
 }
 
-// Industry overlap (binary match)
-function calculateIndustryOverlap(mentee: MenteeData, mentor: MentorData): number {
-  // For now, assume same company = same industry
-  // In production, would extract industry from role or have dedicated field
-  return 1; // All Mews employees = same industry
-}
+// ============================================================================
+// SHARED SCORING FUNCTIONS
+// ============================================================================
 
 // Role seniority fit calculation
 function calculateRoleSeniorityFit(mentee: MenteeData, mentor: MentorData): number {
-  const menteeSeniority = SENIORITY_SCORES[mentee.seniority_band as keyof typeof SENIORITY_SCORES] || 2;
-  const mentorSeniority = SENIORITY_SCORES[mentor.seniority_band as keyof typeof SENIORITY_SCORES] || 3;
+  // Resolve seniority score — try new S1-LT levels first, then legacy IC1-M2
+  const resolveSeniority = (band: string | undefined, defaultVal: number): number => {
+    if (!band) return defaultVal;
+    return SENIORITY_SCORES[band] ?? LEGACY_SENIORITY_SCORES[band] ?? defaultVal;
+  };
 
-  if (mentorSeniority >= menteeSeniority) {
-    const distance = Math.min((mentorSeniority - menteeSeniority) / 6, 1);
-    return 1 - distance;
+  const menteeSeniority = resolveSeniority(mentee.seniority_band, 2);
+  const mentorSeniority = resolveSeniority(mentor.seniority_band, 3);
+
+  if (mentorSeniority > menteeSeniority) {
+    // Mentor is senior — ideal. Score based on gap (1-2 levels = best).
+    const gap = mentorSeniority - menteeSeniority;
+    if (gap <= 2) return 1.0;
+    if (gap <= 4) return 0.8;
+    return 0.6; // Very large gap — still valid but less ideal
+  } else if (mentorSeniority === menteeSeniority) {
+    return 0.5; // Same level — not ideal but acceptable
   } else {
-    return 0.5; // Mentor less senior than mentee
+    return 0.2; // Mentor below mentee — poor fit
   }
 }
 
-// Semantic similarity between goals and bio
+// Semantic similarity between goals and bio (keyword-based fallback)
 function calculateSemanticSimilarity(mentee: MenteeData, mentor: MentorData): number {
-  const menteeText = (mentee.goals_text || '').toLowerCase();
-  const mentorText = ((mentor.bio_text || '') + ' ' + mentor.topics_to_mentor.join(' ')).toLowerCase();
+  // Build text from new fields first, fall back to legacy
+  const menteeText = (
+    mentee.mentoring_goal || mentee.bio || mentee.goals_text || ''
+  ).toLowerCase();
+  const mentorText = (
+    mentor.mentor_motivation || mentor.hard_earned_lesson || mentor.bio ||
+    mentor.bio_text || mentor.topics_to_mentor.join(' ')
+  ).toLowerCase();
 
   if (!menteeText || !mentorText) return 0;
 
-  // Simple keyword-based similarity
   const menteeWords = menteeText.split(/\s+/).filter(word => word.length > 3);
   const mentorWords = mentorText.split(/\s+/).filter(word => word.length > 3);
 
@@ -145,15 +286,9 @@ function calculateTimezoneBonus(menteeTimezone: string, mentorTimezone: string):
   if (!menteeTimezone || !mentorTimezone) return 0;
 
   const distance = calculateTimezoneDistance(menteeTimezone, mentorTimezone);
-  return distance <= 2 ? 1 : 0;
-}
-
-// Language bonus calculation
-function calculateLanguageBonus(mentee: MenteeData, mentor: MentorData): number {
-  if (!mentee.languages || !mentor.languages || mentee.languages.length === 0) return 0;
-
-  const menteePrimaryLanguage = mentee.languages[0];
-  return mentor.languages.includes(menteePrimaryLanguage) ? 1 : 0;
+  if (distance === 0) return 1.0; // Same timezone
+  if (distance <= 2) return 0.5; // Close enough
+  return 0; // Too far
 }
 
 // Capacity penalty calculation
@@ -161,28 +296,31 @@ function calculateCapacityPenalty(capacityRemaining: number): number {
   return capacityRemaining === 1 ? 1 : 0;
 }
 
-// Calculate final match score using your exact formula
+// Calculate final match score with new capability-based weights
 export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): MatchScore {
   const features = calculateFeatures(mentee, mentor);
 
-  // Your exact scoring formula
+  // New scoring formula: Capability 45%, Semantic 30%, Domain 5%, Seniority 10%, TZ 5%, Capacity -10%
   const totalScore = Math.max(0, Math.min(100,
-    40 * features.topics_overlap +
-    15 * features.industry_overlap +
+    45 * features.capability_match +
+    30 * features.semantic_similarity +
+    5 * features.domain_match +
     10 * features.role_seniority_fit +
-    20 * features.semantic_similarity +
-    5 * features.tz_overlap_bonus +
-    5 * features.language_bonus -
+    5 * features.tz_overlap_bonus -
     10 * features.capacity_penalty
   ));
 
   // Generate reasons for the match
   const reasons: string[] = [];
-  if (features.topics_overlap > 0.3) {
-    const sharedTopics = mentee.topics_to_learn.filter(topic =>
-      mentor.topics_to_mentor.includes(topic)
-    ).length;
-    reasons.push(`${sharedTopics} shared development areas`);
+  if (features.capability_match >= 1.0) {
+    reasons.push(`Exact primary capability match: ${mentee.primary_capability || mentee.topics_to_learn?.[0] || 'shared area'}`);
+  } else if (features.capability_match >= 0.8) {
+    reasons.push(`Capability match via mentor's secondary expertise`);
+  } else if (features.capability_match >= 0.4) {
+    reasons.push(`Related capability cluster match`);
+  }
+  if (features.domain_match > 0.2) {
+    reasons.push("Overlapping domain expertise details");
   }
   if (features.role_seniority_fit > 0.7) {
     reasons.push("Appropriate seniority gap");
@@ -191,7 +329,7 @@ export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): Mat
     reasons.push("Compatible timezone");
   }
   if (features.semantic_similarity > 0.2) {
-    reasons.push("Aligned goals and expertise");
+    reasons.push("Aligned goals and motivation");
   }
 
   // Generate risks/concerns
@@ -199,20 +337,23 @@ export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): Mat
   if (features.capacity_penalty > 0) {
     risks.push("Limited mentor capacity");
   }
-  if (features.topics_overlap < 0.2) {
-    risks.push("Limited topic overlap");
+  if (features.capability_match < 0.2) {
+    risks.push("Limited capability overlap");
   }
   if (calculateTimezoneDistance(mentee.location_timezone, mentor.location_timezone) > 2) {
     risks.push("Timezone difference");
   }
 
   // Generate icebreaker suggestion
-  const sharedTopics = mentee.topics_to_learn.filter(topic =>
-    mentor.topics_to_mentor.includes(topic)
-  );
-  const icebreaker = sharedTopics.length > 0
-    ? `Discuss shared interest in ${sharedTopics[0]}`
-    : "Explore complementary experiences and goals";
+  const sharedCapability = mentee.primary_capability && mentor.primary_capability &&
+    mentee.primary_capability.toLowerCase() === mentor.primary_capability.toLowerCase()
+    ? mentee.primary_capability
+    : null;
+  const icebreaker = sharedCapability
+    ? `Discuss shared focus on ${sharedCapability}`
+    : mentee.mentoring_goal
+      ? `Explore mentee's goal: ${mentee.mentoring_goal.substring(0, 80)}...`
+      : "Explore complementary experiences and goals";
 
   return {
     total_score: totalScore,
@@ -241,9 +382,9 @@ export function compareMentorMatches(
     return b.score.total_score - a.score.total_score;
   }
 
-  // Tie-break 1: topics_overlap
-  if (a.score.features.topics_overlap !== b.score.features.topics_overlap) {
-    return b.score.features.topics_overlap - a.score.features.topics_overlap;
+  // Tie-break 1: capability_match
+  if (a.score.features.capability_match !== b.score.features.capability_match) {
+    return b.score.features.capability_match - a.score.features.capability_match;
   }
 
   // Tie-break 2: semantic_similarity
@@ -398,12 +539,12 @@ export function calculateMatchScoreWithModel(
   // Calculate individual weighted scores
   const scoreBreakdown: ScoreBreakdown[] = [
     {
-      criterion: 'topics',
-      criterion_name: 'Topics Match',
-      raw_score: features.topics_overlap,
+      criterion: 'capability',
+      criterion_name: 'Capability Match',
+      raw_score: features.capability_match,
       max_possible: 1,
-      weight: weights.topics,
-      weighted_score: features.topics_overlap * weights.topics,
+      weight: weights.capability,
+      weighted_score: features.capability_match * weights.capability,
     },
     {
       criterion: 'semantic',
@@ -414,12 +555,12 @@ export function calculateMatchScoreWithModel(
       weighted_score: features.semantic_similarity * weights.semantic,
     },
     {
-      criterion: 'industry',
-      criterion_name: 'Industry Match',
-      raw_score: features.industry_overlap,
+      criterion: 'domain',
+      criterion_name: 'Domain Match',
+      raw_score: features.domain_match,
       max_possible: 1,
-      weight: weights.industry,
-      weighted_score: features.industry_overlap * weights.industry,
+      weight: weights.domain,
+      weighted_score: features.domain_match * weights.domain,
     },
     {
       criterion: 'seniority',
@@ -436,14 +577,6 @@ export function calculateMatchScoreWithModel(
       max_possible: 1,
       weight: weights.timezone,
       weighted_score: features.tz_overlap_bonus * weights.timezone,
-    },
-    {
-      criterion: 'language',
-      criterion_name: 'Language Bonus',
-      raw_score: features.language_bonus,
-      max_possible: 1,
-      weight: weights.language,
-      weighted_score: features.language_bonus * weights.language,
     },
   ];
 
@@ -479,12 +612,12 @@ export function calculateMatchScoreWithModel(
     approvalReason = 'Mentor at capacity';
   }
 
-  if (features.topics_overlap === 0) {
+  if (features.capability_match === 0) {
     constraintViolations.push({
-      rule_id: 'no_topics',
-      rule_name: 'No Topic Overlap',
+      rule_id: 'no_capability',
+      rule_name: 'No Capability Match',
       severity: 'warning',
-      description: 'No shared development topics',
+      description: 'No capability or cluster overlap',
     });
   }
 
@@ -766,13 +899,13 @@ function calculateMatchScoreWithEmbeddings(
 ): MatchScore {
   const features = calculateFeaturesWithEmbeddings(mentee, mentor, embeddingCache);
 
+  // Same weights as calculateMatchScore but with embedding-enhanced semantic similarity
   const totalScore = Math.max(0, Math.min(100,
-    40 * features.topics_overlap +
-    15 * features.industry_overlap +
+    45 * features.capability_match +
+    30 * features.semantic_similarity +
+    5 * features.domain_match +
     10 * features.role_seniority_fit +
-    20 * features.semantic_similarity +
-    5 * features.tz_overlap_bonus +
-    5 * features.language_bonus -
+    5 * features.tz_overlap_bonus -
     10 * features.capacity_penalty
   ));
 

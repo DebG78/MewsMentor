@@ -97,6 +97,16 @@ export interface Database {
           profile_goals: Json
           private_notes: string | null
           email: string | null
+          // New survey revamp fields
+          bio: string | null
+          primary_capability: string | null
+          primary_capability_detail: string | null
+          secondary_capability: string | null
+          secondary_capability_detail: string | null
+          primary_proficiency: number | null
+          secondary_proficiency: number | null
+          mentoring_goal: string | null
+          practice_scenarios: string[] | null
           created_at: string
           updated_at: string
         }
@@ -128,6 +138,16 @@ export interface Database {
           profile_goals?: Json
           private_notes?: string | null
           email?: string | null
+          // New survey revamp fields
+          bio?: string | null
+          primary_capability?: string | null
+          primary_capability_detail?: string | null
+          secondary_capability?: string | null
+          secondary_capability_detail?: string | null
+          primary_proficiency?: number | null
+          secondary_proficiency?: number | null
+          mentoring_goal?: string | null
+          practice_scenarios?: string[] | null
           created_at?: string
           updated_at?: string
         }
@@ -159,6 +179,16 @@ export interface Database {
           profile_goals?: Json
           private_notes?: string | null
           email?: string | null
+          // New survey revamp fields
+          bio?: string | null
+          primary_capability?: string | null
+          primary_capability_detail?: string | null
+          secondary_capability?: string | null
+          secondary_capability_detail?: string | null
+          primary_proficiency?: number | null
+          secondary_proficiency?: number | null
+          mentoring_goal?: string | null
+          practice_scenarios?: string[] | null
           created_at?: string
           updated_at?: string
         }
@@ -193,6 +223,21 @@ export interface Database {
           profile_goals: Json
           private_notes: string | null
           email: string | null
+          // New survey revamp fields
+          bio: string | null
+          mentor_motivation: string | null
+          mentoring_experience: string | null
+          first_time_support: string[] | null
+          primary_capability: string | null
+          primary_capability_detail: string | null
+          secondary_capabilities: string[] | null
+          secondary_capability_detail: string | null
+          primary_proficiency: number | null
+          practice_scenarios: string[] | null
+          hard_earned_lesson: string | null
+          natural_strengths: string[] | null
+          excluded_scenarios: string[] | null
+          match_exclusions: string | null
           created_at: string
           updated_at: string
         }
@@ -225,6 +270,21 @@ export interface Database {
           profile_goals?: Json
           private_notes?: string | null
           email?: string | null
+          // New survey revamp fields
+          bio?: string | null
+          mentor_motivation?: string | null
+          mentoring_experience?: string | null
+          first_time_support?: string[] | null
+          primary_capability?: string | null
+          primary_capability_detail?: string | null
+          secondary_capabilities?: string[] | null
+          secondary_capability_detail?: string | null
+          primary_proficiency?: number | null
+          practice_scenarios?: string[] | null
+          hard_earned_lesson?: string | null
+          natural_strengths?: string[] | null
+          excluded_scenarios?: string[] | null
+          match_exclusions?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -257,6 +317,21 @@ export interface Database {
           profile_goals?: Json
           private_notes?: string | null
           email?: string | null
+          // New survey revamp fields
+          bio?: string | null
+          mentor_motivation?: string | null
+          mentoring_experience?: string | null
+          first_time_support?: string[] | null
+          primary_capability?: string | null
+          primary_capability_detail?: string | null
+          secondary_capabilities?: string[] | null
+          secondary_capability_detail?: string | null
+          primary_proficiency?: number | null
+          practice_scenarios?: string[] | null
+          hard_earned_lesson?: string | null
+          natural_strengths?: string[] | null
+          excluded_scenarios?: string[] | null
+          match_exclusions?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -467,6 +542,7 @@ export interface Database {
           mentee_rating: number | null
           mentor_feedback: string | null
           mentee_feedback: string | null
+          journey_phase: string | null
           created_at: string
           updated_at: string
         }
@@ -487,6 +563,7 @@ export interface Database {
           mentee_rating?: number | null
           mentor_feedback?: string | null
           mentee_feedback?: string | null
+          journey_phase?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -507,6 +584,7 @@ export interface Database {
           mentee_rating?: number | null
           mentor_feedback?: string | null
           mentee_feedback?: string | null
+          journey_phase?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -605,6 +683,70 @@ export interface Database {
           model_used?: string
           total_score?: number | null
           generated_at?: string
+        }
+      }
+      message_templates: {
+        Row: {
+          id: string
+          cohort_id: string | null
+          template_type: string
+          journey_phase: string | null
+          body: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cohort_id?: string | null
+          template_type: string
+          journey_phase?: string | null
+          body: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cohort_id?: string | null
+          template_type?: string
+          journey_phase?: string | null
+          body?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      message_log: {
+        Row: {
+          id: string
+          cohort_id: string
+          template_type: string
+          recipient_email: string
+          message_text: string
+          delivery_status: string
+          error_detail: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cohort_id: string
+          template_type: string
+          recipient_email: string
+          message_text: string
+          delivery_status?: string
+          error_detail?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cohort_id?: string
+          template_type?: string
+          recipient_email?: string
+          message_text?: string
+          delivery_status?: string
+          error_detail?: string | null
+          created_at?: string
         }
       }
       mentee_recommendations: {

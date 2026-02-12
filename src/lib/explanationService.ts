@@ -29,36 +29,41 @@ export async function getOrGenerateExplanation(
   const menteeProfile = {
     id: mentee.id,
     role: mentee.role,
-    experience_years: mentee.experience_years,
+    seniority_band: mentee.seniority_band,
+    primary_capability: mentee.primary_capability,
+    secondary_capability: mentee.secondary_capability,
+    mentoring_goal: mentee.mentoring_goal,
+    bio: mentee.bio,
+    practice_scenarios: mentee.practice_scenarios,
+    timezone: mentee.location_timezone,
+    // Legacy fields for old cohorts
     goals_text: mentee.goals_text,
     topics: mentee.topics_to_learn,
-    motivation: mentee.motivation,
-    expectations: mentee.expectations,
-    preferred_mentor_style: mentee.preferred_mentor_style,
-    timezone: mentee.location_timezone,
-    languages: mentee.languages,
   };
 
   const mentorProfile = {
     id: mentor.id,
     role: mentor.role,
-    experience_years: mentor.experience_years,
+    seniority_band: mentor.seniority_band,
+    primary_capability: mentor.primary_capability,
+    secondary_capabilities: mentor.secondary_capabilities,
+    mentor_motivation: mentor.mentor_motivation,
+    hard_earned_lesson: mentor.hard_earned_lesson,
+    bio: mentor.bio,
+    practice_scenarios: mentor.practice_scenarios,
+    natural_strengths: mentor.natural_strengths,
+    timezone: mentor.location_timezone,
+    // Legacy fields for old cohorts
     bio_text: mentor.bio_text,
     topics: mentor.topics_to_mentor,
-    motivation: mentor.motivation,
-    expectations: mentor.expectations,
-    mentoring_style: mentor.mentoring_style,
-    timezone: mentor.location_timezone,
-    languages: mentor.languages,
   };
 
   const scoreBreakdown = [
-    { criterion: 'topics', criterion_name: 'Topics Match', raw_score: score.features.topics_overlap, weight: 40, weighted_score: score.features.topics_overlap * 40 },
-    { criterion: 'semantic', criterion_name: 'Goals Alignment', raw_score: score.features.semantic_similarity, weight: 20, weighted_score: score.features.semantic_similarity * 20 },
-    { criterion: 'industry', criterion_name: 'Industry Match', raw_score: score.features.industry_overlap, weight: 15, weighted_score: score.features.industry_overlap * 15 },
+    { criterion: 'capability', criterion_name: 'Capability Match', raw_score: score.features.capability_match, weight: 45, weighted_score: score.features.capability_match * 45 },
+    { criterion: 'semantic', criterion_name: 'Goals Alignment', raw_score: score.features.semantic_similarity, weight: 30, weighted_score: score.features.semantic_similarity * 30 },
+    { criterion: 'domain', criterion_name: 'Domain Detail Match', raw_score: score.features.domain_match, weight: 5, weighted_score: score.features.domain_match * 5 },
     { criterion: 'seniority', criterion_name: 'Seniority Fit', raw_score: score.features.role_seniority_fit, weight: 10, weighted_score: score.features.role_seniority_fit * 10 },
     { criterion: 'timezone', criterion_name: 'Timezone Compatibility', raw_score: score.features.tz_overlap_bonus, weight: 5, weighted_score: score.features.tz_overlap_bonus * 5 },
-    { criterion: 'language', criterion_name: 'Language Match', raw_score: score.features.language_bonus, weight: 5, weighted_score: score.features.language_bonus * 5 },
   ];
 
   // 3. Call Edge Function

@@ -8,6 +8,8 @@ import type {
   UpdateMatchingModelInput,
   CreateMatchingCriterionInput,
   CreateMatchingRuleInput,
+} from '@/types/matching';
+import {
   DEFAULT_MATCHING_WEIGHTS,
   DEFAULT_MATCHING_FILTERS,
 } from '@/types/matching';
@@ -114,20 +116,12 @@ export async function getActiveMatchingModels(): Promise<MatchingModel[]> {
  */
 export async function createMatchingModel(input: CreateMatchingModelInput): Promise<MatchingModel> {
   const weights = {
-    topics: 40,
-    industry: 15,
-    seniority: 10,
-    semantic: 20,
-    timezone: 5,
-    language: 5,
-    capacity_penalty: 10,
+    ...DEFAULT_MATCHING_WEIGHTS,
     ...input.weights,
   };
 
   const filters = {
-    min_language_overlap: 1,
-    max_timezone_difference: 3,
-    require_available_capacity: true,
+    ...DEFAULT_MATCHING_FILTERS,
     ...input.filters,
   };
 
