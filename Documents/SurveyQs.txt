@@ -1,0 +1,68 @@
+Screening / Eligibility (Q1–3)
+
+Can you commit to ~6–10 hours total across ~5 months? (sessions + a bit of prep/follow-up) — Yes / No
+I understand mentoring is NOT a substitute for line management (performance, promotion, priorities). — Yes / No
+I understand places are limited and matching is based on fit + quality. — Yes / No
+
+Bio Info (Q4–8)
+
+Role title — Open text
+Please select your function — Dropdown with ~60+ department options
+Preferred time-zone — Americas (CT), Europe (CET), Europe (GMT), Australia (AET), Other
+What is your current level at Mews? — S1, S2, M1, M2, D1, D2, VP, SVP, LT
+In 5–8 lines: who are you at Mews and what's the real story behind where you are right now? — Open text
+
+Role Selection (Q9)
+
+I want to participate as: — Mentee / Mentor (can select both)
+
+
+MENTEE Section (Q10–20)
+
+Pick your PRIMARY capability to build (choose 1) — 30 capability options
+Domain expertise: more info (conditional — if Domain Expertise selected) — Open text
+Pick your SECONDARY capability to build (optional, choose 1) — Same 30 options
+Domain expertise: more info (conditional) — Open text
+Rate your CURRENT proficiency in your PRIMARY capability — 1 (New) to 4 (Strong)
+Rate your CURRENT proficiency in your SECONDARY capability — 1 to 4
+Your mentoring goal (using the format: "In the next 5 months, I want to improve [CAPABILITY] by practicing [SPECIFIC BEHAVIOUR] in [SPECIFIC SCENARIO], so that [IMPACT]. I'll know it worked because [MEASURABLE EVIDENCE].") — Open text
+Choose exactly 2 practice scenarios you will use as your "practice arena" — 12 options + Other
+Describe ONE real situation you will bring to session 1 (with prompts: context, who's involved, where you get stuck, what you've tried, what's coming up in 4–8 weeks) — Open text
+What kind of mentor help do you want most? (pick 2) — 7 options + Other
+Are you open to being mentored by someone who is mentoring for the first time? — Yes totally / Yes if strong in skill / Maybe prefer experienced / No only experienced
+Session style preference — Highly structured / Light structure / Flexible
+Feedback style preference — Direct & candid / Balanced / Gentle & encouraging / Questions-first coaching
+
+
+MENTOR Section (Q23–36)
+
+Are you open to mentoring more than one person in this cohort? — Yes / No / Depends
+You have selected yes, how many? (conditional) — Open text/number
+Is this your first time mentoring someone (formally) in a program like this? — First time / Mentored before / Helped informally but never formal
+If this is your first time, what support would help you feel confident as a mentor? (pick up to 2) (conditional) — 6 options + Other
+Pick your PRIMARY capability you feel strongest mentoring on (choose 1) — 30 capability options
+Domain expertise: more info (conditional) — Open text
+Pick your SECONDARY capability (optional, choose 1) — Same 30 options
+Domain expertise: more info (conditional) — Open text
+Rate your CURRENT proficiency in your PRIMARY capability — 1 (Basic awareness) to 5 (Recognised expert)
+Rate your CURRENT proficiency in your SECONDARY capability — 1 to 5
+Choose the practice scenarios you're strongest supporting (pick up to 4) — 12 options + Other
+Share ONE real example where you handled one of the scenarios above really well (with prompts: situation, stakes, what you did, what worked, what you learned) — Open text
+What is your most useful "hard-earned lesson" you often share with others? — Open text
+What do you naturally bring to mentoring sessions? (pick 3) — 7 options + Other
+Session Style — Highly structured / Light structure / Flexible
+Capabilities you do NOT want to mentor on (multi-select) — 30 capability options
+Feedback style — Direct & candid / Balanced / Gentle & encouraging / Questions-first coaching / Other
+Practice scenarios you prefer NOT to support (multi-select) — 12 scenario options
+Anything else that would make a match not work for you? (optional) (prompts: time differences, areas of business, seniority) — Open text
+
+
+
+
+Match:
+Needs refinement in the criterias based on the new form / language should not be considered - its basic for people they will speak englishShould be something like this
+Topics Match: 45%Semantic Similarity: 30% (story + domain detail + goal text is powerful for tie-breaking and nuance)Domain Match: 5% Seniority Fit: 10%Timezone Bonus: 5%Capacity Penalty: 10%
+
+Quick filters
+
+If either says No to commitment → exclude from matching (I have blocjed the form for them anyway)If mentee picked Domain Expertise, require meaningful domain detail (or flag + lower score)If timezones are “Americas vs Australia” → don’t matchIf mentor is already at max capacity → exclude / apply penalty

@@ -118,6 +118,45 @@ export async function getMessageLog(cohortId: string): Promise<MessageLogEntry[]
   return data || [];
 }
 
+/**
+ * Get a delivery summary for specific template types within a cohort.
+ */
+export interface MessageLogSummary {
+  sent: number;
+  failed: number;
+  total: number;
+  lastSentAt: string | null;
+}
+
+export async function getMessageLogSummary(
+  cohortId: string,
+  templateTypes: string[]
+): Promise<MessageLogSummary> {
+  const { data, error } = await supabase
+    .from('message_log')
+    .select('delivery_status, created_at')
+    .eq('cohort_id', cohortId)
+    .in('template_type', templateTypes)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching message log summary:', error);
+    return { sent: 0, failed: 0, total: 0, lastSentAt: null };
+  }
+
+  const entries = data || [];
+  const sent = entries.filter(e => e.delivery_status === 'sent').length;
+  const failed = entries.filter(e => e.delivery_status === 'failed').length;
+  const lastSentEntry = entries.find(e => e.delivery_status === 'sent');
+
+  return {
+    sent,
+    failed,
+    total: entries.length,
+    lastSentAt: lastSentEntry?.created_at || null,
+  };
+}
+
 // ============================================================================
 // SEND WELCOME MESSAGES (calls edge function)
 // ============================================================================
