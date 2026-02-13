@@ -762,8 +762,8 @@ export default function CohortDetail() {
         </div>
         <div className="flex items-center gap-2">
           <Target className="h-4 w-4 text-purple-600" />
-          <span className="font-semibold">{stats.total_capacity}</span>
-          <span className="text-muted-foreground">mentor slots</span>
+          <span className="font-semibold">{adjustedCapacity}/{stats.total_capacity}</span>
+          <span className="text-muted-foreground">slots available</span>
         </div>
         <div className="flex items-center gap-2">
           <CheckCircle className="h-4 w-4 text-indigo-600" />

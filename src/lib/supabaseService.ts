@@ -244,9 +244,11 @@ export async function updateCohort(id: string, updates: Partial<Cohort>): Promis
 // Delete cohort
 export async function deleteCohort(id: string): Promise<boolean> {
   // Move mentees and mentors back to unassigned instead of deleting them
+  // Delete message_log entries that reference this cohort (FK constraint)
   await Promise.all([
     supabase.from('mentees').update({ cohort_id: 'unassigned' }).eq('cohort_id', id),
-    supabase.from('mentors').update({ cohort_id: 'unassigned' }).eq('cohort_id', id)
+    supabase.from('mentors').update({ cohort_id: 'unassigned' }).eq('cohort_id', id),
+    supabase.from('message_log').delete().eq('cohort_id', id),
   ])
 
   const { error } = await supabase
