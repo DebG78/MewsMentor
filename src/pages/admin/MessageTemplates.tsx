@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -207,6 +208,7 @@ function getPhaseLabel(value: string | null): string {
 
 export default function MessageTemplates() {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
 
   // Data
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -215,9 +217,11 @@ export default function MessageTemplates() {
   const [loading, setLoading] = useState(true);
   const [logLoading, setLogLoading] = useState(false);
 
-  // Filters
-  const [activeTab, setActiveTab] = useState('templates');
-  const [logCohortId, setLogCohortId] = useState<string>('');
+  // Filters — initialise from URL params if present
+  const subtabParam = searchParams.get('subtab');
+  const logCohortParam = searchParams.get('logCohort');
+  const [activeTab, setActiveTab] = useState(subtabParam === 'log' ? 'log' : 'templates');
+  const [logCohortId, setLogCohortId] = useState<string>(logCohortParam || '');
 
   const [seeding, setSeeding] = useState(false);
 
@@ -240,6 +244,13 @@ export default function MessageTemplates() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto-load message log when arriving via "View full log" link
+  useEffect(() => {
+    if (!loading && logCohortId) {
+      loadMessageLog(logCohortId);
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadData() {
     setLoading(true);

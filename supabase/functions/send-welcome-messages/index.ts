@@ -50,11 +50,14 @@ function errorResponse(status: number, message: string) {
 }
 
 Deno.serve(async (req) => {
+  console.log('[send-welcome-messages] request received:', req.method);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
+    console.log('[send-welcome-messages] rejected: not POST');
     return errorResponse(405, 'Method not allowed');
   }
 
@@ -63,19 +66,25 @@ Deno.serve(async (req) => {
     const apiKey = req.headers.get('x-api-key');
     const expectedKey = Deno.env.get('SURVEY_IMPORT_API_KEY'); // Reuse same key
     const authHeader = req.headers.get('authorization');
+    console.log('[send-welcome-messages] auth check:', { hasApiKey: !!apiKey, hasAuth: !!authHeader, hasExpectedKey: !!expectedKey });
 
     // Accept either API key or Supabase auth
     if (!authHeader && (!expectedKey || apiKey !== expectedKey)) {
+      console.log('[send-welcome-messages] AUTH FAILED');
       return errorResponse(401, 'Invalid or missing authentication');
     }
 
     const url = new URL(req.url);
-    const cohortId = url.searchParams.get('cohort_id');
+    const body = await req.json().catch(() => ({}));
+    const cohortId = url.searchParams.get('cohort_id') || body.cohort_id;
+    console.log('[send-welcome-messages] cohortId:', cohortId, 'from query:', url.searchParams.get('cohort_id'), 'from body:', body.cohort_id);
     if (!cohortId) {
-      return errorResponse(400, 'Missing required query parameter: cohort_id');
+      return errorResponse(400, 'Missing cohort_id (pass in query string or request body)');
     }
 
     const zapierWebhookUrl = Deno.env.get('ZAPIER_SLACK_WEBHOOK_URL');
+    const adminEmail = Deno.env.get('ADMIN_EMAIL') || 'mentoring@mews.com';
+    console.log('[send-welcome-messages] webhook configured:', !!zapierWebhookUrl);
     if (!zapierWebhookUrl) {
       return errorResponse(500, 'ZAPIER_SLACK_WEBHOOK_URL is not configured');
     }
@@ -175,6 +184,7 @@ Deno.serve(async (req) => {
         MENTEE_EMAIL: mentee.email || '',
         MENTOR_EMAIL: mentor.email || '',
         SHARED_CAPABILITY: sharedCap,
+        ADMIN_EMAIL: adminEmail,
       };
 
       // ---- Mentee welcome DM ----
