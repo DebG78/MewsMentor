@@ -210,11 +210,8 @@ export default function CohortRunbook() {
       summaryKeys.forEach((key, i) => { summaryMap[key] = summaryResults[i]; });
       setStageMsgSummary(summaryMap);
 
-      // Expand in-progress stages by default
-      const inProgressIds = stagesData
-        .filter(s => s.status === 'in_progress')
-        .map(s => s.id);
-      setExpandedStages(inProgressIds);
+      // Start with all stages collapsed
+      setExpandedStages([]);
     } catch (error) {
       toast({
         title: 'Error',
@@ -686,25 +683,43 @@ export default function CohortRunbook() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                {stages.map((stage, index) => {
+                {(() => {
+                  // Find the "current" stage: first in_progress, or first pending if none in_progress
+                  const currentStageId =
+                    stages.find(s => s.status === 'in_progress')?.id
+                    || stages.find(s => s.status === 'pending')?.id;
+                  return stages.map((stage, index) => {
                   const Icon = stageIcons[stage.stage_type];
                   const statusCfg = statusConfig[stage.status];
+                  const isCurrent = stage.id === currentStageId;
                   return (
                     <div key={stage.id} className="flex items-center">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={cn(
-                            'w-10 h-10 rounded-full flex items-center justify-center',
-                            statusCfg.color,
-                            'text-white'
-                          )}
-                        >
-                          <Icon className="w-5 h-5" />
+                      <button
+                        className="flex flex-col items-center cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => {
+                          setExpandedStages(prev =>
+                            prev.includes(stage.id) ? prev : [...prev, stage.id]
+                          );
+                          setTimeout(() => {
+                            document.getElementById(`stage-${stage.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 100);
+                        }}
+                      >
+                        <div className={cn('rounded-full p-0.5', isCurrent ? 'ring-2 ring-offset-2 ring-blue-500 animate-pulse' : '')}>
+                          <div
+                            className={cn(
+                              'w-10 h-10 rounded-full flex items-center justify-center',
+                              statusCfg.color,
+                              'text-white'
+                            )}
+                          >
+                            <Icon className="w-5 h-5" />
+                          </div>
                         </div>
-                        <span className="text-xs mt-1 text-center max-w-[80px] truncate">
+                        <span className={cn('text-xs mt-1 text-center max-w-[80px] truncate', isCurrent && 'font-semibold')}>
                           {stage.stage_name.split(' ')[0]}
                         </span>
-                      </div>
+                      </button>
                       {index < stages.length - 1 && (
                         <div
                           className={cn(
@@ -715,7 +730,8 @@ export default function CohortRunbook() {
                       )}
                     </div>
                   );
-                })}
+                });
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -737,6 +753,7 @@ export default function CohortRunbook() {
                 <AccordionItem
                   key={stage.id}
                   value={stage.id}
+                  id={`stage-${stage.id}`}
                   className="border rounded-lg px-4"
                 >
                   <AccordionTrigger className="hover:no-underline">

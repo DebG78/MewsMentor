@@ -7,9 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProfileModal } from "./ProfileModal";
-import { AddPersonForm } from "./AddPersonForm";
 import { supabase } from "@/lib/supabase";
-import { Users, Search, Eye, MapPin, Target, Plus, User, UserPlus } from "lucide-react";
+import { Users, Search, Eye, MapPin, Target, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { assignToCohort } from "@/lib/cohortManager";
 
@@ -97,8 +96,6 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
   const [selectedType, setSelectedType] = useState<'mentee' | 'mentor'>('mentee');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isAddPersonFormOpen, setIsAddPersonFormOpen] = useState(false);
-  const [addPersonType, setAddPersonType] = useState<'mentor' | 'mentee'>('mentee');
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -175,20 +172,6 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
     setSelectedProfile(profile);
     setSelectedType(type);
     setIsModalOpen(true);
-  };
-
-  const handleAddMentor = () => {
-    setAddPersonType('mentor');
-    setIsAddPersonFormOpen(true);
-  };
-
-  const handleAddMentee = () => {
-    setAddPersonType('mentee');
-    setIsAddPersonFormOpen(true);
-  };
-
-  const handlePersonAdded = () => {
-    loadAllProfiles();
   };
 
   const handleAssignToCohort = async (
@@ -418,31 +401,13 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={handleAddMentee}
-            className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 active:bg-blue-100"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Mentee
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleAddMentor}
-            className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700 hover:border-green-300 active:bg-green-100"
-          >
-            <User className="w-4 h-4 mr-2" />
-            Add Mentor
-          </Button>
-          <div className="flex items-center gap-2 ml-4">
-            <Search className="w-4 h-4" />
-            <Input
-              placeholder="Search by name, role, or topics..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-80"
-            />
-          </div>
+          <Search className="w-4 h-4" />
+          <Input
+            placeholder="Search by name, role, or topics..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-80"
+          />
         </div>
       </div>
 
@@ -471,7 +436,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                 <Target className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium">No Unassigned Profiles</h3>
                 <p className="text-muted-foreground">
-                  All mentors and mentees have been assigned to cohorts. Use the "Add Mentor" or "Add Mentee" buttons above to create new profiles.
+                  All mentors and mentees have been assigned to cohorts.
                 </p>
               </div>
             ) : (
@@ -560,14 +525,6 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
         onClose={() => setIsModalOpen(false)}
       />
 
-      {/* Add Person Form Dialog */}
-      <AddPersonForm
-        isOpen={isAddPersonFormOpen}
-        onClose={() => setIsAddPersonFormOpen(false)}
-        type={addPersonType}
-        onSuccess={handlePersonAdded}
-        selectedCohortId={selectedCohort?.id}
-      />
     </div>
   );
 }
