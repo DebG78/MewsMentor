@@ -19,6 +19,7 @@ export interface MessageLogEntry {
   id: string;
   cohort_id: string;
   template_type: string;
+  journey_phase: string | null;
   recipient_email: string;
   message_text: string;
   delivery_status: 'pending' | 'sent' | 'failed';
@@ -169,6 +170,15 @@ export interface SendWelcomeResult {
   errors?: string[];
 }
 
+export interface SendStageMessagesResult {
+  success: boolean;
+  pairs: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  errors?: string[];
+}
+
 /**
  * Trigger welcome messages for a cohort via the edge function.
  */
@@ -194,6 +204,30 @@ export async function sendWelcomeMessages(cohortId: string): Promise<SendWelcome
   return result as SendWelcomeResult;
 }
 
+/**
+ * Trigger stage messages (next-steps) for a cohort via the edge function.
+ * Sends to all participants, deduplicating against previously sent messages.
+ */
+export async function sendStageMessages(
+  cohortId: string,
+  journeyPhase: string
+): Promise<SendStageMessagesResult> {
+  const { data: result, error: fnError } = await supabase.functions.invoke(
+    'send-stage-messages',
+    { body: { cohort_id: cohortId, journey_phase: journeyPhase } }
+  );
+
+  if (fnError) {
+    const detail = (fnError as any)?.context?.message
+      || (fnError as any)?.context?.error
+      || fnError.message
+      || 'Failed to send stage messages';
+    throw new Error(detail);
+  }
+
+  return result as SendStageMessagesResult;
+}
+
 // ============================================================================
 // TEMPLATE TYPES AND AVAILABLE PLACEHOLDERS
 // ============================================================================
@@ -202,7 +236,9 @@ export const TEMPLATE_TYPES = [
   { value: 'welcome_mentee', label: 'Welcome - Mentee' },
   { value: 'welcome_mentor', label: 'Welcome - Mentor' },
   { value: 'channel_announcement', label: 'Channel Announcement' },
-  { value: 'next_steps', label: 'Next Steps (after session)' },
+  { value: 'next_steps', label: 'Next Steps (generic)' },
+  { value: 'next_steps_mentee', label: 'Next Steps - Mentee' },
+  { value: 'next_steps_mentor', label: 'Next Steps - Mentor' },
 ] as const;
 
 export const JOURNEY_PHASES = [

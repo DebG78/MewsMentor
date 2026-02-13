@@ -182,9 +182,11 @@ const Settings = () => {
                       <Badge variant="outline">Zapier</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Welcome DMs and channel announcements are sent via a Zapier webhook that posts to Slack.
-                      The <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code> edge function
-                      calls this webhook for each matched pair.
+                      All Slack messages (welcome DMs, next-steps messages, and channel announcements) are sent via a Zapier webhook.
+                      Three edge functions use this webhook:{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code> (launch),{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code> (manual midpoint/closure blasts), and{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> (auto-sends next-steps after each logged session).
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
                       <div>
@@ -220,25 +222,71 @@ const Settings = () => {
                   {/* Survey Import via Power Automate */}
                   <div className="space-y-3">
                     <h3 className="text-base font-semibold flex items-center gap-2">
-                      Survey Response Import
+                      Mentor/Mentee Signup Survey Import
                       <Badge variant="outline">Power Automate</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Automatically import mentor/mentee survey responses from Microsoft Forms into MewsMentor.
-                      The <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code> edge function
-                      parses form fields and upserts profiles.
+                      Automatically import mentor/mentee signup survey responses from Microsoft Forms into MewsMentor.
+                      Each form submission creates a mentee and/or mentor profile. Participants can go directly into a
+                      specific cohort, or land in the <strong>Holding Area</strong> for later assignment.
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
                       <div>
-                        <span className="font-medium">Power Automate flow setup:</span>
+                        <span className="font-medium">Step 1 — Create the Power Automate flow:</span>
                         <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
-                          <li>Trigger: <strong>When a new response is submitted</strong> (Microsoft Forms)</li>
-                          <li>Action: <strong>Get response details</strong> (Microsoft Forms)</li>
-                          <li>Action: <strong>HTTP</strong> → POST</li>
-                          <li>URI: your Supabase edge function URL + <code className="bg-background px-1 rounded">/import-survey-response?cohort_id=YOUR_COHORT_ID</code></li>
-                          <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
-                          <li>Body: map form fields as JSON key-value pairs using dynamic content from "Get response details"</li>
+                          <li>Go to <strong>Power Automate</strong> → <strong>Create</strong> → <strong>Automated cloud flow</strong></li>
+                          <li>Trigger: <strong>"When a new response is submitted"</strong> (Microsoft Forms) — select your signup form</li>
+                          <li>Add action: <strong>"Get response details"</strong> (Microsoft Forms) — select the same form, set Response Id to the trigger's Response Id</li>
+                          <li>Add action: <strong>"HTTP"</strong> (premium connector)</li>
                         </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Step 2 — Configure the HTTP action:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Method:</strong> POST</li>
+                          <li><strong>URI:</strong> <code className="bg-background px-1 rounded">https://YOUR_PROJECT.supabase.co/functions/v1/import-survey-response</code></li>
+                          <li>Append <code className="bg-background px-1 rounded">?cohort_id=YOUR_COHORT_ID</code> to route to a specific cohort, <strong>or omit it</strong> to send to the Holding Area</li>
+                          <li><strong>Headers:</strong></li>
+                        </ul>
+                        <code className="block bg-background p-2 rounded mt-1 ml-4 text-xs">
+                          {`x-api-key: YOUR_SURVEY_IMPORT_API_KEY`}<br/>
+                          {`Content-Type: application/json`}
+                        </code>
+                      </div>
+                      <div>
+                        <span className="font-medium">Step 3 — Build the JSON body:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground">
+                          In the HTTP action's <strong>Body</strong> field, map each form question to a JSON key.
+                          Use the dynamic content from "Get response details" to fill in values.
+                          The field names in your JSON should match your MS Forms question text — the system uses
+                          smart keyword matching to map fields automatically.
+                        </p>
+                        <code className="block bg-background p-2 rounded mt-1 ml-4 text-xs whitespace-pre">
+{`{
+  "name": "@{outputs('Get_response_details')?['body/...name...']}",
+  "email": "@{outputs('Get_response_details')?['body/...email...']}",
+  "How do you want to participate as": "@{...}",
+  "What is your current role title": "@{...}",
+  "What time-zone are you in": "@{...}",
+  "What is your current level": "@{...}",
+  ...map all form questions...
+}`}
+                        </code>
+                        <p className="mt-2 ml-2 text-muted-foreground text-xs">
+                          <strong>Tip:</strong> You don't need to match field names exactly. The system looks for keywords
+                          like "time zone", "role title", "primary capability", "how many mentees" etc.
+                          Just use the form question text as the JSON key.
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium">How it works:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>The "participate as" field determines whether a <strong>mentee</strong>, <strong>mentor</strong>, or <strong>both</strong> record is created</li>
+                          <li>If <code className="bg-background px-1 rounded">cohort_id</code> is provided, the participant goes into that cohort (must be draft or active)</li>
+                          <li>If omitted, the participant goes to the <strong>Holding Area</strong> — you can assign them to a cohort later</li>
+                          <li>Re-submissions from the same email update the existing record (upsert) instead of creating duplicates</li>
+                          <li>All capability fields, practice scenarios, strengths, etc. are automatically parsed from the form</li>
+                        </ul>
                       </div>
                       <div>
                         <span className="font-medium">Supabase secret required:</span>
@@ -252,12 +300,14 @@ const Settings = () => {
                   {/* Session Logging via Power Automate */}
                   <div className="space-y-3">
                     <h3 className="text-base font-semibold flex items-center gap-2">
-                      Session Logging
+                      Session Logging + Auto-Send
                       <Badge variant="outline">Power Automate</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Participants can log mentoring sessions via a form. The <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> edge
-                      function records sessions and optionally triggers next-steps messages.
+                      Participants log mentoring sessions via a form. The <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> edge
+                      function records the session and <strong>automatically detects the journey phase</strong> based on how many
+                      sessions the pair has completed. If a next-steps template exists for that phase, it sends it to the
+                      respondent via Slack — no admin action required.
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
                       <div>
@@ -268,14 +318,82 @@ const Settings = () => {
                           <li>Action: <strong>HTTP</strong> → POST</li>
                           <li>URI: your Supabase edge function URL + <code className="bg-background px-1 rounded">/log-session</code></li>
                           <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
-                          <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_email": "...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4, "journey_phase": "building" }`}</code></li>
+                          <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_email": "...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4 }`}</code></li>
                         </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">What happens after a session is logged:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Session is saved to the database</li>
+                          <li>Completed session count for the pair is calculated</li>
+                          <li>Journey phase is auto-detected using the cohort's session thresholds (configured in Runbook &rarr; Setup stage)</li>
+                          <li>The session record is updated with the detected phase</li>
+                          <li>If a role-specific template (<code className="bg-background px-1 rounded">next_steps_mentee</code> or <code className="bg-background px-1 rounded">next_steps_mentor</code>) exists for that phase, it's used; otherwise falls back to the generic <code className="bg-background px-1 rounded">next_steps</code> template. The message is sent via Slack if the respondent hasn't already received it.</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Default session thresholds (configurable per cohort):</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Sessions 1–2 → <strong>Getting Started</strong></li>
+                          <li>Sessions 3–5 → <strong>Building</strong></li>
+                          <li>Sessions 6–7 → <strong>Midpoint</strong></li>
+                          <li>Sessions 8+ → <strong>Wrapping Up</strong></li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium">Deduplication:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground">
+                          Each person only receives a given phase's next-steps message once. If they've already been sent it
+                          (via auto-send or the admin's manual "Send Stage Messages" button), subsequent sessions in the same phase are skipped.
+                        </p>
                       </div>
                       <div>
                         <span className="font-medium">Supabase secret required:</span>
                         <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
                           <li><code className="bg-background px-1 rounded">LOG_SESSION_API_KEY</code> — shared key for authenticating session log calls</li>
                         </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Next-Steps Stage Messaging */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Next-Steps Stage Messaging (Manual)
+                      <Badge variant="outline">Runbook</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      In addition to auto-sending next-steps messages after each logged session, admins can manually
+                      send stage messages to all remaining participants via the Cohort Runbook. This is useful when you
+                      want to reach participants who haven't yet logged a session for a given phase.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">How it works:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Go to the <strong>Cohort Runbook</strong> page</li>
+                          <li>Expand the <strong>Midpoint</strong> or <strong>Closure</strong> stage</li>
+                          <li>Click <strong>"Send Midpoint Messages"</strong> or <strong>"Send Wrapping Up Messages"</strong></li>
+                          <li>The system loads templates for that phase — if role-specific templates exist (<code className="bg-background px-1 rounded">next_steps_mentee</code> / <code className="bg-background px-1 rounded">next_steps_mentor</code>), each person gets their tailored message; otherwise the generic <code className="bg-background px-1 rounded">next_steps</code> template is used</li>
+                          <li>For each pair, <strong>both</strong> the mentee and mentor receive their respective message</li>
+                          <li>Anyone who was already auto-sent the message is <strong>automatically skipped</strong> (no duplicates)</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Edge function:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground">
+                          <code className="bg-background px-1 rounded">send-stage-messages</code> — accepts{' '}
+                          <code className="bg-background px-1 rounded">{`{ cohort_id, journey_phase }`}</code> and
+                          returns <code className="bg-background px-1 rounded">{`{ sent, failed, skipped }`}</code> counts.
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium">Configuring session thresholds:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground">
+                          In the Runbook's <strong>Setup</strong> stage, you'll find a "Journey Phase Thresholds" section where you can
+                          configure how many completed sessions map to each phase. These thresholds are saved per cohort and used
+                          by both auto-detect (log-session) and manual sends.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -287,11 +405,19 @@ const Settings = () => {
                       Set these via <code className="text-xs bg-muted px-1 py-0.5 rounded">supabase secrets set KEY=value</code> in the CLI:
                     </p>
                     <div className="bg-muted rounded-md p-4 text-sm font-mono space-y-1 text-muted-foreground">
-                      <div><code>ZAPIER_SLACK_WEBHOOK_URL</code> — Zapier Catch Hook URL for Slack (used by Zap)</div>
-                      <div><code>SLACK_MENTORING_CHANNEL</code> — e.g. #mentoring (used by Zap)</div>
+                      <div><code>ZAPIER_SLACK_WEBHOOK_URL</code> — Zapier Catch Hook URL for Slack (used by welcome, stage, and auto-send messages)</div>
+                      <div><code>SLACK_MENTORING_CHANNEL</code> — e.g. #mentoring (used for channel announcements)</div>
                       <div><code>SURVEY_IMPORT_API_KEY</code> — API key for survey import (used by Power Automate)</div>
                       <div><code>LOG_SESSION_API_KEY</code> — API key for session logging (used by Power Automate)</div>
+                      <div><code>ADMIN_EMAIL</code> — Admin contact email for templates (optional, defaults to mentoring@mews.com)</div>
                     </div>
+                    <p className="text-sm text-muted-foreground mt-3">
+                      <strong>Edge functions to deploy:</strong>{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code>,{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code>,{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code>,{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code>
+                    </p>
                   </div>
                 </CardContent>
               </Card>

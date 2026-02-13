@@ -321,12 +321,19 @@ export function AnalyticsHelpGuide() {
                   <li>Looks up the respondent by email or name across all active cohorts</li>
                   <li>Finds their mentoring pair from the approved matches</li>
                   <li>Creates a completed session in the sessions table</li>
+                  <li><strong>Auto-detects the journey phase</strong> based on how many sessions the pair has completed</li>
+                  <li><strong>Auto-sends a next-steps Slack DM</strong> to the respondent — uses a role-specific template (<code>next_steps_mentee</code> / <code>next_steps_mentor</code>) if available, otherwise the generic <code>next_steps</code> template (with deduplication — each person only receives it once per phase)</li>
                 </ol>
                 <p className="text-muted-foreground mt-2">
                   At least one of <code>respondent_name</code> or <code>respondent_email</code> is required.
                   Email matching takes priority over name matching and is more reliable for
                   common names. If a match is found in multiple cohorts, the request returns
                   an error for manual resolution.
+                </p>
+                <p className="text-muted-foreground">
+                  Journey phase thresholds (e.g., sessions 1–2 = Getting Started, 3–5 = Building, etc.)
+                  are configurable per cohort in the Runbook's Setup stage. Defaults are used if no custom
+                  thresholds are set.
                 </p>
               </CardContent>
             </Card>
@@ -394,7 +401,9 @@ export function AnalyticsHelpGuide() {
                   {`{`}<br />
                   &nbsp;&nbsp;{`"success": true,`}<br />
                   &nbsp;&nbsp;{`"pair": "Alice Smith & Bob Jones",`}<br />
-                  &nbsp;&nbsp;{`"cohort": "Cohort 3"`}<br />
+                  &nbsp;&nbsp;{`"cohort": "Cohort 3",`}<br />
+                  &nbsp;&nbsp;{`"logged_by": "mentee",`}<br />
+                  &nbsp;&nbsp;{`"auto_sent_phase": "building"`}&nbsp;&nbsp;{`// present if a next-steps message was auto-sent`}<br />
                   {`}`}
                 </div>
                 <p className="text-muted-foreground mt-2">
@@ -443,6 +452,8 @@ export function AnalyticsHelpGuide() {
                   <li>Approve matches, noting any overrides from algorithm recommendations</li>
                   <li>Check People Analytics topic demand vs supply for the new cohort</li>
                   <li>Set up an MS Form for session logging and share with participants</li>
+                  <li>Configure <strong>journey phase thresholds</strong> in the Runbook's Setup stage (e.g., sessions 1–2 = Getting Started)</li>
+                  <li>Create <strong>next-steps message templates</strong> in Settings &rarr; Message Templates for each journey phase</li>
                 </ul>
               </CardContent>
             </Card>
@@ -454,8 +465,11 @@ export function AnalyticsHelpGuide() {
               <CardContent className="text-sm space-y-1">
                 <ul className="list-disc list-inside space-y-1">
                   <li>Session data arrives automatically if MS Forms webhook is configured — check the Mentoring Sessions page for new entries</li>
+                  <li>Next-steps messages are <strong>auto-sent</strong> to participants after each logged session based on their journey phase</li>
                   <li>If using manual CSV: export from MS Forms and use "Import Session Logs" to upload</li>
                   <li>Review pairs with low session frequency and take action</li>
+                  <li>Use the <strong>"Send Stage Messages"</strong> button in the Runbook to reach participants who haven't logged a session yet</li>
+                  <li>Check the Message Log (Settings &rarr; Messages &rarr; Log tab) to verify delivery status</li>
                   <li>Check the Admin Overview dashboard for a quick health snapshot</li>
                 </ul>
               </CardContent>
@@ -528,15 +542,26 @@ export function AnalyticsHelpGuide() {
                 <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
                   <Badge>MS Forms / Power Automate</Badge>
                   <span>&rarr;</span>
-                  <Badge variant="secondary">Webhook (Edge Function)</Badge>
+                  <Badge variant="secondary">Webhook (log-session)</Badge>
                   <span>&rarr;</span>
                   <Badge variant="secondary">Sessions Table</Badge>
                   <span>&rarr;</span>
                   <Badge>Analytics &amp; Insights</Badge>
                 </div>
+                <p className="font-medium mt-3">Auto-messaging after session logging:</p>
+                <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                  <Badge variant="secondary">Session Logged</Badge>
+                  <span>&rarr;</span>
+                  <Badge variant="secondary">Phase Auto-Detected</Badge>
+                  <span>&rarr;</span>
+                  <Badge variant="secondary">Dedup Check</Badge>
+                  <span>&rarr;</span>
+                  <Badge>Next-Steps DM via Slack</Badge>
+                </div>
                 <p className="mt-2">
                   Analytics are only as good as the data you feed them. Automated ingestion via
-                  MS Forms reduces the manual burden and keeps dashboards accurate.
+                  MS Forms reduces the manual burden and keeps dashboards accurate. Auto-messaging
+                  ensures participants receive timely guidance at each stage of their mentoring journey.
                 </p>
               </CardContent>
             </Card>
@@ -635,13 +660,13 @@ export function AnalyticsHelpGuide() {
               <CardContent className="text-sm space-y-2">
                 <p>Sessions can be logged through multiple channels:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li><strong>MS Forms + Power Automate:</strong> Participants fill out a Microsoft Form. Power Automate sends responses to the webhook automatically.</li>
+                  <li><strong>MS Forms + Power Automate:</strong> Participants fill out a Microsoft Form. Power Automate sends responses to the webhook automatically. This also triggers <strong>auto-detection of the journey phase</strong> and sends next-steps messages via Slack.</li>
                   <li><strong>"Import Session Logs" button:</strong> Upload a CSV export from MS Forms (or any form tool). The system auto-matches respondent names to pairs — no internal IDs needed.</li>
                   <li><strong>"New Session" button:</strong> Manually create sessions with specific mentor/mentee IDs.</li>
                   <li><strong>Session CSV import:</strong> Bulk import with internal IDs (mentor_id, mentee_id, cohort_id).</li>
                 </ul>
                 <p className="text-muted-foreground mt-2">
-                  The "Import Session Logs" option is the easiest for form data — just export from MS Forms and upload. Names are automatically matched to active pairs.
+                  The MS Forms + Power Automate option is recommended — sessions are logged instantly, journey phases are auto-detected, and next-steps messages are sent without any admin intervention.
                 </p>
               </CardContent>
             </Card>

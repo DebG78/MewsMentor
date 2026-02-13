@@ -76,13 +76,14 @@ import {
   deleteAllCohortStages,
   completeAllStages,
 } from '@/lib/runbookService';
-import { getAllCohorts } from '@/lib/supabaseService';
+import { getAllCohorts, updateCohort } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
 import {
-  getMessageTemplates, getMessageLogSummary, sendWelcomeMessages,
+  getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
   TEMPLATE_TYPES,
   type MessageTemplate, type MessageLogSummary,
 } from '@/lib/messageService';
+import { DEFAULT_SESSION_THRESHOLDS, type SessionThresholds, type JourneyPhase } from '@/types/mentoring';
 
 // Icon mapping for stage types
 const stageIcons: Record<StageType, React.ComponentType<{ className?: string }>> = {
@@ -109,7 +110,7 @@ export default function CohortRunbook() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
+  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string; session_thresholds?: SessionThresholds | null }>>([]);
   const [selectedCohort, setSelectedCohort] = useState<string>(cohortId || '');
   const [stages, setStages] = useState<CohortStage[]>([]);
   const [progress, setProgress] = useState({ total: 0, completed: 0, percentComplete: 0 });
@@ -141,11 +142,21 @@ export default function CohortRunbook() {
   const [previewBody, setPreviewBody] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  // Stage message sending state
+  const [isSendingStageMessages, setIsSendingStageMessages] = useState(false);
+  const [isSendStageConfirmOpen, setIsSendStageConfirmOpen] = useState(false);
+  const [sendStagePhase, setSendStagePhase] = useState<string>('');
+  const [sendStageLabel, setSendStageLabel] = useState<string>('');
+
+  // Session threshold editing state
+  const [editingThresholds, setEditingThresholds] = useState<SessionThresholds | null>(null);
+  const [isSavingThresholds, setIsSavingThresholds] = useState(false);
+
   // Stage type → template type mapping
-  const STAGE_TEMPLATE_MAP: Record<string, { types: string[]; phase?: string; autoSent?: boolean }> = {
+  const STAGE_TEMPLATE_MAP: Record<string, { types: string[]; phase?: string }> = {
     launch: { types: ['welcome_mentee', 'welcome_mentor', 'channel_announcement'] },
-    midpoint: { types: ['next_steps'], phase: 'midpoint', autoSent: true },
-    closure: { types: ['next_steps'], phase: 'wrapping_up', autoSent: true },
+    midpoint: { types: ['next_steps', 'next_steps_mentee', 'next_steps_mentor'], phase: 'midpoint' },
+    closure: { types: ['next_steps', 'next_steps_mentee', 'next_steps_mentor'], phase: 'wrapping_up' },
   };
 
   useEffect(() => {
@@ -161,7 +172,7 @@ export default function CohortRunbook() {
   const loadCohorts = async () => {
     try {
       const data = await getAllCohorts();
-      setCohorts(data.map(c => ({ id: c.id, name: c.name })));
+      setCohorts(data.map(c => ({ id: c.id, name: c.name, session_thresholds: c.session_thresholds })));
       if (!selectedCohort && data.length > 0) {
         setSelectedCohort(data[0].id);
       }
@@ -514,6 +525,48 @@ export default function CohortRunbook() {
       });
     } finally {
       setIsSendingMessages(false);
+    }
+  };
+
+  const handleSendStageMessages = async () => {
+    if (!selectedCohort || !sendStagePhase) return;
+    setIsSendStageConfirmOpen(false);
+    setIsSendingStageMessages(true);
+    try {
+      const result = await sendStageMessages(selectedCohort, sendStagePhase);
+      toast({
+        title: 'Stage messages sent',
+        description: `${result.sent} sent, ${result.skipped} skipped (already received), ${result.failed} failed`,
+      });
+      loadStages();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to send stage messages',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingStageMessages(false);
+    }
+  };
+
+  const handleSaveThresholds = async () => {
+    if (!selectedCohort || !editingThresholds) return;
+    setIsSavingThresholds(true);
+    try {
+      await updateCohort(selectedCohort, { session_thresholds: editingThresholds });
+      setCohorts(prev => prev.map(c =>
+        c.id === selectedCohort ? { ...c, session_thresholds: editingThresholds } : c
+      ));
+      toast({ title: 'Session thresholds saved' });
+    } catch (err: any) {
+      toast({
+        title: 'Failed to save thresholds',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingThresholds(false);
     }
   };
 
@@ -877,20 +930,19 @@ export default function CohortRunbook() {
                         const relevantTemplates = getTemplatesForStage(stage.stage_type);
                         const summary = stageMsgSummary[stage.stage_type];
                         const isLaunch = stage.stage_type === 'launch';
+                        const isStageWithPhase = !!config.phase;
 
                         return (
                           <div className="border-t pt-4">
                             <div className="flex items-center gap-2 mb-3">
                               <MessageSquare className="w-4 h-4 text-muted-foreground" />
                               <Label className="text-xs">Messages</Label>
-                              {config.autoSent && (
-                                <Badge variant="secondary" className="text-[10px] h-5">Auto-sent</Badge>
-                              )}
                             </div>
 
-                            {config.autoSent && (
+                            {isStageWithPhase && (
                               <p className="text-xs text-muted-foreground mb-3">
-                                Sent automatically when participants log a session in this phase.
+                                Next-steps messages are auto-sent when a participant logs a session in this phase.
+                                Use the button below to send to remaining participants who haven't received it yet.
                               </p>
                             )}
 
@@ -962,6 +1014,29 @@ export default function CohortRunbook() {
                               </Button>
                             )}
 
+                            {/* Send button for midpoint/closure stages */}
+                            {isStageWithPhase && relevantTemplates.length > 0 && (
+                              <Button
+                                size="sm"
+                                className="mt-3"
+                                onClick={() => {
+                                  setSendStagePhase(config.phase!);
+                                  setSendStageLabel(
+                                    stage.stage_type === 'midpoint' ? 'Midpoint' : 'Wrapping Up'
+                                  );
+                                  setIsSendStageConfirmOpen(true);
+                                }}
+                                disabled={isSendingStageMessages}
+                              >
+                                {isSendingStageMessages ? (
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Send className="w-3 h-3 mr-1" />
+                                )}
+                                Send {stage.stage_type === 'midpoint' ? 'Midpoint' : 'Wrapping Up'} Messages
+                              </Button>
+                            )}
+
                             {/* Delivery summary */}
                             {summary && summary.total > 0 && (
                               <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
@@ -980,6 +1055,80 @@ export default function CohortRunbook() {
                                   View full log
                                 </button>
                               </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Session Threshold Config — only for setup stage */}
+                      {stage.stage_type === 'setup' && (() => {
+                        const currentCohort = cohorts.find(c => c.id === selectedCohort);
+                        const thresholds = editingThresholds
+                          || currentCohort?.session_thresholds
+                          || DEFAULT_SESSION_THRESHOLDS;
+                        const phases: { key: JourneyPhase; label: string }[] = [
+                          { key: 'getting_started', label: 'Getting Started' },
+                          { key: 'building', label: 'Building' },
+                          { key: 'midpoint', label: 'Midpoint' },
+                          { key: 'wrapping_up', label: 'Wrapping Up' },
+                        ];
+
+                        return (
+                          <div className="border-t pt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Settings className="w-4 h-4 text-muted-foreground" />
+                              <Label className="text-xs">Journey Phase Thresholds</Label>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-3">
+                              Configure how many completed sessions map to each journey phase. Used to auto-detect phase and send relevant messages.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {phases.map(phase => {
+                                const range = thresholds[phase.key] || { min: 0, max: null };
+                                return (
+                                  <div key={phase.key} className="flex items-center gap-2">
+                                    <span className="text-xs w-28 truncate">{phase.label}</span>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      className="h-7 w-16 text-xs"
+                                      value={range.min}
+                                      onChange={(e) => {
+                                        const updated = { ...thresholds, [phase.key]: { ...range, min: Number(e.target.value) } };
+                                        setEditingThresholds(updated);
+                                      }}
+                                    />
+                                    <span className="text-xs text-muted-foreground">to</span>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      className="h-7 w-16 text-xs"
+                                      placeholder="∞"
+                                      value={range.max ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value ? Number(e.target.value) : null;
+                                        const updated = { ...thresholds, [phase.key]: { ...range, max: val } };
+                                        setEditingThresholds(updated);
+                                      }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {editingThresholds && (
+                              <Button
+                                size="sm"
+                                className="mt-3"
+                                onClick={handleSaveThresholds}
+                                disabled={isSavingThresholds}
+                              >
+                                {isSavingThresholds ? (
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                )}
+                                Save Thresholds
+                              </Button>
                             )}
                           </div>
                         );
@@ -1142,6 +1291,27 @@ export default function CohortRunbook() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSendConfirmOpen(false)}>Cancel</Button>
             <Button onClick={handleSendWelcomeMessages}>
+              <Send className="w-4 h-4 mr-1" />
+              Send Messages
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Stage Messages Confirmation Dialog */}
+      <Dialog open={isSendStageConfirmOpen} onOpenChange={setIsSendStageConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send {sendStageLabel} Messages</DialogTitle>
+            <DialogDescription>
+              This will send next-steps messages to all participants in matched pairs who
+              haven't already received a message for this phase. Participants who were auto-sent
+              a message when they logged a session will be skipped.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSendStageConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={handleSendStageMessages}>
               <Send className="w-4 h-4 mr-1" />
               Send Messages
             </Button>
