@@ -135,6 +135,8 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('import-survey-response v11 invoked');
+
     // Validate API key
     const apiKey = req.headers.get('x-api-key');
     const expectedKey = Deno.env.get('SURVEY_IMPORT_API_KEY');
@@ -148,6 +150,10 @@ Deno.serve(async (req) => {
     const cohortId = cohortIdParam || 'unassigned';
 
     const body = await req.json();
+    console.log('Body keys:', Object.keys(body));
+    console.log('Body value types:', Object.fromEntries(
+      Object.entries(body).map(([k, v]) => [k, typeof v])
+    ));
     const f = (patterns: string[][]) => findFieldByKeywords(body, patterns);
 
     // Create admin Supabase client (bypasses RLS)
@@ -181,7 +187,6 @@ Deno.serve(async (req) => {
       return errorResponse(400, 'At least one of email or name is required');
     }
 
-    const seniorityBand = parseSeniorityBand(f(SHARED.seniority_band));
     const role = f(SHARED.role) || '';
     const industry = f(SHARED.industry) || '';
     const locationTimezone = f(SHARED.location_timezone) || '';
@@ -197,10 +202,10 @@ Deno.serve(async (req) => {
       roleSelection = 'mentor';
     }
 
-    // Split name
-    const nameParts = name.split(/\s+/);
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    // Generate unique person ID (same pattern as client-side)
+    function generatePersonId(type: 'mentee' | 'mentor'): string {
+      return `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
 
     const results: string[] = [];
 
@@ -209,16 +214,14 @@ Deno.serve(async (req) => {
       const primaryCapability = f(MENTEE.primary_capability);
       const mentoringGoal = f(MENTEE.mentoring_goal);
 
-      const menteeRecord: Record<string, unknown> = {
+      // Fields to set on both insert and update
+      const menteeFields: Record<string, unknown> = {
         cohort_id: cohortId,
-        first_name: firstName,
-        last_name: lastName,
         full_name: name,
         email: email || null,
-        role: role,
-        seniority_band: seniorityBand,
-        industry: industry,
-        location_timezone: locationTimezone,
+        role: role || 'Not specified',
+        industry: industry || 'Technology',
+        location_timezone: locationTimezone || 'Not specified',
         bio: bio || null,
         primary_capability: primaryCapability || null,
         primary_capability_detail: f(MENTEE.primary_capability_detail) || null,
@@ -230,22 +233,51 @@ Deno.serve(async (req) => {
         preferred_style: f(MENTEE.preferred_style) || null,
         feedback_preference: f(MENTEE.feedback_preference) || null,
         mentor_experience_importance: f(MENTEE.mentor_experience_importance) || null,
-        // Populate legacy array for backward compat
         topics_to_learn: [primaryCapability, f(MENTEE.secondary_capability)].filter(Boolean),
       };
 
-      const { data: menteeData, error: menteeError } = await supabaseAdmin
-        .from('mentees')
-        .upsert(menteeRecord, { onConflict: 'cohort_id,email' })
-        .select('mentee_id')
-        .single();
-
-      if (menteeError) {
-        console.error('Mentee upsert error:', menteeError);
-        return errorResponse(500, `Failed to import mentee: ${menteeError.message}`);
+      // Check if this mentee already exists (by cohort_id + email)
+      let existingMenteeId: string | null = null;
+      if (email) {
+        const { data: existing } = await supabaseAdmin
+          .from('mentees')
+          .select('mentee_id')
+          .eq('cohort_id', cohortId)
+          .eq('email', email)
+          .single();
+        if (existing) existingMenteeId = existing.mentee_id;
       }
 
-      results.push(`mentee:${menteeData.mentee_id}`);
+      console.log('Mentee roleSelection:', roleSelection, 'email:', email, 'cohortId:', cohortId);
+
+      if (existingMenteeId) {
+        console.log('Updating existing mentee:', existingMenteeId);
+        const { error: updateError } = await supabaseAdmin
+          .from('mentees')
+          .update(menteeFields)
+          .eq('mentee_id', existingMenteeId);
+
+        if (updateError) {
+          console.error('Mentee update error:', JSON.stringify(updateError));
+          return errorResponse(500, `Failed to update mentee: ${updateError.message}`);
+        }
+        results.push(`mentee:${existingMenteeId}`);
+      } else {
+        const newMenteeId = generatePersonId('mentee');
+        console.log('Inserting new mentee:', newMenteeId, JSON.stringify(menteeFields));
+        const { error: insertError } = await supabaseAdmin
+          .from('mentees')
+          .insert({
+            ...menteeFields,
+            mentee_id: newMenteeId,
+          });
+
+        if (insertError) {
+          console.error('Mentee insert error:', JSON.stringify(insertError));
+          return errorResponse(500, `Failed to import mentee: ${insertError.message}`);
+        }
+        results.push(`mentee:${newMenteeId}`);
+      }
     }
 
     // ---- MENTOR RECORD ----
@@ -254,16 +286,14 @@ Deno.serve(async (req) => {
       const mentorMotivation = f(MENTOR.mentor_motivation);
       const experienceText = f(MENTOR.mentoring_experience);
 
-      const mentorRecord: Record<string, unknown> = {
+      // Fields to set on both insert and update
+      const mentorFields: Record<string, unknown> = {
         cohort_id: cohortId,
-        first_name: firstName,
-        last_name: lastName,
         full_name: name,
         email: email || null,
-        role: role,
-        seniority_band: seniorityBand,
-        industry: industry,
-        location_timezone: locationTimezone,
+        role: role || 'Not specified',
+        industry: industry || 'Technology',
+        location_timezone: locationTimezone || 'Not specified',
         bio: bio || null,
         mentor_motivation: mentorMotivation || null,
         capacity_remaining: parseCapacityText(f(MENTOR.capacity)),
@@ -278,28 +308,55 @@ Deno.serve(async (req) => {
         hard_earned_lesson: f(MENTOR.hard_earned_lesson) || null,
         natural_strengths: parseMultiSelect(f(MENTOR.natural_strengths)),
         meeting_style: f(MENTOR.meeting_style) || null,
-        topics_not_to_mentor: parseMultiSelect(f(MENTOR.topics_not_to_mentor)),
+        topics_not_to_mentor: parseMultiSelect(f(MENTOR.topics_not_to_mentor)).join('; ') || null,
         excluded_scenarios: parseMultiSelect(f(MENTOR.excluded_scenarios)),
         match_exclusions: f(MENTOR.match_exclusions) || null,
-        // Populate legacy array for backward compat
         topics_to_mentor: [
           primaryCapability,
           ...parseMultiSelect(f(MENTOR.secondary_capabilities)),
         ].filter(Boolean),
       };
 
-      const { data: mentorData, error: mentorError } = await supabaseAdmin
-        .from('mentors')
-        .upsert(mentorRecord, { onConflict: 'cohort_id,email' })
-        .select('mentor_id')
-        .single();
-
-      if (mentorError) {
-        console.error('Mentor upsert error:', mentorError);
-        return errorResponse(500, `Failed to import mentor: ${mentorError.message}`);
+      // Check if this mentor already exists (by cohort_id + email)
+      let existingMentorId: string | null = null;
+      if (email) {
+        const { data: existing } = await supabaseAdmin
+          .from('mentors')
+          .select('mentor_id')
+          .eq('cohort_id', cohortId)
+          .eq('email', email)
+          .single();
+        if (existing) existingMentorId = existing.mentor_id;
       }
 
-      results.push(`mentor:${mentorData.mentor_id}`);
+      if (existingMentorId) {
+        // Update existing record (don't change mentor_id)
+        const { error: updateError } = await supabaseAdmin
+          .from('mentors')
+          .update(mentorFields)
+          .eq('mentor_id', existingMentorId);
+
+        if (updateError) {
+          console.error('Mentor update error:', updateError);
+          return errorResponse(500, `Failed to update mentor: ${updateError.message}`);
+        }
+        results.push(`mentor:${existingMentorId}`);
+      } else {
+        // Insert new record with generated ID and required defaults
+        const newMentorId = generatePersonId('mentor');
+        const { error: insertError } = await supabaseAdmin
+          .from('mentors')
+          .insert({
+            ...mentorFields,
+            mentor_id: newMentorId,
+          });
+
+        if (insertError) {
+          console.error('Mentor insert error:', insertError);
+          return errorResponse(500, `Failed to import mentor: ${insertError.message}`);
+        }
+        results.push(`mentor:${newMentorId}`);
+      }
     }
 
     return new Response(
@@ -311,8 +368,9 @@ Deno.serve(async (req) => {
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
-  } catch (error) {
-    console.error('import-survey-response error:', error);
-    return errorResponse(500, error.message || 'Internal server error');
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('import-survey-response error:', message, error);
+    return errorResponse(500, message || 'Internal server error');
   }
 });

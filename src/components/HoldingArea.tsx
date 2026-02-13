@@ -13,20 +13,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Users,
-  UserPlus,
   Target,
   MoreHorizontal,
   Eye,
-  ArrowRight,
   Clock,
   Mail,
-  Plus,
-  User
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getUnassignedSignups, assignToCohort, getAllCohorts } from "@/lib/cohortManager";
 import { Cohort } from "@/types/mentoring";
-import { AddPersonForm } from "./AddPersonForm";
+
 import type { Database } from '@/types/database';
 
 type MenteeRow = Database['public']['Tables']['mentees']['Row'];
@@ -38,8 +34,6 @@ export function HoldingArea() {
   const [availableCohorts, setAvailableCohorts] = useState<Cohort[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
-  const [isAddPersonFormOpen, setIsAddPersonFormOpen] = useState(false);
-  const [addPersonType, setAddPersonType] = useState<'mentor' | 'mentee'>('mentee');
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -116,20 +110,6 @@ export function HoldingArea() {
     return `${topics.slice(0, 2).join(', ')} +${topics.length - 2} more`;
   };
 
-  const handleAddMentor = () => {
-    setAddPersonType('mentor');
-    setIsAddPersonFormOpen(true);
-  };
-
-  const handleAddMentee = () => {
-    setAddPersonType('mentee');
-    setIsAddPersonFormOpen(true);
-  };
-
-  const handlePersonAdded = () => {
-    loadData(); // Refresh the data to show the newly added person
-  };
-
   if (isLoading) {
     return (
       <Card>
@@ -182,24 +162,6 @@ export function HoldingArea() {
               <CardDescription>
                 People who have signed up but haven't been assigned to a cohort yet.
               </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleAddMentee}
-                className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 active:bg-blue-100"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Mentee
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleAddMentor}
-                className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700 hover:border-green-300 active:bg-green-100"
-              >
-                <User className="w-4 h-4 mr-2" />
-                Add Mentor
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -381,13 +343,6 @@ export function HoldingArea() {
         </CardContent>
       </Card>
 
-      {/* Add Person Form Dialog */}
-      <AddPersonForm
-        isOpen={isAddPersonFormOpen}
-        onClose={() => setIsAddPersonFormOpen(false)}
-        type={addPersonType}
-        onSuccess={handlePersonAdded}
-      />
     </div>
   );
 }
