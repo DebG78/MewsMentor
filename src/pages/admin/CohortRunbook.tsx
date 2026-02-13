@@ -975,7 +975,7 @@ export default function CohortRunbook() {
                                 )}
                                 <button
                                   className="text-primary underline ml-1"
-                                  onClick={() => navigate('/admin/settings?tab=messages')}
+                                  onClick={() => navigate(`/admin/settings?tab=messages&subtab=log&logCohort=${selectedCohort}`)}
                                 >
                                   View full log
                                 </button>

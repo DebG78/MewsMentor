@@ -173,13 +173,22 @@ export interface SendWelcomeResult {
  * Trigger welcome messages for a cohort via the edge function.
  */
 export async function sendWelcomeMessages(cohortId: string): Promise<SendWelcomeResult> {
+  console.log('[sendWelcomeMessages] invoking edge function with cohort_id:', cohortId);
+
   const { data: result, error: fnError } = await supabase.functions.invoke(
-    `send-welcome-messages?cohort_id=${cohortId}`,
-    { body: {} }
+    'send-welcome-messages',
+    { body: { cohort_id: cohortId } }
   );
 
+  console.log('[sendWelcomeMessages] response:', { data: result, error: fnError });
+
   if (fnError) {
-    throw new Error(fnError.message || 'Failed to send welcome messages');
+    console.error('[sendWelcomeMessages] error details:', JSON.stringify(fnError, null, 2));
+    const detail = (fnError as any)?.context?.message
+      || (fnError as any)?.context?.error
+      || fnError.message
+      || 'Failed to send welcome messages';
+    throw new Error(detail);
   }
 
   return result as SendWelcomeResult;
