@@ -143,6 +143,7 @@ export async function getAllCohorts(): Promise<Cohort[]> {
   const { data: cohorts, error } = await supabase
     .from('cohorts')
     .select('*')
+    .neq('id', 'unassigned')
     .order('created_at', { ascending: false })
 
   if (error) {

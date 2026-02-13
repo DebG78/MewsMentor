@@ -198,19 +198,29 @@ export default function CohortDetail() {
 
         // Send welcome messages if activating and user opted in
         if (newStatus === 'active' && sendMessages) {
-          try {
-            const result = await sendWelcomeMessages(cohort.id);
+          // Check if there are matched pairs before trying to send
+          const hasManualMatches = (cohort.manual_matches as any)?.matches?.length > 0;
+          const hasAlgoMatches = (cohort.matches as any)?.results?.some((r: any) => r.proposed_assignment?.mentor_id);
+          if (!hasManualMatches && !hasAlgoMatches) {
             toast({
-              title: "Welcome messages sent",
-              description: `${result.sent} messages sent${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
+              title: "Cohort activated",
+              description: "No matched pairs found — welcome messages will be sent once you run matching.",
             });
-          } catch (msgError) {
-            console.error('Welcome messages error:', msgError);
-            toast({
-              title: "Messages not sent",
-              description: "Cohort activated, but welcome messages failed. You can retry from the messaging section.",
-              variant: "destructive",
-            });
+          } else {
+            try {
+              const result = await sendWelcomeMessages(cohort.id);
+              toast({
+                title: "Welcome messages sent",
+                description: `${result.sent} messages sent${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
+              });
+            } catch (msgError) {
+              console.error('Welcome messages error:', msgError);
+              toast({
+                title: "Messages not sent",
+                description: "Cohort activated, but welcome messages failed. You can retry from the Runbook.",
+                variant: "destructive",
+              });
+            }
           }
         }
       }
