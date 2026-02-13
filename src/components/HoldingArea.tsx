@@ -123,34 +123,6 @@ export function HoldingArea() {
 
   return (
     <div className="space-y-6">
-      {/* Overview Stats */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="text-2xl font-bold">{unassignedMentees.length}</p>
-                <p className="text-sm text-muted-foreground">Unassigned Mentees</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-2xl font-bold">{unassignedMentors.length}</p>
-                <p className="text-sm text-muted-foreground">Unassigned Mentors</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Unassigned People */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

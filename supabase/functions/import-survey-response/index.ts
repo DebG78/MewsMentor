@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('import-survey-response v11 invoked');
+    console.log('import-survey-response v12 invoked');
 
     // Validate API key
     const apiKey = req.headers.get('x-api-key');
@@ -180,12 +180,23 @@ Deno.serve(async (req) => {
       cohortName = cohort.name;
     }
 
+    // Derive a display name from email (fallback)
+    function nameFromEmail(email: string): string {
+      const local = email.split('@')[0] || '';
+      return local
+        .split(/[._-]/)
+        .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join(' ');
+    }
+
     // Extract shared fields
     const email = f(SHARED.email) || (body.email as string) || '';
-    const name = f(SHARED.name) || (body.name as string) || '';
+    const rawName = f(SHARED.name) || (body.name as string) || '';
+    const name = rawName || (email ? nameFromEmail(email) : '');
     if (!email && !name) {
       return errorResponse(400, 'At least one of email or name is required');
     }
+    console.log('Resolved name:', name, '| email:', email);
 
     const role = f(SHARED.role) || '';
     const industry = f(SHARED.industry) || '';
@@ -213,6 +224,12 @@ Deno.serve(async (req) => {
     if (roleSelection === 'mentee' || roleSelection === 'both') {
       const primaryCapability = f(MENTEE.primary_capability);
       const mentoringGoal = f(MENTEE.mentoring_goal);
+      console.log('Mentee field extraction:', {
+        primaryCapability,
+        secondaryCapability: f(MENTEE.secondary_capability),
+        mentoringGoal,
+        practiceScenarios: f(MENTEE.practice_scenarios),
+      });
 
       // Fields to set on both insert and update
       const menteeFields: Record<string, unknown> = {

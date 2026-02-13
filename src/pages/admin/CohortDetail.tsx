@@ -53,6 +53,7 @@ import {
   Globe,
   MessageSquare,
   Briefcase,
+  Search,
 } from "lucide-react";
 import {
   getCohortById,
@@ -101,6 +102,7 @@ export default function CohortDetail() {
   const [selectedMatch, setSelectedMatch] = useState<MatchingResult | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState("");
+  const [peopleSearch, setPeopleSearch] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editManager, setEditManager] = useState("");
 
@@ -833,6 +835,19 @@ export default function CohortDetail() {
           </TabsList>
         )}
 
+        {/* Search bar for mentees/mentors */}
+        {(activeTab === 'mentees' || activeTab === 'mentors') && (
+          <div className="flex items-center gap-2 mt-4 mb-2">
+            <Search className="w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name..."
+              value={peopleSearch}
+              onChange={(e) => setPeopleSearch(e.target.value)}
+              className="w-64"
+            />
+          </div>
+        )}
+
         {/* Mentors Tab */}
         <TabsContent value="mentors">
           <Card>
@@ -895,7 +910,9 @@ export default function CohortDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cohort.mentors.map((mentor, index) => {
+                  {cohort.mentors
+                    .filter(m => !peopleSearch || (m.name || m.id).toLowerCase().includes(peopleSearch.toLowerCase()))
+                    .map((mentor, index) => {
                     const remaining = effectiveCapacity.get(mentor.id) || 0;
                     const isAtCapacity = remaining === 0;
                     return (
@@ -970,7 +987,9 @@ export default function CohortDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cohort.mentees.map((mentee, index) => {
+                  {cohort.mentees
+                    .filter(m => !peopleSearch || (m.name || m.id).toLowerCase().includes(peopleSearch.toLowerCase()))
+                    .map((mentee, index) => {
                     const hasMatch = cohort.matches?.results?.find(
                       (r) => r.mentee_id === mentee.id && r.proposed_assignment?.mentor_id
                     );
