@@ -142,12 +142,10 @@ Deno.serve(async (req) => {
       return errorResponse(401, 'Invalid or missing API key');
     }
 
-    // Get cohort_id from query parameter
+    // Get cohort_id from query parameter (optional — defaults to 'unassigned')
     const url = new URL(req.url);
-    const cohortId = url.searchParams.get('cohort_id');
-    if (!cohortId) {
-      return errorResponse(400, 'Missing required query parameter: cohort_id');
-    }
+    const cohortIdParam = url.searchParams.get('cohort_id');
+    const cohortId = cohortIdParam || 'unassigned';
 
     const body = await req.json();
     const f = (patterns: string[][]) => findFieldByKeywords(body, patterns);
@@ -158,18 +156,22 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Verify cohort exists and is in valid status
-    const { data: cohort, error: cohortError } = await supabaseAdmin
-      .from('cohorts')
-      .select('id, name, status')
-      .eq('id', cohortId)
-      .single();
+    // Verify cohort exists and is in valid status (skip for 'unassigned')
+    let cohortName = 'Unassigned';
+    if (cohortId !== 'unassigned') {
+      const { data: cohort, error: cohortError } = await supabaseAdmin
+        .from('cohorts')
+        .select('id, name, status')
+        .eq('id', cohortId)
+        .single();
 
-    if (cohortError || !cohort) {
-      return errorResponse(404, `Cohort not found: ${cohortId}`);
-    }
-    if (!['draft', 'active'].includes(cohort.status)) {
-      return errorResponse(400, `Cohort "${cohort.name}" is in "${cohort.status}" status. Only draft/active cohorts accept survey imports.`);
+      if (cohortError || !cohort) {
+        return errorResponse(404, `Cohort not found: ${cohortId}`);
+      }
+      if (!['draft', 'active'].includes(cohort.status)) {
+        return errorResponse(400, `Cohort "${cohort.name}" is in "${cohort.status}" status. Only draft/active cohorts accept survey imports.`);
+      }
+      cohortName = cohort.name;
     }
 
     // Extract shared fields
@@ -303,7 +305,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        cohort: cohort.name,
+        cohort: cohortName,
         role: roleSelection,
         records: results,
       }),

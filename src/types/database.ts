@@ -26,6 +26,7 @@ export interface Database {
           manual_matches: Json | null
           mentor_survey_id: string | null
           mentee_survey_id: string | null
+          session_thresholds: Json | null
           created_at: string
           updated_at: string
         }
@@ -45,6 +46,7 @@ export interface Database {
           manual_matches?: Json | null
           mentor_survey_id?: string | null
           mentee_survey_id?: string | null
+          session_thresholds?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -64,6 +66,7 @@ export interface Database {
           manual_matches?: Json | null
           mentor_survey_id?: string | null
           mentee_survey_id?: string | null
+          session_thresholds?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -722,6 +725,7 @@ export interface Database {
           id: string
           cohort_id: string
           template_type: string
+          journey_phase: string | null
           recipient_email: string
           message_text: string
           delivery_status: string
@@ -732,6 +736,7 @@ export interface Database {
           id?: string
           cohort_id: string
           template_type: string
+          journey_phase?: string | null
           recipient_email: string
           message_text: string
           delivery_status?: string
@@ -742,6 +747,7 @@ export interface Database {
           id?: string
           cohort_id?: string
           template_type?: string
+          journey_phase?: string | null
           recipient_email?: string
           message_text?: string
           delivery_status?: string

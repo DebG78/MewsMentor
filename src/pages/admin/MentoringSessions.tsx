@@ -536,6 +536,7 @@ export default function MentoringSessions() {
                           <TableHead>Mentor</TableHead>
                           <TableHead>Mentee</TableHead>
                           <TableHead>Duration</TableHead>
+                          <TableHead>Logged By</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-center">Rating</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
@@ -553,6 +554,15 @@ export default function MentoringSessions() {
                             <TableCell>{personLookup.get(session.mentor_id)?.name || session.mentor_id.slice(0, 8) + '...'}</TableCell>
                             <TableCell>{personLookup.get(session.mentee_id)?.name || session.mentee_id.slice(0, 8) + '...'}</TableCell>
                             <TableCell>{session.duration_minutes}min</TableCell>
+                            <TableCell>
+                              {session.logged_by ? (
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {session.logged_by}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">-</span>
+                              )}
+                            </TableCell>
                             <TableCell>{getStatusBadge(session.status)}</TableCell>
                             <TableCell className="text-center">
                               {session.mentor_rating || session.mentee_rating ? (

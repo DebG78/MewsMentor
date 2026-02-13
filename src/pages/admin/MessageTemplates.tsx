@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, MoreVertical, Loader2, Copy, Trash2, Edit, Eye, ChevronDown, ChevronRight, PackagePlus } from 'lucide-react';
 import {
@@ -206,6 +207,55 @@ function getPhaseLabel(value: string | null): string {
   return JOURNEY_PHASES.find(p => p.value === value)?.label || value;
 }
 
+interface MessageBatch {
+  id: string;
+  template_type: string;
+  sent_at: string;
+  entries: MessageLogEntry[];
+  sentCount: number;
+  failedCount: number;
+  pendingCount: number;
+}
+
+function groupIntoBatches(entries: MessageLogEntry[]): MessageBatch[] {
+  const BUCKET_MS = 5 * 60 * 1000; // 5-minute buckets
+  const sorted = [...entries].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+
+  const batchMap = new Map<string, MessageBatch>();
+
+  for (const entry of sorted) {
+    const ts = new Date(entry.created_at).getTime();
+    const bucket = Math.floor(ts / BUCKET_MS) * BUCKET_MS;
+    const key = `${entry.template_type}::${bucket}`;
+
+    let batch = batchMap.get(key);
+    if (!batch) {
+      batch = {
+        id: key,
+        template_type: entry.template_type,
+        sent_at: entry.created_at,
+        entries: [],
+        sentCount: 0,
+        failedCount: 0,
+        pendingCount: 0,
+      };
+      batchMap.set(key, batch);
+    }
+
+    batch.entries.push(entry);
+    if (entry.delivery_status === 'sent') batch.sentCount++;
+    else if (entry.delivery_status === 'failed') batch.failedCount++;
+    else batch.pendingCount++;
+  }
+
+  // Newest first
+  return Array.from(batchMap.values()).sort(
+    (a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime()
+  );
+}
+
 export default function MessageTemplates() {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -224,6 +274,11 @@ export default function MessageTemplates() {
   const [logCohortId, setLogCohortId] = useState<string>(logCohortParam || '');
 
   const [seeding, setSeeding] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+
+  // Batch grouping
+  const batches = useMemo(() => groupIntoBatches(messageLog), [messageLog]);
+  const selectedBatch = batches.find(b => b.id === selectedBatchId) || null;
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -563,7 +618,7 @@ export default function MessageTemplates() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Message Delivery Log</CardTitle>
-                <Select value={logCohortId} onValueChange={(v) => { setLogCohortId(v); loadMessageLog(v); }}>
+                <Select value={logCohortId} onValueChange={(v) => { setLogCohortId(v); setSelectedBatchId(null); loadMessageLog(v); }}>
                   <SelectTrigger className="w-[240px]">
                     <SelectValue placeholder="Select a cohort..." />
                   </SelectTrigger>
@@ -589,50 +644,108 @@ export default function MessageTemplates() {
                   No messages sent for this cohort yet.
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Recipient</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Sent</TableHead>
-                      <TableHead className="w-[50px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {messageLog.map(entry => (
-                      <TableRow key={entry.id}>
-                        <TableCell>
-                          <Badge variant="outline">{getTypeLabel(entry.template_type)}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{entry.recipient_email}</TableCell>
-                        <TableCell>
-                          <Badge variant={
-                            entry.delivery_status === 'sent' ? 'default' :
-                            entry.delivery_status === 'failed' ? 'destructive' : 'secondary'
-                          }>
-                            {entry.delivery_status}
-                          </Badge>
-                          {entry.error_detail && (
-                            <p className="text-xs text-destructive mt-1">{entry.error_detail}</p>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(entry.created_at).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openPreview(entry.message_text)}
+                <div className="flex gap-4">
+                  {/* Left panel — Batch list */}
+                  <div className="w-2/5 border rounded-md">
+                    <ScrollArea className="h-[500px]">
+                      <div className="divide-y">
+                        {batches.map(batch => (
+                          <button
+                            key={batch.id}
+                            type="button"
+                            onClick={() => setSelectedBatchId(batch.id)}
+                            className={`w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors ${
+                              selectedBatchId === batch.id ? 'bg-accent' : ''
+                            }`}
                           >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            <div className="flex items-center justify-between mb-1">
+                              <Badge variant="outline">{getTypeLabel(batch.template_type)}</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {batch.entries.length} recipient{batch.entries.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-1">
+                              {new Date(batch.sent_at).toLocaleString()}
+                            </p>
+                            <div className="flex gap-3 text-xs">
+                              {batch.sentCount > 0 && (
+                                <span className="text-green-600">{batch.sentCount} sent</span>
+                              )}
+                              {batch.failedCount > 0 && (
+                                <span className="text-destructive">{batch.failedCount} failed</span>
+                              )}
+                              {batch.pendingCount > 0 && (
+                                <span className="text-muted-foreground">{batch.pendingCount} pending</span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {/* Right panel — Recipient details */}
+                  <div className="w-3/5 border rounded-md">
+                    {!selectedBatch ? (
+                      <div className="flex items-center justify-center h-[500px] text-muted-foreground text-sm">
+                        Select a message batch to view recipients
+                      </div>
+                    ) : (
+                      <div className="flex flex-col h-[500px]">
+                        <div className="px-4 py-3 border-b bg-muted/30">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{getTypeLabel(selectedBatch.template_type)}</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(selectedBatch.sent_at).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <ScrollArea className="flex-1">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Recipient</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead className="w-[50px]" />
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {selectedBatch.entries.map(entry => (
+                                <TableRow key={entry.id}>
+                                  <TableCell className="text-sm">{entry.recipient_email}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={
+                                      entry.delivery_status === 'sent' ? 'default' :
+                                      entry.delivery_status === 'failed' ? 'destructive' : 'secondary'
+                                    }>
+                                      {entry.delivery_status}
+                                    </Badge>
+                                    {entry.error_detail && (
+                                      <p className="text-xs text-destructive mt-1">{entry.error_detail}</p>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {new Date(entry.created_at).toLocaleTimeString()}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => openPreview(entry.message_text)}
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

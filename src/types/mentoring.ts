@@ -242,6 +242,7 @@ export interface Cohort {
   success_rate_target?: number;
   mentor_survey_id?: string;  // Survey template ID for mentor signup
   mentee_survey_id?: string;  // Survey template ID for mentee signup
+  session_thresholds?: SessionThresholds | null;
 }
 
 export interface CohortStats {
@@ -326,6 +327,20 @@ export const JOURNEY_PHASES: { key: JourneyPhase; label: string }[] = [
   { key: 'midpoint', label: 'Midpoint Check-in' },
   { key: 'wrapping_up', label: 'Wrapping Up' },
 ];
+
+export interface SessionThresholdRange {
+  min: number;
+  max: number | null; // null means "and above"
+}
+
+export type SessionThresholds = Record<JourneyPhase, SessionThresholdRange>;
+
+export const DEFAULT_SESSION_THRESHOLDS: SessionThresholds = {
+  getting_started: { min: 1, max: 2 },
+  building: { min: 3, max: 5 },
+  midpoint: { min: 6, max: 7 },
+  wrapping_up: { min: 8, max: null },
+};
 
 // Session management types (simplified for meeting logging)
 export interface Session {

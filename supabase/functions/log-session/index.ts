@@ -1,6 +1,13 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  renderTemplate,
+  detectJourneyPhase,
+  DEFAULT_SESSION_THRESHOLDS,
+  type TemplateContext,
+  type SessionThresholds,
+} from '../_shared/templates.ts';
 
 const VALID_DURATIONS = [15, 30, 45, 60, 90, 120];
 
@@ -218,6 +225,7 @@ Deno.serve(async (req) => {
         scheduled_datetime: parsedDate.toISOString(),
         duration_minutes: durationNum,
         status: 'completed',
+        logged_by: pair.respondent_role,
         [ratingField]: ratingNum,
         ...(sessionJourneyPhase ? { journey_phase: sessionJourneyPhase } : {}),
       });
@@ -227,12 +235,141 @@ Deno.serve(async (req) => {
       return errorResponse(500, 'Failed to log session');
     }
 
+    // ================================================================
+    // Auto-detect journey phase and send next-steps message
+    // ================================================================
+    let autoSentPhase: string | null = null;
+    try {
+      // Count completed sessions for this pair
+      const { count: sessionCount } = await supabaseAdmin
+        .from('sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('mentor_id', pair.mentor_id)
+        .eq('mentee_id', pair.mentee_id)
+        .eq('cohort_id', pair.cohort_id)
+        .eq('status', 'completed');
+
+      if (sessionCount !== null && sessionCount > 0) {
+        // Get the cohort for threshold config
+        const matchedCohort = cohorts?.find((c: any) => c.id === pair.cohort_id);
+        const thresholds = (matchedCohort?.session_thresholds as SessionThresholds) || DEFAULT_SESSION_THRESHOLDS;
+        const detectedPhase = detectJourneyPhase(sessionCount, thresholds);
+
+        console.log(`[log-session] Auto-detect: pair ${pair.mentee_name} & ${pair.mentor_name}, sessions=${sessionCount}, phase=${detectedPhase}`);
+
+        if (detectedPhase) {
+          // Update the session with detected phase if not manually set
+          if (!sessionJourneyPhase) {
+            await supabaseAdmin
+              .from('sessions')
+              .update({ journey_phase: detectedPhase })
+              .eq('mentor_id', pair.mentor_id)
+              .eq('mentee_id', pair.mentee_id)
+              .eq('cohort_id', pair.cohort_id)
+              .eq('scheduled_datetime', parsedDate.toISOString());
+          }
+
+          // Find respondent email — prefer the one we matched on, fall back to DB lookup
+          let respondentEmail = effectiveEmail;
+          if (!respondentEmail) {
+            const table = pair.respondent_role === 'mentee' ? 'mentees' : 'mentors';
+            const idCol = pair.respondent_role === 'mentee' ? 'mentee_id' : 'mentor_id';
+            const idVal = pair.respondent_role === 'mentee' ? pair.mentee_id : pair.mentor_id;
+            const { data: person } = await supabaseAdmin
+              .from(table)
+              .select('email')
+              .eq(idCol, idVal)
+              .eq('cohort_id', pair.cohort_id)
+              .single();
+            respondentEmail = person?.email || '';
+          }
+
+          if (respondentEmail) {
+            // Dedup check: has this person already received ANY next_steps message for this phase?
+            const { data: existing } = await supabaseAdmin
+              .from('message_log')
+              .select('id')
+              .eq('cohort_id', pair.cohort_id)
+              .in('template_type', ['next_steps', 'next_steps_mentee', 'next_steps_mentor'])
+              .eq('journey_phase', detectedPhase)
+              .eq('recipient_email', respondentEmail)
+              .eq('delivery_status', 'sent')
+              .limit(1);
+
+            if (!existing || existing.length === 0) {
+              // Load next_steps template for this phase — prefer role-specific, fall back to generic
+              const roleType = pair.respondent_role === 'mentee' ? 'next_steps_mentee' : 'next_steps_mentor';
+              const { data: templates } = await supabaseAdmin
+                .from('message_templates')
+                .select('*')
+                .or(`cohort_id.eq.${pair.cohort_id},cohort_id.is.null`)
+                .eq('is_active', true)
+                .in('template_type', [roleType, 'next_steps'])
+                .eq('journey_phase', detectedPhase);
+
+              // Priority: cohort-specific role → cohort-specific generic → global role → global generic
+              const template = templates?.find((t: any) => t.cohort_id === pair.cohort_id && t.template_type === roleType)
+                || templates?.find((t: any) => t.cohort_id === pair.cohort_id && t.template_type === 'next_steps')
+                || templates?.find((t: any) => !t.cohort_id && t.template_type === roleType)
+                || templates?.find((t: any) => !t.cohort_id && t.template_type === 'next_steps');
+
+              if (template) {
+                const zapierWebhookUrl = Deno.env.get('ZAPIER_SLACK_WEBHOOK_URL');
+                if (zapierWebhookUrl) {
+                  const context: TemplateContext = {
+                    FIRST_NAME: pair.respondent_role === 'mentee'
+                      ? pair.mentee_name.split(' ')[0]
+                      : pair.mentor_name.split(' ')[0],
+                    MENTEE_FIRST_NAME: pair.mentee_name.split(' ')[0],
+                    MENTOR_FIRST_NAME: pair.mentor_name.split(' ')[0],
+                    COHORT_NAME: pair.cohort_name,
+                  };
+
+                  const messageText = renderTemplate(template.body, context);
+
+                  const zapRes = await fetch(zapierWebhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      type: 'dm',
+                      recipient_email: respondentEmail,
+                      message_text: messageText,
+                      cohort_name: pair.cohort_name,
+                    }),
+                  });
+
+                  await supabaseAdmin.from('message_log').insert({
+                    cohort_id: pair.cohort_id,
+                    template_type: template.template_type,
+                    journey_phase: detectedPhase,
+                    recipient_email: respondentEmail,
+                    message_text: messageText,
+                    delivery_status: zapRes.ok ? 'sent' : 'failed',
+                    error_detail: zapRes.ok ? null : `HTTP ${zapRes.status}`,
+                  });
+
+                  autoSentPhase = detectedPhase;
+                  console.log(`[log-session] Auto-sent next_steps (${detectedPhase}) to ${respondentEmail}: ${zapRes.ok ? 'OK' : 'FAILED'}`);
+                }
+              }
+            } else {
+              console.log(`[log-session] Skipping auto-send: ${respondentEmail} already received next_steps for ${detectedPhase}`);
+            }
+          }
+        }
+      }
+    } catch (msgError) {
+      // Never fail the session insert due to messaging errors
+      console.error('[log-session] Auto-send next-steps error (non-fatal):', msgError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         pair: `${pair.mentee_name} & ${pair.mentor_name}`,
         cohort: pair.cohort_name,
         logged_by: pair.respondent_role,
+        ...(autoSentPhase ? { auto_sent_phase: autoSentPhase } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

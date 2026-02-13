@@ -20,6 +20,7 @@ export interface SessionRow {
   mentee_rating: number | null;
   mentor_feedback: string | null;
   mentee_feedback: string | null;
+  logged_by: string | null;
   created_at: string;
   updated_at: string;
 }
