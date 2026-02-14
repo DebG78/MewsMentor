@@ -20,6 +20,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, MoreVertical, Loader2, Copy, Trash2, Edit, Eye, ChevronDown, ChevronRight, PackagePlus } from 'lucide-react';
+import { PageHeader } from "@/components/admin/PageHeader";
 import {
   getMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, getMessageLog,
   TEMPLATE_TYPES, JOURNEY_PHASES, AVAILABLE_PLACEHOLDERS,
@@ -496,24 +497,22 @@ export default function MessageTemplates() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Message Templates</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage templates for welcome messages, announcements, and session next-steps.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleAddDefaults} disabled={seeding}>
-            {seeding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PackagePlus className="w-4 h-4 mr-2" />}
-            Add Default Templates
-          </Button>
-          <Button onClick={openCreateDialog}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Template
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Message Templates"
+        description="Manage templates for welcome messages, announcements, and session next-steps."
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleAddDefaults} disabled={seeding}>
+              {seeding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PackagePlus className="w-4 h-4 mr-2" />}
+              Add Default Templates
+            </Button>
+            <Button onClick={openCreateDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Template
+            </Button>
+          </div>
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>

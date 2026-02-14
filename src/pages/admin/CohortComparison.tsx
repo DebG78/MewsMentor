@@ -38,6 +38,7 @@ import { compareCohortMetrics } from '@/lib/metricsService';
 import { METRIC_LABELS } from '@/types/metrics';
 import type { CohortComparison as CohortComparisonType } from '@/types/metrics';
 import { computeMentorLoadBalance, computeTopicCoverage } from '@/lib/analyticsComputeService';
+import { PageHeader } from "@/components/admin/PageHeader";
 
 const comparisonChartConfig = {
   actual_value: { label: 'Actual', color: 'hsl(221, 83%, 53%)' },
@@ -165,12 +166,7 @@ export default function CohortComparison() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Cohort Comparison</h1>
-        <p className="text-muted-foreground">
-          Compare performance and metrics across cohorts
-        </p>
-      </div>
+      <PageHeader title="Cohort Comparison" description="Compare performance and metrics across cohorts" />
 
       {/* Side-by-side Stats Table */}
       <Card>

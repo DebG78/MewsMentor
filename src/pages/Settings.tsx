@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
-  Settings as SettingsIcon,
   FileEdit,
   Users,
   Globe,
@@ -17,6 +16,7 @@ import { SurveyMigrationHelper } from "@/components/SurveyMigrationHelper";
 import { HelpGuide } from "@/components/HelpGuide";
 import { AnalyticsHelpGuide } from "@/components/AnalyticsHelpGuide";
 import MessageTemplates from "./admin/MessageTemplates";
+import { PageHeader } from "@/components/admin/PageHeader";
 
 const Settings = () => {
   const [searchParams] = useSearchParams();
@@ -79,22 +79,14 @@ const Settings = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
-      <div className="mx-auto px-6 py-8">
-        <div className="max-w-[1600px] mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <SettingsIcon className="w-8 h-8 text-primary" />
-              <h1 className="text-3xl font-bold">Settings</h1>
-            </div>
-            <p className="text-muted-foreground">
-              Configure your mentoring platform settings and preferences
-            </p>
-          </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Settings"
+        description="Configure your mentoring platform settings and preferences"
+      />
 
-          {/* Settings Navigation */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      {/* Settings Navigation */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-auto p-1">
               {settingsCategories.map((category) => (
                 <TabsTrigger
@@ -466,8 +458,6 @@ const Settings = () => {
               </TabsContent>
             ))}
           </Tabs>
-        </div>
-      </div>
     </div>
   );
 };

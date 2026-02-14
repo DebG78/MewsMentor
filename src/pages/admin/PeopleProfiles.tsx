@@ -1,16 +1,14 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AllProfiles } from "@/components/AllProfiles";
+import { PageHeader } from "@/components/admin/PageHeader";
 
 export default function PeopleProfiles() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>All Profiles</CardTitle>
-        <CardDescription>Browse and search all participant profiles across programs</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <AllProfiles selectedCohort={null} />
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <PageHeader
+        title="All Profiles"
+        description="Browse and search all participant profiles across programs"
+      />
+      <AllProfiles selectedCohort={null} />
+    </div>
   );
 }

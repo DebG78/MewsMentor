@@ -43,6 +43,7 @@ import {
   TrendingUp,
   BarChart3,
 } from 'lucide-react';
+import { PageHeader } from "@/components/admin/PageHeader";
 import {
   BarChart,
   Bar,
@@ -285,22 +286,19 @@ export default function MentoringSessions() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Mentoring Sessions</h1>
-          <p className="text-muted-foreground">
-            Track and analyze mentoring sessions across cohorts
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <SessionLogImport onImported={loadData} />
-          <Button onClick={() => setIsCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Session
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Mentoring Sessions"
+        description="Track and analyze mentoring sessions across cohorts"
+        actions={
+          <div className="flex gap-2">
+            <SessionLogImport onImported={loadData} />
+            <Button onClick={() => setIsCreateOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Session
+            </Button>
+          </div>
+        }
+      />
 
       {/* Cohort Selector */}
       <div className="w-64">

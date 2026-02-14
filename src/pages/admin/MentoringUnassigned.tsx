@@ -1,16 +1,14 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { HoldingArea } from "@/components/HoldingArea";
+import { PageHeader } from "@/components/admin/PageHeader";
 
 export default function MentoringUnassigned() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Unassigned Participants</CardTitle>
-        <CardDescription>Mentees and mentors waiting for cohort assignment</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <HoldingArea />
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <PageHeader
+        title="Unassigned Participants"
+        description="Mentees and mentors waiting for cohort assignment"
+      />
+      <HoldingArea />
+    </div>
   );
 }
