@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,13 +92,19 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
   const [groupedMentors, setGroupedMentors] = useState<GroupedProfile[]>([]);
   const [unassignedMentees, setUnassignedMentees] = useState<MenteeRow[]>([]);
   const [unassignedMentors, setUnassignedMentors] = useState<MentorRow[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<'mentee' | 'mentor'>('mentee');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q) setSearchTerm(q);
+  }, [searchParams]);
 
   useEffect(() => {
     loadAllProfiles();
@@ -211,27 +218,19 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
     }
   };
 
-  const filteredMentees = groupedMentees.filter(mentee =>
-    mentee.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    mentee.person_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (mentee.topics || []).some(topic =>
-      topic.toLowerCase().includes(searchTerm.toLowerCase())
-    ) ||
-    mentee.cohort_ids.some(cohortId =>
-      cohortId.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  const matchesSearch = (profile: GroupedProfile) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    // Search all string and string-array fields on the profile
+    return Object.values(profile).some(val => {
+      if (typeof val === 'string') return val.toLowerCase().includes(term);
+      if (Array.isArray(val)) return val.some(v => typeof v === 'string' && v.toLowerCase().includes(term));
+      return false;
+    });
+  };
 
-  const filteredMentors = groupedMentors.filter(mentor =>
-    mentor.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    mentor.person_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (mentor.topics || []).some(topic =>
-      topic.toLowerCase().includes(searchTerm.toLowerCase())
-    ) ||
-    mentor.cohort_ids.some(cohortId =>
-      cohortId.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  const filteredMentees = groupedMentees.filter(matchesSearch);
+  const filteredMentors = groupedMentors.filter(matchesSearch);
 
   const ProfileTable = ({ profiles, type }: { profiles: any[], type: 'mentee' | 'mentor' }) => {
     const isMentee = type === 'mentee';

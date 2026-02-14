@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 interface StatCardProps {
@@ -25,33 +25,39 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <Card className={cn("", className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">
-          {isLoading ? '...' : value}
+    <Card className={cn("bg-card", className)}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold tracking-tight">
+              {isLoading ? '...' : value}
+            </p>
+            {trend && (
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium',
+                    trend.value >= 0
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  )}
+                >
+                  {trend.value >= 0 ? '+' : ''}{trend.value}%
+                </span>
+                {trend.label && (
+                  <span className="text-xs text-muted-foreground">{trend.label}</span>
+                )}
+              </div>
+            )}
+            {description && (
+              <p className="text-xs text-muted-foreground">{description}</p>
+            )}
+          </div>
+          <div className="rounded-lg bg-background p-2">
+            <Icon className="h-5 w-5 text-muted-foreground" />
+          </div>
         </div>
-        {trend && (
-          <p className="text-xs text-muted-foreground">
-            <span
-              className={cn(
-                'font-medium',
-                trend.value >= 0
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
-              )}
-            >
-              {trend.value >= 0 ? '+' : ''}{trend.value}%
-            </span>
-            {trend.label && ` ${trend.label}`}
-          </p>
-        )}
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        )}
       </CardContent>
     </Card>
   )
