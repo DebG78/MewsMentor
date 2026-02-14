@@ -579,13 +579,13 @@ export default function CohortDetail() {
     : null;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">{cohort.name}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">{cohort.name}</h1>
               <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
             </div>
             {cohort.description && (

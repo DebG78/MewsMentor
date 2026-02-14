@@ -30,6 +30,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { useToast } from '@/hooks/use-toast';
+import { PageHeader } from "@/components/admin/PageHeader";
 import {
   Loader2,
   Settings,
@@ -588,15 +589,10 @@ export default function CohortRunbook() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Cohort Runbook</h1>
-          <p className="text-muted-foreground">
-            Track program stages and manage checklists
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Cohort Runbook"
+        description="Track program stages and manage checklists"
+      />
 
       {/* Cohort Selector and Progress */}
       <div className="flex gap-4 items-start">

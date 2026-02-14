@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import type { ChartConfig } from "@/components/ui/chart";
-import { Target, UserCog, Users, Calendar, ArrowRight, BarChart3, TrendingUp, ShieldAlert } from "lucide-react";
+import { Target, UserCog, Users, ArrowRight, ShieldAlert } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { getAllCohorts } from "@/lib/supabaseService";
 import type { Cohort } from "@/types/mentoring";
+import { PageHeader } from "@/components/admin/PageHeader";
+import { StatCard } from "@/components/admin/StatCard";
 
 interface OverviewStats {
   activeCohorts: number;
@@ -131,11 +133,11 @@ export default function AdminOverview() {
   }, [cohorts]);
 
   const getStatusBadge = (status: Cohort['status']) => {
-    const variants: Record<string, { variant: "default" | "secondary" | "outline"; label: string }> = {
-      active: { variant: "default", label: "Active" },
+    const variants: Record<string, { variant: "default" | "secondary" | "outline" | "success" | "warning"; label: string }> = {
+      active: { variant: "success", label: "Active" },
       draft: { variant: "secondary", label: "Draft" },
-      completed: { variant: "outline", label: "Completed" },
-      paused: { variant: "outline", label: "Paused" },
+      completed: { variant: "info" as any, label: "Completed" },
+      paused: { variant: "warning", label: "Paused" },
     };
     const config = variants[status] || variants.draft;
     return <Badge variant={config.variant}>{config.label}</Badge>;
@@ -143,48 +145,48 @@ export default function AdminOverview() {
 
   const recentCohorts = [...cohorts]
     .sort((a, b) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime())
-    .slice(0, 4);
+    .slice(0, 5);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Overview</h1>
-        <p className="text-muted-foreground">Program health at a glance</p>
-      </div>
+      <PageHeader title="Overview" description="Program health at a glance" />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: "Active Cohorts", value: stats.activeCohorts, icon: Target, color: "text-blue-600" },
-          { label: "Active Pairs", value: stats.activePairs, icon: Users, color: "text-green-600" },
-          { label: "Unassigned", value: stats.unassignedMentees, icon: ShieldAlert, color: stats.unassignedMentees > 0 ? "text-amber-600" : "text-muted-foreground" },
-          { label: "Mentors", value: stats.totalMentors, icon: UserCog, color: "text-purple-600" },
-          { label: "Mentees", value: stats.totalMentees, icon: Users, color: "text-pink-600" },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <Card key={label}>
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="text-2xl font-bold">{isLoading ? "..." : value}</p>
-                </div>
-                <Icon className={`w-8 h-8 opacity-40 ${color}`} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Active Cohorts"
+          value={stats.activeCohorts}
+          icon={Target}
+          isLoading={isLoading}
+          description={`${cohorts.length} total cohorts`}
+        />
+        <StatCard
+          title="Active Pairs"
+          value={stats.activePairs}
+          icon={Users}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Unassigned Mentees"
+          value={stats.unassignedMentees}
+          icon={ShieldAlert}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Participants"
+          value={stats.totalMentors + stats.totalMentees}
+          icon={UserCog}
+          isLoading={isLoading}
+          description={`${stats.totalMentors} mentors, ${stats.totalMentees} mentees`}
+        />
       </div>
 
       {/* Charts Row */}
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-2 gap-4">
         {/* Cohort Status Pie */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="w-4 h-4" />
-              Cohort Status
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Cohort Status</CardTitle>
             <CardDescription>{cohorts.length} total cohorts</CardDescription>
           </CardHeader>
           <CardContent>
@@ -232,10 +234,7 @@ export default function AdminOverview() {
         {/* Mentor Capacity Bar */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Mentor Capacity
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Mentor Capacity</CardTitle>
             <CardDescription>Assigned vs available slots</CardDescription>
           </CardHeader>
           <CardContent>
@@ -257,14 +256,14 @@ export default function AdminOverview() {
             )}
           </CardContent>
         </Card>
+      </div>
 
+      {/* Bottom Row: Cohort Sizes + Recent Cohorts */}
+      <div className="grid md:grid-cols-2 gap-4">
         {/* Cohort Sizes */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Cohort Sizes
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Cohort Sizes</CardTitle>
             <CardDescription>Mentees vs mentors per cohort</CardDescription>
           </CardHeader>
           <CardContent>
@@ -287,36 +286,20 @@ export default function AdminOverview() {
           </CardContent>
         </Card>
 
-      </div>
-
-      {/* Quick Actions + Recent Cohorts */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate("/admin/mentoring/cohorts")}>
-              <Target className="w-4 h-4 mr-2" /> Manage Cohorts
-            </Button>
-            <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate("/admin/analytics/metrics")}>
-              <BarChart3 className="w-4 h-4 mr-2" /> View Success Metrics
-            </Button>
-            <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate("/admin/people/analytics")}>
-              <TrendingUp className="w-4 h-4 mr-2" /> People Analytics
-            </Button>
-          </CardContent>
-        </Card>
-
         {/* Recent Cohorts */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Calendar className="w-4 h-4" />
-              Recent Cohorts
-            </CardTitle>
-            <CardDescription>Latest mentoring cohorts</CardDescription>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-medium">Recent Cohorts</CardTitle>
+                <CardDescription>Latest mentoring cohorts</CardDescription>
+              </div>
+              {cohorts.length > 5 && (
+                <Button variant="ghost" size="sm" onClick={() => navigate("/admin/mentoring/cohorts")}>
+                  View all
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -332,34 +315,26 @@ export default function AdminOverview() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {recentCohorts.map((cohort) => (
                   <div
                     key={cohort.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                    className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                     onClick={() => navigate(`/admin/mentoring/cohort/${cohort.id}/mentees`)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{cohort.name}</span>
+                        <span className="text-sm font-medium truncate">{cohort.name}</span>
                         {getStatusBadge(cohort.status)}
                       </div>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          {cohort.mentees?.length || 0} mentees
-                        </span>
+                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                        <span>{cohort.mentees?.length || 0} mentees</span>
                         <span>{cohort.mentors?.length || 0} mentors</span>
                       </div>
                     </div>
                     <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </div>
                 ))}
-                {cohorts.length > 4 && (
-                  <Button variant="ghost" size="sm" className="w-full" onClick={() => navigate("/admin/mentoring/cohorts")}>
-                    View all {cohorts.length} cohorts
-                  </Button>
-                )}
               </div>
             )}
           </CardContent>

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CohortManagement } from "@/components/CohortManagement";
 import type { Cohort } from "@/types/mentoring";
+import { PageHeader } from "@/components/admin/PageHeader";
 
 export default function MentoringCohorts() {
   const { cohortId } = useParams<{ cohortId?: string }>();
@@ -13,17 +13,15 @@ export default function MentoringCohorts() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Mentoring Cohorts</CardTitle>
-        <CardDescription>Create and manage mentoring program cohorts</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <CohortManagement
-          onCohortSelected={handleCohortSelected}
-          selectedCohortId={cohortId}
-        />
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <PageHeader
+        title="Mentoring Cohorts"
+        description="Create and manage mentoring program cohorts"
+      />
+      <CohortManagement
+        onCohortSelected={handleCohortSelected}
+        selectedCohortId={cohortId}
+      />
+    </div>
   );
 }

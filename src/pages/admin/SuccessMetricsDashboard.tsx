@@ -83,6 +83,7 @@ import {
 } from '@/lib/metricsService';
 import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
+import { PageHeader } from "@/components/admin/PageHeader";
 
 const categoryIcons: Record<MetricCategory, React.ComponentType<{ className?: string }>> = {
   engagement: Activity,
@@ -266,12 +267,7 @@ export default function SuccessMetricsDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Success Metrics</h1>
-          <p className="text-muted-foreground">Track program performance against targets</p>
-        </div>
-      </div>
+      <PageHeader title="Success Metrics" description="Track program performance against targets" />
 
       <div className="w-64">
         <Label>Select Cohort</Label>

@@ -83,6 +83,7 @@ import {
 } from '@/lib/vipService';
 import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
+import { PageHeader } from "@/components/admin/PageHeader";
 
 const tierDonutConfig = {
   platinum: { label: 'Platinum', color: 'hsl(215, 14%, 50%)' },
@@ -405,22 +406,20 @@ export default function VIPManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">VIP Management</h1>
-          <p className="text-muted-foreground">
-            Track engagement scores and manage VIP status
-          </p>
-        </div>
-        <Button onClick={handleApplyRules} disabled={isApplyingRules}>
-          {isApplyingRules ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-2" />
-          )}
-          Apply VIP Rules
-        </Button>
-      </div>
+      <PageHeader
+        title="VIP Management"
+        description="Track engagement scores and manage VIP status"
+        actions={
+          <Button onClick={handleApplyRules} disabled={isApplyingRules}>
+            {isApplyingRules ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Apply VIP Rules
+          </Button>
+        }
+      />
 
       {/* Cohort Selector */}
       <div className="w-64">

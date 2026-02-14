@@ -49,6 +49,7 @@ import {
   getCohortMatchQualities,
   getPopulationStats,
 } from '@/lib/peopleAnalyticsService';
+import { PageHeader } from "@/components/admin/PageHeader";
 
 const topicChartConfig = {
   demand: { label: 'Mentee Demand', color: 'hsl(221, 83%, 53%)' },
@@ -238,12 +239,7 @@ export default function PeopleAnalytics() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">People Analytics</h1>
-        <p className="text-muted-foreground">
-          Population-level insights across all cohorts
-        </p>
-      </div>
+      <PageHeader title="People Analytics" description="Population-level insights across all cohorts" />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

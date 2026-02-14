@@ -33,6 +33,7 @@ import {
   getMatchScoreDistribution,
   getFeatureContributions,
 } from '@/lib/peopleAnalyticsService';
+import { PageHeader } from "@/components/admin/PageHeader";
 
 const scoreDistConfig = {
   count: { label: 'Matches', color: 'hsl(221, 83%, 53%)' },
@@ -166,12 +167,7 @@ export default function MatchQualityAnalytics() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Match Quality Analytics</h1>
-        <p className="text-muted-foreground">
-          Deep-dive into matching algorithm effectiveness
-        </p>
-      </div>
+      <PageHeader title="Match Quality Analytics" description="Deep-dive into matching algorithm effectiveness" />
 
       {/* Cohort Selector */}
       <div className="w-64">
