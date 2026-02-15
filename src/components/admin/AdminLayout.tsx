@@ -4,6 +4,7 @@ import { AppSidebar } from './AppSidebar'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Search } from 'lucide-react'
+import { useUser } from '@/contexts/UserContext'
 import {
   SidebarInset,
   SidebarProvider,
@@ -16,6 +17,7 @@ interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const navigate = useNavigate()
+  const { userProfile } = useUser()
   const [searchValue, setSearchValue] = useState('')
 
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -50,7 +52,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               </div>
               <SidebarTrigger />
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">AD</AvatarFallback>
+                <AvatarFallback className="text-xs">
+                  {userProfile?.email?.slice(0, 2).toUpperCase() || 'AD'}
+                </AvatarFallback>
               </Avatar>
           </header>
 

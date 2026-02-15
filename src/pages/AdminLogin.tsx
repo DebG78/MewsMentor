@@ -9,32 +9,29 @@ import { Target } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 
 const AdminLogin = () => {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { adminLogin } = useUser();
+  const { signIn } = useUser();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const success = adminLogin(username, password);
+    const result = await signIn(email, password);
 
-    if (success) {
+    if (result.success) {
       toast({
-        title: "Admin Login Successful",
+        title: "Login Successful",
         description: "Welcome to the admin dashboard.",
       });
-      // Use setTimeout to ensure state updates have completed
-      setTimeout(() => {
-        navigate('/admin');
-      }, 100);
+      navigate('/admin');
     } else {
       toast({
         title: "Login Failed",
-        description: "Invalid admin credentials. Please try again.",
+        description: result.error || "Invalid credentials. Please try again.",
         variant: "destructive",
       });
     }
@@ -63,19 +60,19 @@ const AdminLogin = () => {
             <CardHeader className="text-center">
               <CardTitle>Admin Login</CardTitle>
               <CardDescription>
-                Enter your admin credentials to access the dashboard
+                Sign in with your email to access the dashboard
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Admin username"
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
                     required
                   />
                 </div>
@@ -87,7 +84,7 @@ const AdminLogin = () => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Admin password"
+                    placeholder="Your password"
                     required
                   />
                 </div>
@@ -100,12 +97,6 @@ const AdminLogin = () => {
                   {isLoading ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
-
-              <div className="mt-6 p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground">
-                <p className="font-medium mb-1">Demo Credentials:</p>
-                <p>Username: <code className="text-foreground">admin</code></p>
-                <p>Password: <code className="text-foreground">admin123</code></p>
-              </div>
             </CardContent>
           </Card>
         </div>

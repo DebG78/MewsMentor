@@ -99,6 +99,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
+  const [cohortNameMap, setCohortNameMap] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -113,10 +114,19 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
   const loadAllProfiles = async () => {
     setLoading(true);
     try {
-      const [menteesResult, mentorsResult] = await Promise.all([
+      const [menteesResult, mentorsResult, cohortsResult] = await Promise.all([
         supabase.from('mentees').select('*').order('created_at', { ascending: false }),
-        supabase.from('mentors').select('*').order('created_at', { ascending: false })
+        supabase.from('mentors').select('*').order('created_at', { ascending: false }),
+        supabase.from('cohorts').select('id, name')
       ]);
+
+      if (cohortsResult.data) {
+        const nameMap: Record<string, string> = {};
+        cohortsResult.data.forEach((c: { id: string; name: string }) => {
+          nameMap[c.id] = c.name;
+        });
+        setCohortNameMap(nameMap);
+      }
 
       if (menteesResult.data) {
         setMentees(menteesResult.data);
@@ -300,7 +310,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                         <div className="flex flex-wrap gap-1">
                           {cohortIds.slice(0, 2).map((cohortId: string, idx: number) => (
                             <Badge key={idx} variant="secondary" className="text-xs">
-                              {cohortId}
+                              {cohortNameMap[cohortId] || cohortId}
                             </Badge>
                           ))}
                           {cohortIds.length > 2 && (

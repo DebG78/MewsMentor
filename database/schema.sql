@@ -102,12 +102,18 @@ insert into public.cohorts (
   85
 );
 
--- Enable Row Level Security (RLS) - Optional but recommended
+-- Enable Row Level Security (RLS)
 alter table public.cohorts enable row level security;
 alter table public.mentees enable row level security;
 alter table public.mentors enable row level security;
 
--- Create policies for public access (adjust as needed for your security requirements)
-create policy "Allow all operations on cohorts" on public.cohorts for all using (true);
-create policy "Allow all operations on mentees" on public.mentees for all using (true);
-create policy "Allow all operations on mentors" on public.mentors for all using (true);
+-- Require Supabase Auth for all operations (edge functions bypass via service_role key)
+create policy "Authenticated users full access" on public.cohorts
+  for all using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
+create policy "Authenticated users full access" on public.mentees
+  for all using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
+create policy "Authenticated users full access" on public.mentors
+  for all using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
