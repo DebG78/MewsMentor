@@ -231,32 +231,6 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     topicsToLearn.push(`Other: ${otherTopicValue.trim()}`);
   }
 
-  // Collect life experiences from boolean columns
-  const lifeExperiences: string[] = [];
-  const lifeExperienceColumns = [
-    "Returning from maternity/paternity/parental leave",
-    "Navigating menopause or andropause",
-    "Career break / sabbatical",
-    "Relocation to a new country",
-    "Career change or industry switch",
-    "Managing health challenges (physical or mental)",
-    "Stepping into leadership for the first time",
-    "Working towards a promotion",
-    "Thinking about an internal move"
-  ];
-
-  lifeExperienceColumns.forEach(experience => {
-    if (row[experience] && row[experience].trim() && row[experience] !== '0') {
-      lifeExperiences.push(experience);
-    }
-  });
-
-  // Check if there's an "Other" life experience specified
-  const otherExperienceValue = row["You picked Other - we'd love to hear more. What experience would you add?"];
-  if (otherExperienceValue && otherExperienceValue.trim()) {
-    lifeExperiences.push(`Other: ${otherExperienceValue.trim()}`);
-  }
-
   // Build goals text from motivation and expectations
   const motivationKey = Object.keys(row).find(key =>
     key.includes("Why would you like to join the mentorship program?")
@@ -367,9 +341,6 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     job_grade: jobGradeValue,
     email: menteeEmailValue && menteeEmailValue.includes('@') ? menteeEmailValue.trim() : undefined,
 
-    // Store life experiences as collected array
-    life_experiences: lifeExperiences,
-
     // Store topics as collected array
     topics_to_learn: topicsToLearn,
 
@@ -398,7 +369,6 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     role: result.role,
     experience_years: result.experience_years,
     location_timezone: result.location_timezone,
-    life_experiences: result.life_experiences,
     topics_to_learn: result.topics_to_learn,
     meeting_frequency: result.meeting_frequency,
     availableColumns: Object.keys(row) // Show ALL column names for debugging
@@ -730,7 +700,6 @@ export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: n
     seniority_band: shared.seniority_band,
 
     // Legacy fields (populated for backward compat)
-    life_experiences: [],
     topics_to_learn: topicsToLearn,
     meeting_frequency: '', // Not asked in new survey
     languages: ['English'],

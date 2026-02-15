@@ -140,38 +140,6 @@ export const DEFAULT_MENTOR_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
       step: 2,
       questions: [
         {
-          id: "life_experiences",
-          type: "checkbox",
-          title: "Which experiences have you navigated that you could help others with?",
-          description: "Select all that apply",
-          required: true,
-          options: [
-            "Returning from maternity/paternity/parental leave",
-            "Navigating menopause or andropause",
-            "Career break / sabbatical",
-            "Relocation to a new country",
-            "Career change or industry switch",
-            "Managing health challenges (physical or mental)",
-            "Stepping into leadership for the first time",
-            "Promotions",
-            "Internal moves",
-            "Other"
-          ],
-          step: 2,
-          order: 1,
-          active: true
-        },
-        {
-          id: "other_experience",
-          type: "textarea",
-          title: "You picked Other - we'd love to hear more. What experience would you add?",
-          placeholder: "Please describe the experience...",
-          required: false,
-          step: 2,
-          order: 2,
-          active: true
-        },
-        {
           id: "topics_to_mentor",
           type: "checkbox",
           title: "What areas could you mentor on?",
@@ -191,7 +159,7 @@ export const DEFAULT_MENTOR_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
             "Other"
           ],
           step: 2,
-          order: 3,
+          order: 1,
           active: true
         },
         {
@@ -201,7 +169,7 @@ export const DEFAULT_MENTOR_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
           placeholder: "Please describe the topic...",
           required: false,
           step: 2,
-          order: 4,
+          order: 2,
           active: true
         },
         {
@@ -211,7 +179,7 @@ export const DEFAULT_MENTOR_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
           required: true,
           options: ["Yes", "No"],
           step: 2,
-          order: 5,
+          order: 3,
           active: true
         }
       ]
@@ -407,38 +375,6 @@ export const DEFAULT_MENTEE_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
       step: 2,
       questions: [
         {
-          id: "life_experiences",
-          type: "checkbox",
-          title: "Which experiences have you navigated that you could help others with?",
-          description: "Select all that apply",
-          required: true,
-          options: [
-            "Returning from maternity/paternity/parental leave",
-            "Navigating menopause or andropause",
-            "Career break / sabbatical",
-            "Relocation to a new country",
-            "Career change or industry switch",
-            "Managing health challenges (physical or mental)",
-            "Stepping into leadership for the first time",
-            "Promotions",
-            "Internal moves",
-            "Other"
-          ],
-          step: 2,
-          order: 1,
-          active: true
-        },
-        {
-          id: "other_experience",
-          type: "textarea",
-          title: "You picked Other - we'd love to hear more. What experience would you add?",
-          placeholder: "Please describe the experience...",
-          required: false,
-          step: 2,
-          order: 2,
-          active: true
-        },
-        {
           id: "topics_to_learn",
           type: "checkbox",
           title: "What areas would you like to learn about?",
@@ -458,7 +394,7 @@ export const DEFAULT_MENTEE_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
             "Other"
           ],
           step: 2,
-          order: 3,
+          order: 1,
           active: true
         },
         {
@@ -468,7 +404,7 @@ export const DEFAULT_MENTEE_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
           placeholder: "Please describe the topic...",
           required: false,
           step: 2,
-          order: 4,
+          order: 2,
           active: true
         },
         {
@@ -478,7 +414,7 @@ export const DEFAULT_MENTEE_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
           required: true,
           options: ["Yes", "No"],
           step: 2,
-          order: 5,
+          order: 3,
           active: true
         }
       ]

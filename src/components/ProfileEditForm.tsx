@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   User,
   Target,
-  Heart,
   MessageCircle,
   Star,
   Zap,
@@ -94,15 +93,6 @@ export function ProfileEditForm({ profile, type, onSave, onCancel }: ProfileEdit
           items={formData[isMentee ? "topics_to_learn" : "topics_to_mentor"] || []}
           placeholder="Add a topic"
           onChange={(items) => handleChange(isMentee ? "topics_to_learn" : "topics_to_mentor", items)}
-        />
-      </Section>
-
-      {/* Life Experiences */}
-      <Section icon={<Heart className="w-4 h-4" />} title="Life experiences">
-        <ArrayField
-          items={formData.life_experiences || []}
-          placeholder="Add a life experience"
-          onChange={(items) => handleChange("life_experiences", items)}
         />
       </Section>
 

@@ -42,7 +42,7 @@ import type { Cohort } from '@/types/mentoring';
 import {
   getTopicDemandSupply,
   getExperienceDistribution,
-  getLifeExperienceDistribution,
+
   getMentorUtilization,
   getMatchScoreDistribution,
   getFeatureContributions,
@@ -61,10 +61,6 @@ const experienceChartConfig = {
   mentors: { label: 'Mentors', color: 'hsl(142, 71%, 45%)' },
 } satisfies ChartConfig;
 
-const lifeExpChartConfig = {
-  mentees: { label: 'Mentees', color: 'hsl(221, 83%, 53%)' },
-  mentors: { label: 'Mentors', color: 'hsl(280, 67%, 55%)' },
-} satisfies ChartConfig;
 
 const matchScoreChartConfig = {
   count: { label: 'Matches', color: 'hsl(221, 83%, 53%)' },
@@ -208,7 +204,7 @@ export default function PeopleAnalytics() {
   const populationStats = useMemo(() => getPopulationStats(filteredCohorts), [filteredCohorts]);
   const topicData = useMemo(() => getTopicDemandSupply(filteredCohorts), [filteredCohorts]);
   const experienceData = useMemo(() => getExperienceDistribution(filteredCohorts), [filteredCohorts]);
-  const lifeExpData = useMemo(() => getLifeExperienceDistribution(filteredCohorts), [filteredCohorts]);
+
   const utilizationData = useMemo(() => getMentorUtilization(filteredCohorts), [filteredCohorts]);
   const cohortQualities = useMemo(() => getCohortMatchQualities(filteredCohorts), [filteredCohorts]);
 
@@ -457,30 +453,6 @@ export default function PeopleAnalytics() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Life Experiences</CardTitle>
-                <CardDescription>Mentee needs vs mentor expertise in life situations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {lifeExpData.length > 0 ? (
-                  <ChartContainer config={lifeExpChartConfig} className="h-[250px] w-full">
-                    <BarChart data={lifeExpData.slice(0, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" allowDecimals={false} fontSize={12} />
-                      <YAxis type="category" dataKey="experience" width={140} fontSize={10} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="mentees" fill="var(--color-mentees)" radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="mentors" fill="var(--color-mentors)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                    No life experience data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 

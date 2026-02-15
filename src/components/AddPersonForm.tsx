@@ -19,19 +19,6 @@ import { ArrowLeft, ArrowRight, X, User, UserPlus } from "lucide-react";
 import { getAllCohorts, signupMentor, signupMentee } from "@/lib/cohortManager";
 import { Cohort } from "@/types/mentoring";
 
-const LIFE_EXPERIENCES = [
-  "Returning from maternity/paternity/parental leave",
-  "Navigating menopause or andropause",
-  "Career break / sabbatical",
-  "Relocation to a new country",
-  "Career change or industry switch",
-  "Managing health challenges (physical or mental)",
-  "Stepping into leadership for the first time",
-  "Promotions",
-  "Internal moves",
-  "Other"
-];
-
 const TOPICS_TO_MENTOR = [
   "Career growth & progression",
   "Leadership & management",
@@ -82,7 +69,6 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
     role: "",
     experienceYears: "",
     locationTimezone: "",
-    lifeExperiences: [] as string[],
     otherExperience: "",
     cohortId: selectedCohortId || "",
 
@@ -134,7 +120,6 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
         role: "",
         experienceYears: "",
         locationTimezone: "",
-        lifeExperiences: [],
         otherExperience: "",
         cohortId: selectedCohortId || "",
         topicsToMentor: [],
@@ -162,7 +147,7 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
     }
   }, [isOpen, type, selectedCohortId]);
 
-  const handleCheckboxChange = (field: 'lifeExperiences' | 'topicsToMentor' | 'topicsToLearn', value: string, checked: boolean) => {
+  const handleCheckboxChange = (field: 'topicsToMentor' | 'topicsToLearn', value: string, checked: boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: checked
@@ -184,7 +169,6 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
           role: formData.role,
           experienceYears: formData.experienceYears,
           locationTimezone: formData.locationTimezone,
-          lifeExperiences: formData.lifeExperiences,
           otherExperiences: formData.otherExperience,
           topicsToMentor: formData.topicsToMentor,
           otherTopics: formData.otherTopics,
@@ -206,7 +190,6 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
           role: formData.role,
           experienceYears: formData.experienceYears,
           locationTimezone: formData.locationTimezone,
-          lifeExperiences: formData.lifeExperiences,
           otherExperience: formData.otherExperience,
           hasParticipatedBefore: formData.hasParticipatedBefore === "yes",
           topicsToLearn: formData.topicsToLearn,
@@ -302,34 +285,6 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
 
   const renderStep2 = () => (
     <div className="space-y-6">
-      <div>
-        <Label className="text-base font-medium">Which experiences have you navigated that you could help others with? (Select all that apply)</Label>
-        <div className="mt-3 space-y-3">
-          {LIFE_EXPERIENCES.map((experience) => (
-            <div key={experience} className="flex items-center space-x-2">
-              <Checkbox
-                id={experience}
-                checked={formData.lifeExperiences.includes(experience)}
-                onCheckedChange={(checked) => handleCheckboxChange('lifeExperiences', experience, checked as boolean)}
-              />
-              <Label htmlFor={experience} className="text-sm font-normal">{experience}</Label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {formData.lifeExperiences.includes("Other") && (
-        <div>
-          <Label htmlFor="otherExperiences">You picked Other - we'd love to hear more. What experience would you add?</Label>
-          <Textarea
-            id="otherExperiences"
-            value={formData.otherExperience}
-            onChange={(e) => setFormData(prev => ({ ...prev, otherExperience: e.target.value }))}
-            placeholder="Please describe the experience..."
-          />
-        </div>
-      )}
-
       {/* Mentor-specific topics */}
       {type === 'mentor' && (
         <>
@@ -719,9 +674,9 @@ export const AddPersonForm = ({ isOpen, onClose, type, selectedCohortId, onSucce
         return formData.role && formData.experienceYears && formData.locationTimezone;
       case 2:
         if (type === 'mentor') {
-          return formData.lifeExperiences.length > 0 && formData.topicsToMentor.length > 0 && formData.hasMentoredBefore;
+          return formData.topicsToMentor.length > 0 && formData.hasMentoredBefore;
         } else {
-          return formData.lifeExperiences.length > 0 && formData.topicsToLearn.length > 0 && formData.hasParticipatedBefore;
+          return formData.topicsToLearn.length > 0 && formData.hasParticipatedBefore;
         }
       case 3:
         if (type === 'mentor') {
