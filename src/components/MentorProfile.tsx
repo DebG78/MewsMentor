@@ -14,8 +14,8 @@ import {
   Building,
   Award,
   Edit,
-  Mail,
 } from "lucide-react";
+import { toDisplayName } from '@/lib/displayName';
 
 interface MentorProfileProps {
   mentor: MentorData;
@@ -36,7 +36,7 @@ export function MentorProfile({ mentor, onEdit, variant = "default" }: MentorPro
             <User className="w-5 h-5 text-blue-600" />
           </div>
           <div className="flex-1">
-            <h3 className="font-medium">{mentor.name}</h3>
+            <h3 className="font-medium">{toDisplayName(mentor.name)}</h3>
             <p className="text-sm text-muted-foreground">{mentor.role}</p>
           </div>
           <Badge variant="secondary">{mentor.capacity} slots</Badge>
@@ -54,14 +54,8 @@ export function MentorProfile({ mentor, onEdit, variant = "default" }: MentorPro
               <User className="w-8 h-8 text-blue-600" />
             </div>
             <div>
-              <CardTitle className="text-xl">{mentor.name}</CardTitle>
+              <CardTitle className="text-xl">{toDisplayName(mentor.name)}</CardTitle>
               <CardDescription className="text-lg">{mentor.role}</CardDescription>
-              {mentor.email && (
-                <div className="flex items-center gap-1 mt-1">
-                  <Mail className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{mentor.email}</span>
-                </div>
-              )}
               {mentor.company && (
                 <div className="flex items-center gap-1 mt-1">
                   <Building className="w-4 h-4 text-muted-foreground" />

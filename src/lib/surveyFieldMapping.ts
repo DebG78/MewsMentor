@@ -129,6 +129,7 @@ export const SHARED_BIO_PATTERNS = {
   role_selection: [['participate as'], ['want to participate']],
   email: [['email']],
   name: [['name']],
+  slack_user_id: [['slack']],
 } as const;
 
 /**
@@ -209,6 +210,7 @@ export function parseMentoringExperience(value: string | undefined): boolean {
 export interface NewSurveySharedFields {
   email?: string;
   name?: string;
+  slack_user_id?: string;
   seniority_band: string;
   role: string;
   industry: string;
@@ -271,6 +273,7 @@ export function extractSharedFields(row: Record<string, string>): NewSurveyShare
   return {
     email: f(SHARED_BIO_PATTERNS.email),
     name: f(SHARED_BIO_PATTERNS.name),
+    slack_user_id: f(SHARED_BIO_PATTERNS.slack_user_id),
     seniority_band: parseSeniorityBand(f(SHARED_BIO_PATTERNS.seniority_band)),
     role: f(SHARED_BIO_PATTERNS.role) || '',
     industry: f(SHARED_BIO_PATTERNS.industry) || '',

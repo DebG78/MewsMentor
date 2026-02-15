@@ -20,6 +20,7 @@ import {
   Undo,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toDisplayName } from '@/lib/displayName';
 
 interface MentorCard {
   id: string;
@@ -156,7 +157,7 @@ export function MatchBoard({
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-sm">{mentee.name}</span>
+                    <span className="font-medium text-sm">{toDisplayName(mentee.name)}</span>
                     <User className="w-3 h-3 text-muted-foreground" />
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">{mentee.role}</div>
@@ -206,7 +207,7 @@ export function MatchBoard({
                   )}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-sm">{mentor.name}</span>
+                    <span className="font-medium text-sm">{toDisplayName(mentor.name)}</span>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
@@ -291,9 +292,9 @@ export function MatchBoard({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="font-medium">{mentee.name}</span>
+                    <span className="font-medium">{toDisplayName(mentee.name)}</span>
                     <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">{mentor?.name || 'Unknown'}</span>
+                    <span className="text-muted-foreground">{toDisplayName(mentor?.name) || 'Unknown'}</span>
                   </div>
                   {mentee.matchScore !== undefined && (
                     <div className="text-xs text-muted-foreground mt-1">
@@ -326,9 +327,9 @@ export function MatchBoard({
                     </Button>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="font-medium">{mentee.name}</span>
+                    <span className="font-medium">{toDisplayName(mentee.name)}</span>
                     <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">{mentor?.name || 'Unknown'}</span>
+                    <span className="text-muted-foreground">{toDisplayName(mentor?.name) || 'Unknown'}</span>
                   </div>
                 </div>
               );

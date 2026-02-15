@@ -33,6 +33,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   MoreHorizontal,
   Eye,
   Edit,
@@ -65,7 +75,7 @@ import {
   saveMatchesToCohort,
   saveManualMatches,
 } from "@/lib/cohortManager";
-import { updateMenteeProfile, updateMentorProfile } from "@/lib/supabaseService";
+import { updateMenteeProfile, updateMentorProfile, removeFromCohort } from "@/lib/supabaseService";
 import { sendWelcomeMessages } from "@/lib/messageService";
 import { Cohort, ImportResult, MatchingResult } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +89,7 @@ import { MenteeData, MentorData } from "@/types/mentoring";
 import { ScoreBreakdownVisual, ScoreBadge } from "@/components/ScoreBreakdownVisual";
 import { ManualMatchingBoard } from "@/components/admin/ManualMatchingBoard";
 import { MatchComparison } from "@/components/admin/MatchComparison";
+import { toDisplayName } from '@/lib/displayName';
 
 export default function CohortDetail() {
   const { cohortId, tab } = useParams<{ cohortId: string; tab?: string }>();
@@ -103,6 +114,7 @@ export default function CohortDetail() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [peopleSearch, setPeopleSearch] = useState("");
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; type: 'mentee' | 'mentor' } | null>(null);
   const [editDescription, setEditDescription] = useState("");
   const [editManager, setEditManager] = useState("");
 
@@ -289,6 +301,30 @@ export default function CohortDetail() {
         title: "Failed to delete cohort",
         description: error instanceof Error ? error.message : "Unknown error occurred",
       });
+    }
+  };
+
+  const handleRemoveFromCohort = async () => {
+    if (!removeTarget || !cohort) return;
+    try {
+      const success = await removeFromCohort(removeTarget.id, removeTarget.type, cohort.id);
+      if (success) {
+        toast({
+          title: `${removeTarget.type === 'mentor' ? 'Mentor' : 'Mentee'} removed`,
+          description: `${removeTarget.name} has been removed from the cohort`,
+        });
+        await loadCohort();
+      } else {
+        throw new Error('Remove failed');
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to remove",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+      });
+    } finally {
+      setRemoveTarget(null);
     }
   };
 
@@ -541,14 +577,21 @@ export default function CohortDetail() {
   const approvedMatches = cohort.matches?.results?.filter(
     (r) => r.proposed_assignment?.mentor_id
   ) || [];
-  const matchedMenteeIds = new Set(approvedMatches.map((r) => r.mentee_id));
+  const manualMatches = cohort.manual_matches?.matches || [];
+  const matchedMenteeIds = new Set([
+    ...approvedMatches.map((r) => r.mentee_id),
+    ...manualMatches.map((m) => m.mentee_id),
+  ]);
   const unmatchedMentees = cohort.mentees.filter((m) => !matchedMenteeIds.has(m.id));
 
-  // Count how many mentees are already assigned to each mentor
+  // Count how many mentees are already assigned to each mentor (algo + manual)
   const mentorAssignedCounts = new Map<string, number>();
   approvedMatches.forEach((r) => {
     const mid = r.proposed_assignment?.mentor_id;
     if (mid) mentorAssignedCounts.set(mid, (mentorAssignedCounts.get(mid) || 0) + 1);
+  });
+  manualMatches.forEach((m) => {
+    mentorAssignedCounts.set(m.mentor_id, (mentorAssignedCounts.get(m.mentor_id) || 0) + 1);
   });
   const adjustedMentors = cohort.mentors.map((m) => ({
     ...m,
@@ -929,7 +972,7 @@ export default function CohortDetail() {
                         className={isAtCapacity ? "opacity-50 bg-gray-50" : ""}
                       >
                         <TableCell className="font-medium">
-                          {mentor.name || mentor.id}
+                          {toDisplayName(mentor.name || mentor.id)}
                           {isAtCapacity && (
                             <Badge variant="secondary" className="ml-2 text-xs">
                               At Capacity
@@ -962,6 +1005,14 @@ export default function CohortDetail() {
                               <DropdownMenuItem onClick={() => setEditingProfile({ profile: mentor, type: 'mentor' })}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit Profile
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setRemoveTarget({ id: mentor.id, name: toDisplayName(mentor.name || mentor.id), type: 'mentor' })}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Remove from Cohort
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -998,12 +1049,10 @@ export default function CohortDetail() {
                   {cohort.mentees
                     .filter(m => !peopleSearch || (m.name || m.id).toLowerCase().includes(peopleSearch.toLowerCase()))
                     .map((mentee, index) => {
-                    const hasMatch = cohort.matches?.results?.find(
-                      (r) => r.mentee_id === mentee.id && r.proposed_assignment?.mentor_id
-                    );
+                    const hasMatch = matchedMenteeIds.has(mentee.id);
                     return (
                       <TableRow key={index}>
-                        <TableCell className="font-medium">{mentee.name || mentee.id}</TableCell>
+                        <TableCell className="font-medium">{toDisplayName(mentee.name || mentee.id)}</TableCell>
                         <TableCell>{mentee.role}</TableCell>
                         <TableCell>{mentee.location_timezone}</TableCell>
                         <TableCell>{mentee.experience_years}</TableCell>
@@ -1029,6 +1078,14 @@ export default function CohortDetail() {
                               <DropdownMenuItem onClick={() => setEditingProfile({ profile: mentee, type: 'mentee' })}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit Profile
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setRemoveTarget({ id: mentee.id, name: toDisplayName(mentee.name || mentee.id), type: 'mentee' })}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Remove from Cohort
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1146,10 +1203,10 @@ export default function CohortDetail() {
                                   />
                                 </TableCell>
                                 <TableCell className="font-medium">
-                                  {result.mentee_name || result.mentee_id}
+                                  {toDisplayName(result.mentee_name || result.mentee_id)}
                                 </TableCell>
                                 <TableCell>
-                                  {result.proposed_assignment?.mentor_name || (
+                                  {result.proposed_assignment?.mentor_name ? toDisplayName(result.proposed_assignment.mentor_name) : (
                                     <span className="text-muted-foreground">No match</span>
                                   )}
                                 </TableCell>
@@ -1195,7 +1252,7 @@ export default function CohortDetail() {
                             <DialogHeader>
                               <DialogTitle>Match Details</DialogTitle>
                               <DialogDescription>
-                                {batchDetailResult.mentee_name} &rarr; {batchDetailResult.proposed_assignment?.mentor_name}
+                                {toDisplayName(batchDetailResult.mentee_name)} &rarr; {toDisplayName(batchDetailResult.proposed_assignment?.mentor_name)}
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
@@ -1224,7 +1281,7 @@ export default function CohortDetail() {
                                   <div className="space-y-1">
                                     {batchDetailResult.recommendations.slice(1).map((alt: any, idx: number) => (
                                       <div key={idx} className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted/50">
-                                        <span className="text-muted-foreground">{alt.mentor_name}</span>
+                                        <span className="text-muted-foreground">{toDisplayName(alt.mentor_name)}</span>
                                         <Badge variant="outline">{Math.round(alt.score.total_score)}</Badge>
                                       </div>
                                     ))}
@@ -1317,11 +1374,11 @@ export default function CohortDetail() {
                                   onClick={() => setSelectedMatch(result)}
                                 >
                                   <TableCell className="font-medium">
-                                    {result.mentee_name || result.mentee_id}
+                                    {toDisplayName(result.mentee_name || result.mentee_id)}
                                   </TableCell>
                                   <TableCell>
                                     <span className="font-medium">
-                                      {assignedMatch.mentor_name || assignedMatch.mentor_id}
+                                      {toDisplayName(assignedMatch.mentor_name || assignedMatch.mentor_id)}
                                     </span>
                                   </TableCell>
                                   <TableCell>
@@ -1403,12 +1460,12 @@ export default function CohortDetail() {
                               return (
                                 <TableRow key={index}>
                                   <TableCell className="font-medium">
-                                    {result.mentee_name || result.mentee_id}
+                                    {toDisplayName(result.mentee_name || result.mentee_id)}
                                   </TableCell>
                                   <TableCell>
                                     {topMatch ? (
                                       <span className="text-muted-foreground">
-                                        {topMatch.mentor_name}
+                                        {toDisplayName(topMatch.mentor_name)}
                                       </span>
                                     ) : (
                                       <span className="text-muted-foreground">No recommendations</span>
@@ -1425,7 +1482,7 @@ export default function CohortDetail() {
                                     <div className="flex gap-1">
                                       {result.recommendations.slice(1, 3).map((rec, idx) => (
                                         <Badge key={idx} variant="secondary" className="text-xs">
-                                          {rec.mentor_name}
+                                          {toDisplayName(rec.mentor_name)}
                                         </Badge>
                                       ))}
                                     </div>
@@ -1496,9 +1553,9 @@ export default function CohortDetail() {
               <div className="overflow-y-auto max-h-[85vh] p-6">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-lg">
-                    {selectedMatch.mentee_name || selectedMatch.mentee_id}
+                    {toDisplayName(selectedMatch.mentee_name || selectedMatch.mentee_id)}
                     <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                    {assignment?.mentor_name || assignment?.mentor_id}
+                    {toDisplayName(assignment?.mentor_name || assignment?.mentor_id)}
                   </DialogTitle>
                   <DialogDescription>
                     Match details and compatibility breakdown
@@ -1535,7 +1592,7 @@ export default function CohortDetail() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-2 text-sm">
-                        <div className="font-medium">{mentee?.name || selectedMatch.mentee_id}</div>
+                        <div className="font-medium">{toDisplayName(mentee?.name || selectedMatch.mentee_id)}</div>
                         {mentee?.role && (
                           <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
                             <Briefcase className="w-3 h-3" />
@@ -1587,7 +1644,7 @@ export default function CohortDetail() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-2 text-sm">
-                        <div className="font-medium">{mentor?.name || assignment?.mentor_id}</div>
+                        <div className="font-medium">{toDisplayName(mentor?.name || assignment?.mentor_id)}</div>
                         {mentor?.role && (
                           <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
                             <Briefcase className="w-3 h-3" />
@@ -1781,6 +1838,26 @@ export default function CohortDetail() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Remove from Cohort Confirmation */}
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {removeTarget?.type === 'mentee' ? 'Mentee' : 'Mentor'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{removeTarget?.name}</strong> from the cohort.
+              {' '}Any existing match will be broken and the paired person will become unmatched.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemoveFromCohort} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,15 +12,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Users,
   Target,
   MoreHorizontal,
   Eye,
+  Trash2,
   Clock,
-  Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { toDisplayName } from '@/lib/displayName';
 import { getUnassignedSignups, assignToCohort, getAllCohorts } from "@/lib/cohortManager";
+import { deleteUnassignedPerson } from "@/lib/supabaseService";
 import { Cohort } from "@/types/mentoring";
 
 import type { Database } from '@/types/database';
@@ -34,6 +46,7 @@ export function HoldingArea() {
   const [availableCohorts, setAvailableCohorts] = useState<Cohort[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'mentee' | 'mentor' } | null>(null);
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -94,6 +107,30 @@ export function HoldingArea() {
       });
     } finally {
       setAssigningPersonId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const success = await deleteUnassignedPerson(deleteTarget.id, deleteTarget.type);
+      if (success) {
+        toast({
+          title: "Deleted",
+          description: `${deleteTarget.name} has been removed from the holding area.`,
+        });
+        await loadData();
+      } else {
+        throw new Error("Delete failed");
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Delete Failed",
+        description: "Could not delete this person. Please try again.",
+      });
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -172,7 +209,7 @@ export function HoldingArea() {
                     {unassignedMentees.map((mentee) => (
                       <TableRow key={mentee.id}>
                         <TableCell>
-                          <div className="font-medium">{mentee.full_name || mentee.mentee_id}</div>
+                          <div className="font-medium">{toDisplayName(mentee.full_name || mentee.mentee_id)}</div>
                           {mentee.pronouns && (
                             <div className="text-sm text-muted-foreground">({mentee.pronouns})</div>
                           )}
@@ -213,9 +250,16 @@ export function HoldingArea() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   View Full Profile
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Mail className="w-4 h-4 mr-2" />
-                                  Contact Mentee
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteTarget({
+                                    id: mentee.mentee_id,
+                                    name: toDisplayName(mentee.full_name || mentee.mentee_id),
+                                    type: 'mentee',
+                                  })}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -253,7 +297,7 @@ export function HoldingArea() {
                     {unassignedMentors.map((mentor) => (
                       <TableRow key={mentor.id}>
                         <TableCell>
-                          <div className="font-medium">{mentor.full_name || mentor.mentor_id}</div>
+                          <div className="font-medium">{toDisplayName(mentor.full_name || mentor.mentor_id)}</div>
                           {mentor.pronouns && (
                             <div className="text-sm text-muted-foreground">({mentor.pronouns})</div>
                           )}
@@ -297,9 +341,16 @@ export function HoldingArea() {
                                   <Eye className="w-4 h-4 mr-2" />
                                   View Full Profile
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Mail className="w-4 h-4 mr-2" />
-                                  Contact Mentor
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setDeleteTarget({
+                                    id: mentor.mentor_id,
+                                    name: toDisplayName(mentor.full_name || mentor.mentor_id),
+                                    type: 'mentor',
+                                  })}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -315,6 +366,22 @@ export function HoldingArea() {
         </CardContent>
       </Card>
 
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.type === 'mentee' ? 'Mentee' : 'Mentor'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{deleteTarget?.name}</strong> from the holding area. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

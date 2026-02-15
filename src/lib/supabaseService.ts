@@ -55,7 +55,6 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     expectations: dbMentee.expectations || undefined,
     department: (dbMentee as any).department || undefined,
     job_grade: (dbMentee as any).job_grade || undefined,
-    email: (dbMentee as any).email || undefined,
     languages: dbMentee.languages,
     industry: dbMentee.industry
   }
@@ -88,7 +87,6 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     capacity_remaining: dbMentor.capacity_remaining,
     department: (dbMentor as any).department || undefined,
     job_grade: (dbMentor as any).job_grade || undefined,
-    email: (dbMentor as any).email || undefined,
     languages: dbMentor.languages,
     industry: dbMentor.industry
   }
@@ -238,6 +236,91 @@ export async function updateCohort(id: string, updates: Partial<Cohort>): Promis
 
   // Fetch updated cohort with mentees and mentors
   return getCohortById(id)
+}
+
+// Delete an unassigned mentee or mentor from the holding area
+export async function deleteUnassignedPerson(
+  personId: string,
+  personType: 'mentee' | 'mentor'
+): Promise<boolean> {
+  const table = personType === 'mentee' ? 'mentees' : 'mentors';
+  const idColumn = personType === 'mentee' ? 'mentee_id' : 'mentor_id';
+
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq(idColumn, personId)
+    .eq('cohort_id', 'unassigned');
+
+  if (error) {
+    console.error(`Error deleting unassigned ${personType}:`, error);
+    return false;
+  }
+
+  return true;
+}
+
+// Remove a mentor or mentee from a cohort (hard-delete).
+// If they have an active match, break the pair so the partner becomes unmatched.
+export async function removeFromCohort(
+  personId: string,
+  personType: 'mentee' | 'mentor',
+  cohortId: string
+): Promise<boolean> {
+  // 1. Clean up matches involving this person
+  const cohort = await getCohortById(cohortId);
+  if (cohort) {
+    const updates: Partial<Cohort> = {};
+
+    if (cohort.matches?.results) {
+      if (personType === 'mentee') {
+        // Remove the mentee's entry from results entirely
+        updates.matches = {
+          ...cohort.matches,
+          results: cohort.matches.results.filter(r => r.mentee_id !== personId)
+        };
+      } else {
+        // Null out the assignment for any mentee matched to this mentor
+        updates.matches = {
+          ...cohort.matches,
+          results: cohort.matches.results.map(r => {
+            if (r.proposed_assignment?.mentor_id === personId) {
+              return { ...r, proposed_assignment: { mentor_id: null, mentor_name: null } };
+            }
+            return r;
+          })
+        };
+      }
+    }
+
+    if (cohort.manual_matches?.matches) {
+      const filtered = cohort.manual_matches.matches.filter(
+        m => personType === 'mentee' ? m.mentee_id !== personId : m.mentor_id !== personId
+      );
+      updates.manual_matches = { ...cohort.manual_matches, matches: filtered };
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await updateCohort(cohortId, updates);
+    }
+  }
+
+  // 2. Hard-delete the person from the DB
+  const table = personType === 'mentee' ? 'mentees' : 'mentors';
+  const idColumn = personType === 'mentee' ? 'mentee_id' : 'mentor_id';
+
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq(idColumn, personId)
+    .eq('cohort_id', cohortId);
+
+  if (error) {
+    console.error(`Error removing ${personType} from cohort:`, error);
+    return false;
+  }
+
+  return true;
 }
 
 // Delete cohort
@@ -404,7 +487,6 @@ export async function addImportDataToCohort(
         ...(expectations ? { expectations } : {}),
         ...(mentee.department ? { department: sanitizeText(mentee.department) } : {}),
         ...(mentee.job_grade ? { job_grade: sanitizeText(mentee.job_grade) } : {}),
-        ...(mentee.email ? { email: sanitizeText(mentee.email) } : {}),
         // New survey revamp fields
         ...(mentee.bio ? { bio: sanitizeText(mentee.bio) } : {}),
         ...(mentee.primary_capability ? { primary_capability: sanitizeText(mentee.primary_capability) } : {}),
@@ -574,7 +656,6 @@ export async function addImportDataToCohort(
         ...(expectations ? { expectations } : {}),
         ...(mentor.department ? { department: sanitizeText(mentor.department) } : {}),
         ...(mentor.job_grade ? { job_grade: sanitizeText(mentor.job_grade) } : {}),
-        ...(mentor.email ? { email: sanitizeText(mentor.email) } : {}),
         // New survey revamp fields
         ...(mentor.bio ? { bio: sanitizeText(mentor.bio) } : {}),
         ...(mentor.mentor_motivation ? { mentor_motivation: sanitizeText(mentor.mentor_motivation) } : {}),

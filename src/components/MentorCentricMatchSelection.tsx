@@ -43,6 +43,7 @@ import {
 } from "@/components/ScoreBreakdownVisual";
 import { getOrGenerateExplanation, generateAllExplanations } from "@/lib/explanationService";
 import { useToast } from "@/hooks/use-toast";
+import { toDisplayName } from '@/lib/displayName';
 
 interface MentorCentricMatchSelectionProps {
   matchingOutput: MatchingOutput;
@@ -488,8 +489,8 @@ export function MentorCentricMatchSelection({
           <DialogHeader>
             <DialogTitle>Match Details</DialogTitle>
             <DialogDescription>
-              {selectedDetail?.mentee.mentee_name} with{" "}
-              {selectedDetail?.mentor.mentor_name}
+              {toDisplayName(selectedDetail?.mentee.mentee_name)} with{" "}
+              {toDisplayName(selectedDetail?.mentor.mentor_name)}
             </DialogDescription>
           </DialogHeader>
           {selectedDetail && (
@@ -498,7 +499,7 @@ export function MentorCentricMatchSelection({
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground">Mentee</p>
                   <p className="font-semibold">
-                    {selectedDetail.mentee.mentee_name}
+                    {toDisplayName(selectedDetail.mentee.mentee_name)}
                   </p>
                 </div>
                 <div className="text-center">
@@ -507,7 +508,7 @@ export function MentorCentricMatchSelection({
                 <div className="flex-1 text-right">
                   <p className="text-sm text-muted-foreground">Mentor</p>
                   <p className="font-semibold">
-                    {selectedDetail.mentor.mentor_name}
+                    {toDisplayName(selectedDetail.mentor.mentor_name)}
                   </p>
                 </div>
               </div>
@@ -592,7 +593,7 @@ function MentorCard({
                 <div>
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base">
-                      {mentor.mentor_name}
+                      {toDisplayName(mentor.mentor_name)}
                     </CardTitle>
                     {selectedCount > 0 && (
                       <Badge variant="default" className="text-xs">
@@ -679,7 +680,7 @@ function MentorCard({
                           >
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium">
-                                {mentee.mentee_name}
+                                {toDisplayName(mentee.mentee_name)}
                               </span>
                               <ScoreBadge score={mentee.score.total_score} size="sm" />
                               <RankBadge rank={mentee.rank_for_this_mentee} />

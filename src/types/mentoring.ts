@@ -41,7 +41,6 @@ export interface MenteeData {
   // Organisation fields
   department?: string;
   job_grade?: string;
-  email?: string;
 
   // Additional computed fields
   goals_text?: string; // Combined motivation + main_reason + expectations
@@ -98,7 +97,6 @@ export interface MentorData {
   // Organisation fields
   department?: string;
   job_grade?: string;
-  email?: string;
 
   // Additional computed fields
   bio_text?: string; // Combined motivation + expectations + experience

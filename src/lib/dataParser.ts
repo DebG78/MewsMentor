@@ -323,13 +323,6 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
   });
   const jobGradeValue = gradeKey ? row[gradeKey] : '';
 
-  // Find email column with flexible matching
-  const menteeEmailKey = Object.keys(row).find(key => {
-    const lk = key.toLowerCase();
-    return lk === 'email' || lk === 'work email' || lk === 'email address' || lk.includes('e-mail');
-  });
-  const menteeEmailValue = menteeEmailKey ? row[menteeEmailKey] : '';
-
   const result = {
     id,
     name,
@@ -339,7 +332,6 @@ export function parseMenteeRow(row: Record<string, string>): MenteeData | null {
     location_timezone: locationValue,
     department: departmentValue,
     job_grade: jobGradeValue,
-    email: menteeEmailValue && menteeEmailValue.includes('@') ? menteeEmailValue.trim() : undefined,
 
     // Store topics as collected array
     topics_to_learn: topicsToLearn,
@@ -606,13 +598,6 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
   });
   const mentorJobGrade = mentorGradeKey ? row[mentorGradeKey] : '';
 
-  // Find email column with flexible matching
-  const mentorEmailKey = Object.keys(row).find(key => {
-    const lk = key.toLowerCase();
-    return lk === 'email' || lk === 'work email' || lk === 'email address' || lk.includes('e-mail');
-  });
-  const mentorEmailValue = mentorEmailKey ? row[mentorEmailKey] : '';
-
   return {
     id,
     name,
@@ -622,7 +607,6 @@ export function parseMentorRow(row: Record<string, string>): MentorData | null {
     location_timezone: mentorLocation,
     department: mentorDepartment,
     job_grade: mentorJobGrade,
-    email: mentorEmailValue && mentorEmailValue.includes('@') ? mentorEmailValue.trim() : undefined,
 
     // Life experiences
     returning_from_leave: !!row["Returning from maternity/paternity/parental leave"],
@@ -686,8 +670,8 @@ export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: n
   // Build goals_text from mentoring goal
   const goalsText = mentee?.mentoring_goal || '';
 
-  // Generate a stable ID from name + email
-  const nameForId = shared.name || shared.email || `row-${rowIndex}`;
+  // Generate a stable ID from name
+  const nameForId = shared.name || `row-${rowIndex}`;
   const id = nameForId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
 
   return {
@@ -696,7 +680,6 @@ export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: n
     role: shared.role,
     experience_years: '', // Not asked in new survey
     location_timezone: shared.location_timezone,
-    email: shared.email,
     seniority_band: shared.seniority_band,
 
     // Legacy fields (populated for backward compat)
@@ -744,8 +727,8 @@ export function parseNewFormatMentorRow(row: Record<string, string>, rowIndex: n
   if (mentor?.primary_capability) topicsToMentor.push(mentor.primary_capability);
   if (mentor?.secondary_capabilities) topicsToMentor.push(...mentor.secondary_capabilities);
 
-  // Generate a stable ID from name + email
-  const nameForId = shared.name || shared.email || `row-${rowIndex}`;
+  // Generate a stable ID from name
+  const nameForId = shared.name || `row-${rowIndex}`;
   const id = nameForId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
 
   return {
@@ -754,7 +737,6 @@ export function parseNewFormatMentorRow(row: Record<string, string>, rowIndex: n
     role: shared.role,
     experience_years: '', // Not asked in new survey
     location_timezone: shared.location_timezone,
-    email: shared.email,
     seniority_band: shared.seniority_band,
     industry: shared.industry,
 

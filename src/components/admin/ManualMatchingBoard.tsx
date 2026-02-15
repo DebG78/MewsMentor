@@ -50,6 +50,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toDisplayName } from '@/lib/displayName';
 import { Cohort, MenteeData, MentorData, ManualMatch, ManualMatchingOutput } from '@/types/mentoring';
 import { useToast } from '@/hooks/use-toast';
 
@@ -544,7 +545,7 @@ export function ManualMatchingBoard({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <h4 className="font-medium text-sm truncate">
-                              {mentee.name || mentee.id}
+                              {toDisplayName(mentee.name || mentee.id)}
                             </h4>
                             <Button
                               variant="ghost"
@@ -745,7 +746,7 @@ export function ManualMatchingBoard({
             {selectedMentee && (
               <div className="mt-2 p-2 bg-primary/5 rounded-md text-xs">
                 <span className="font-medium">Selecting for:</span>{' '}
-                {selectedMentee.name} — looking for:{' '}
+                {toDisplayName(selectedMentee.name)} — looking for:{' '}
                 {selectedMentee.primary_capability || selectedMentee.topics_to_learn.join(', ')}
               </div>
             )}
@@ -793,7 +794,7 @@ export function ManualMatchingBoard({
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
                                 <h4 className="font-medium text-sm truncate">
-                                  {mentor.name || mentor.id}
+                                  {toDisplayName(mentor.name || mentor.id)}
                                 </h4>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <Badge
@@ -895,8 +896,8 @@ export function ManualMatchingBoard({
                               Create pair
                             </h4>
                             <p className="text-xs text-muted-foreground">
-                              {selectedMentee?.name} <ArrowRight className="w-3 h-3 inline" />{' '}
-                              {mentor.name}
+                              {toDisplayName(selectedMentee?.name)} <ArrowRight className="w-3 h-3 inline" />{' '}
+                              {toDisplayName(mentor.name)}
                             </p>
                           </div>
                           <div>
@@ -989,12 +990,12 @@ export function ManualMatchingBoard({
                 {pairs.map((pair, index) => (
                   <TableRow key={`${pair.mentee_id}-${pair.mentor_id}`}>
                     <TableCell className="font-medium">
-                      {pair.mentee_name || pair.mentee_id}
+                      {toDisplayName(pair.mentee_name || pair.mentee_id)}
                     </TableCell>
                     <TableCell className="text-center">
                       <ArrowRight className="w-4 h-4 mx-auto text-muted-foreground" />
                     </TableCell>
-                    <TableCell>{pair.mentor_name || pair.mentor_id}</TableCell>
+                    <TableCell>{toDisplayName(pair.mentor_name || pair.mentor_id)}</TableCell>
                     <TableCell>
                       <ConfidenceBadge confidence={pair.confidence} />
                     </TableCell>
@@ -1075,9 +1076,9 @@ export function ManualMatchingBoard({
           {editingPairIndex !== null && pairs[editingPairIndex] && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {pairs[editingPairIndex].mentee_name}{' '}
+                {toDisplayName(pairs[editingPairIndex].mentee_name)}{' '}
                 <ArrowRight className="w-3 h-3 inline" />{' '}
-                {pairs[editingPairIndex].mentor_name}
+                {toDisplayName(pairs[editingPairIndex].mentor_name)}
               </p>
               <div>
                 <label className="text-sm font-medium">
@@ -1147,7 +1148,7 @@ export function ManualMatchingBoard({
             return (
               <div className="space-y-5">
                 <div>
-                  <h3 className="font-semibold text-lg">{m.name || m.id}</h3>
+                  <h3 className="font-semibold text-lg">{toDisplayName(m.name || m.id)}</h3>
                   <p className="text-muted-foreground">{m.role}</p>
                   {m.pronouns && <p className="text-sm text-muted-foreground">{m.pronouns}</p>}
                 </div>
@@ -1169,11 +1170,6 @@ export function ManualMatchingBoard({
                     <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span>{m.location_timezone}</span>
                   </div>
-                  {m.email && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Email:</span> {m.email}
-                    </div>
-                  )}
                   {m.has_participated_before !== undefined && (
                     <div className="col-span-2 sm:col-span-3">
                       <Badge variant={m.has_participated_before ? 'default' : 'outline'} className="text-xs">
@@ -1381,7 +1377,7 @@ export function ManualMatchingBoard({
             return (
               <div className="space-y-5">
                 <div>
-                  <h3 className="font-semibold text-lg">{m.name || m.id}</h3>
+                  <h3 className="font-semibold text-lg">{toDisplayName(m.name || m.id)}</h3>
                   <p className="text-muted-foreground">{m.role}</p>
                   {m.pronouns && <p className="text-sm text-muted-foreground">{m.pronouns}</p>}
                 </div>
@@ -1407,11 +1403,6 @@ export function ManualMatchingBoard({
                     <Users className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span><span className="font-medium">Capacity:</span> {m.capacity_remaining} slots</span>
                   </div>
-                  {m.email && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Email:</span> {m.email}
-                    </div>
-                  )}
                   <div>
                     <Badge variant={m.has_mentored_before ? 'default' : 'outline'} className="text-xs">
                       {m.has_mentored_before ? 'Experienced mentor' : 'First-time mentor'}

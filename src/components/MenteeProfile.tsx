@@ -14,8 +14,8 @@ import {
   Building,
   BookOpen,
   Edit,
-  Mail,
 } from "lucide-react";
+import { toDisplayName } from '@/lib/displayName';
 
 interface MenteeProfileProps {
   mentee: MenteeData;
@@ -36,7 +36,7 @@ export function MenteeProfile({ mentee, onEdit, variant = "default" }: MenteePro
             <User className="w-5 h-5 text-green-600" />
           </div>
           <div className="flex-1">
-            <h3 className="font-medium">{mentee.name}</h3>
+            <h3 className="font-medium">{toDisplayName(mentee.name)}</h3>
             <p className="text-sm text-muted-foreground">{mentee.role}</p>
           </div>
           <Badge variant="outline">{mentee.experience_level}</Badge>
@@ -54,14 +54,8 @@ export function MenteeProfile({ mentee, onEdit, variant = "default" }: MenteePro
               <User className="w-8 h-8 text-green-600" />
             </div>
             <div>
-              <CardTitle className="text-xl">{mentee.name}</CardTitle>
+              <CardTitle className="text-xl">{toDisplayName(mentee.name)}</CardTitle>
               <CardDescription className="text-lg">{mentee.role}</CardDescription>
-              {mentee.email && (
-                <div className="flex items-center gap-1 mt-1">
-                  <Mail className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{mentee.email}</span>
-                </div>
-              )}
               {mentee.company && (
                 <div className="flex items-center gap-1 mt-1">
                   <Building className="w-4 h-4 text-muted-foreground" />

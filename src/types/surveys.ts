@@ -130,6 +130,17 @@ export const DEFAULT_MENTOR_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
           step: 1,
           order: 4,
           active: true
+        },
+        {
+          id: "slack_user_id",
+          type: "text",
+          title: "What is your Slack member ID?",
+          description: "Open Slack → click your profile photo → the ID is at the bottom of your profile",
+          placeholder: "e.g., U0123456789",
+          required: true,
+          step: 1,
+          order: 5,
+          active: true
         }
       ]
     },
@@ -364,6 +375,17 @@ export const DEFAULT_MENTEE_SURVEY_TEMPLATE: Omit<SurveyTemplate, 'id' | 'create
           required: true,
           step: 1,
           order: 4,
+          active: true
+        },
+        {
+          id: "slack_user_id",
+          type: "text",
+          title: "What is your Slack member ID?",
+          description: "Open Slack → click your profile photo → the ID is at the bottom of your profile",
+          placeholder: "e.g., U0123456789",
+          required: true,
+          step: 1,
+          order: 5,
           active: true
         }
       ]

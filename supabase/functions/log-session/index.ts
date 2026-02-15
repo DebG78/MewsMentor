@@ -37,11 +37,11 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { respondent_name, respondent_email, date, duration_minutes, rating, journey_phase } = body;
+    const { respondent_name, slack_user_id, date, duration_minutes, rating, journey_phase } = body;
 
-    // Validate required fields — at least one of name or email is needed
-    if (!respondent_name && !respondent_email) {
-      return errorResponse(400, 'At least one of respondent_name or respondent_email is required');
+    // Validate required fields — at least one of name or slack_user_id is needed
+    if (!respondent_name && !slack_user_id) {
+      return errorResponse(400, 'At least one of respondent_name or slack_user_id is required');
     }
     if (!date || !duration_minutes || !rating) {
       return errorResponse(400, 'Missing required fields: date, duration_minutes, rating');
@@ -82,16 +82,10 @@ Deno.serve(async (req) => {
       return errorResponse(500, 'Failed to look up cohorts');
     }
 
-    // Auto-detect: if respondent_name looks like an email, treat it as one
-    let effectiveName = respondent_name?.trim() || '';
-    let effectiveEmail = respondent_email?.trim() || '';
-    if (effectiveName.includes('@') && !effectiveEmail) {
-      effectiveEmail = effectiveName;
-      effectiveName = '';
-    }
+    const effectiveName = respondent_name?.trim() || '';
+    const effectiveSlackUserId = slack_user_id?.trim() || '';
 
     const normalizedName = effectiveName.toLowerCase();
-    const normalizedEmail = effectiveEmail.toLowerCase();
     const candidates: Array<{
       mentor_id: string;
       mentee_id: string;
@@ -102,7 +96,7 @@ Deno.serve(async (req) => {
       respondent_role: 'mentor' | 'mentee';
     }> = [];
 
-    console.log(`[debug] Found ${cohorts?.length || 0} cohorts, searching for email="${normalizedEmail}" name="${normalizedName}"`);
+    console.log(`[debug] Found ${cohorts?.length || 0} cohorts, searching for slack_user_id="${effectiveSlackUserId}" name="${normalizedName}"`);
 
     for (const cohort of cohorts || []) {
       const matches = cohort.matches as any;
@@ -119,15 +113,15 @@ Deno.serve(async (req) => {
 
       // Fetch mentees and mentors for this cohort
       const [menteesResult, mentorsResult] = await Promise.all([
-        supabaseAdmin.from('mentees').select('mentee_id, full_name, email').eq('cohort_id', cohort.id),
-        supabaseAdmin.from('mentors').select('mentor_id, full_name, email').eq('cohort_id', cohort.id),
+        supabaseAdmin.from('mentees').select('mentee_id, full_name, slack_user_id').eq('cohort_id', cohort.id),
+        supabaseAdmin.from('mentors').select('mentor_id, full_name, slack_user_id').eq('cohort_id', cohort.id),
       ]);
 
       const mentees = menteesResult.data || [];
       const mentors = mentorsResult.data || [];
 
-      console.log(`[debug] Mentees:`, mentees.map(m => ({ id: m.mentee_id, name: m.full_name, email: m.email })));
-      console.log(`[debug] Mentors:`, mentors.map(m => ({ id: m.mentor_id, name: m.full_name, email: m.email })));
+      console.log(`[debug] Mentees:`, mentees.map(m => ({ id: m.mentee_id, name: m.full_name, slack_user_id: m.slack_user_id })));
+      console.log(`[debug] Mentors:`, mentors.map(m => ({ id: m.mentor_id, name: m.full_name, slack_user_id: m.slack_user_id })));
 
       // Build a unified list of pairs from both algorithm and manual matches
       const allPairs: Array<{ mentee_id: string; mentor_id: string }> = [];
@@ -147,11 +141,11 @@ Deno.serve(async (req) => {
 
       console.log(`[debug] All pairs:`, JSON.stringify(allPairs));
 
-      // Check mentees — email match takes priority over name match
+      // Check mentees — slack_user_id match takes priority over name match
       for (const mentee of mentees) {
-        const emailMatch = normalizedEmail && mentee.email?.trim().toLowerCase() === normalizedEmail;
+        const slackMatch = effectiveSlackUserId && mentee.slack_user_id === effectiveSlackUserId;
         const nameMatch = normalizedName && mentee.full_name?.trim().toLowerCase() === normalizedName;
-        if (emailMatch || nameMatch) {
+        if (slackMatch || nameMatch) {
           const pairedEntries = allPairs.filter(p => p.mentee_id === mentee.mentee_id);
           for (const pair of pairedEntries) {
             const mentor = mentors.find((m: any) => m.mentor_id === pair.mentor_id);
@@ -168,11 +162,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Check mentors — email match takes priority over name match
+      // Check mentors — slack_user_id match takes priority over name match
       for (const mentor of mentors) {
-        const emailMatch = normalizedEmail && mentor.email?.trim().toLowerCase() === normalizedEmail;
+        const slackMatch = effectiveSlackUserId && mentor.slack_user_id === effectiveSlackUserId;
         const nameMatch = normalizedName && mentor.full_name?.trim().toLowerCase() === normalizedName;
-        if (emailMatch || nameMatch) {
+        if (slackMatch || nameMatch) {
           const pairedEntries = allPairs.filter(p => p.mentor_id === mentor.mentor_id);
           for (const pair of pairedEntries) {
             const mentee = mentees.find((m: any) => m.mentee_id === pair.mentee_id);
@@ -191,12 +185,12 @@ Deno.serve(async (req) => {
     }
 
     if (candidates.length === 0) {
-      const identifier = normalizedEmail || respondent_name;
-      return errorResponse(404, `No active pair found for "${identifier}". Ensure the name or email matches exactly as registered.`);
+      const identifier = effectiveSlackUserId || respondent_name;
+      return errorResponse(404, `No active pair found for "${identifier}". Ensure the name or slack_user_id matches exactly as registered.`);
     }
 
     if (candidates.length > 1) {
-      const identifier = normalizedEmail || respondent_name;
+      const identifier = effectiveSlackUserId || respondent_name;
       return errorResponse(
         409,
         `Multiple matches found for "${identifier}". Found in: ${candidates.map(c => `${c.cohort_name} (${c.mentee_name} & ${c.mentor_name})`).join(', ')}. Please resolve manually.`
@@ -269,22 +263,22 @@ Deno.serve(async (req) => {
               .eq('scheduled_datetime', parsedDate.toISOString());
           }
 
-          // Find respondent email — prefer the one we matched on, fall back to DB lookup
-          let respondentEmail = effectiveEmail;
-          if (!respondentEmail) {
+          // Find respondent slack_user_id — prefer the one we matched on, fall back to DB lookup
+          let respondentSlackId = effectiveSlackUserId;
+          if (!respondentSlackId) {
             const table = pair.respondent_role === 'mentee' ? 'mentees' : 'mentors';
             const idCol = pair.respondent_role === 'mentee' ? 'mentee_id' : 'mentor_id';
             const idVal = pair.respondent_role === 'mentee' ? pair.mentee_id : pair.mentor_id;
             const { data: person } = await supabaseAdmin
               .from(table)
-              .select('email')
+              .select('slack_user_id')
               .eq(idCol, idVal)
               .eq('cohort_id', pair.cohort_id)
               .single();
-            respondentEmail = person?.email || '';
+            respondentSlackId = person?.slack_user_id || '';
           }
 
-          if (respondentEmail) {
+          if (respondentSlackId) {
             // Dedup check: has this person already received ANY next_steps message for this phase?
             const { data: existing } = await supabaseAdmin
               .from('message_log')
@@ -292,7 +286,7 @@ Deno.serve(async (req) => {
               .eq('cohort_id', pair.cohort_id)
               .in('template_type', ['next_steps', 'next_steps_mentee', 'next_steps_mentor'])
               .eq('journey_phase', detectedPhase)
-              .eq('recipient_email', respondentEmail)
+              .eq('slack_user_id', respondentSlackId)
               .eq('delivery_status', 'sent')
               .limit(1);
 
@@ -332,7 +326,7 @@ Deno.serve(async (req) => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       type: 'dm',
-                      recipient_email: respondentEmail,
+                      slack_user_id: respondentSlackId,
                       message_text: messageText,
                       cohort_name: pair.cohort_name,
                     }),
@@ -342,18 +336,19 @@ Deno.serve(async (req) => {
                     cohort_id: pair.cohort_id,
                     template_type: template.template_type,
                     journey_phase: detectedPhase,
-                    recipient_email: respondentEmail,
+                    slack_user_id: respondentSlackId,
+                    recipient_email: respondentSlackId || '',
                     message_text: messageText,
                     delivery_status: zapRes.ok ? 'sent' : 'failed',
                     error_detail: zapRes.ok ? null : `HTTP ${zapRes.status}`,
                   });
 
                   autoSentPhase = detectedPhase;
-                  console.log(`[log-session] Auto-sent next_steps (${detectedPhase}) to ${respondentEmail}: ${zapRes.ok ? 'OK' : 'FAILED'}`);
+                  console.log(`[log-session] Auto-sent next_steps (${detectedPhase}) to ${respondentSlackId}: ${zapRes.ok ? 'OK' : 'FAILED'}`);
                 }
               }
             } else {
-              console.log(`[log-session] Skipping auto-send: ${respondentEmail} already received next_steps for ${detectedPhase}`);
+              console.log(`[log-session] Skipping auto-send: ${respondentSlackId} already received next_steps for ${detectedPhase}`);
             }
           }
         }

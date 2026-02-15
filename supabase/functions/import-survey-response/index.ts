@@ -79,6 +79,7 @@ const SHARED = {
   role_selection: [['participate as'], ['want to participate']],
   email: [['email']],
   name: [['name']],
+  slack_user_id: [['slack']],
 };
 
 const MENTEE = {
@@ -117,6 +118,22 @@ const MENTOR = {
 // Edge Function
 // ============================================================================
 
+/**
+ * Derive a privacy-safe display name from an email address.
+ * e.g. "debora.gallo@mews.com" → "Debora G."
+ * Falls back to the local part if no separator is found.
+ */
+function deriveDisplayName(email: string): string {
+  const local = email.split('@')[0]; // "debora.gallo"
+  // Split on . - or _ to get name parts
+  const parts = local.split(/[.\-_]/).filter(Boolean);
+  if (parts.length === 0) return '';
+  const firstName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
+  if (parts.length === 1) return firstName;
+  const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return `${firstName} ${lastInitial}.`;
+}
+
 function errorResponse(status: number, message: string) {
   return new Response(
     JSON.stringify({ error: message }),
@@ -135,7 +152,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('import-survey-response v12 invoked');
+    console.log('import-survey-response v13 invoked');
 
     // Validate API key
     const apiKey = req.headers.get('x-api-key');
@@ -180,23 +197,16 @@ Deno.serve(async (req) => {
       cohortName = cohort.name;
     }
 
-    // Derive a display name from email (fallback)
-    function nameFromEmail(email: string): string {
-      const local = email.split('@')[0] || '';
-      return local
-        .split(/[._-]/)
-        .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
-        .join(' ');
-    }
-
     // Extract shared fields
-    const email = f(SHARED.email) || (body.email as string) || '';
+    const slackUserId = f(SHARED.slack_user_id) || (body.slack_user_id as string) || '';
     const rawName = f(SHARED.name) || (body.name as string) || '';
-    const name = rawName || (email ? nameFromEmail(email) : '');
-    if (!email && !name) {
-      return errorResponse(400, 'At least one of email or name is required');
+    const email = f(SHARED.email) || (body.email as string) || '';
+    // Derive privacy-safe display name: prefer explicit name, fall back to email-derived
+    const name = rawName || (email ? deriveDisplayName(email) : '');
+    if (!slackUserId && !name) {
+      return errorResponse(400, 'At least one of slack_user_id, name, or email is required');
     }
-    console.log('Resolved name:', name, '| email:', email);
+    console.log('Resolved name:', name, '| slack_user_id:', slackUserId, '| email-derived:', !rawName && !!email);
 
     const role = f(SHARED.role) || '';
     const industry = f(SHARED.industry) || '';
@@ -235,7 +245,7 @@ Deno.serve(async (req) => {
       const menteeFields: Record<string, unknown> = {
         cohort_id: cohortId,
         full_name: name,
-        email: email || null,
+        slack_user_id: slackUserId || null,
         role: role || 'Not specified',
         industry: industry || 'Technology',
         location_timezone: locationTimezone || 'Not specified',
@@ -253,19 +263,28 @@ Deno.serve(async (req) => {
         topics_to_learn: [primaryCapability, f(MENTEE.secondary_capability)].filter(Boolean),
       };
 
-      // Check if this mentee already exists (by cohort_id + email)
+      // Check if this mentee already exists (by cohort_id + slack_user_id, fallback to name)
       let existingMenteeId: string | null = null;
-      if (email) {
+      if (slackUserId) {
         const { data: existing } = await supabaseAdmin
           .from('mentees')
           .select('mentee_id')
           .eq('cohort_id', cohortId)
-          .eq('email', email)
+          .eq('slack_user_id', slackUserId)
+          .single();
+        if (existing) existingMenteeId = existing.mentee_id;
+      }
+      if (!existingMenteeId && name) {
+        const { data: existing } = await supabaseAdmin
+          .from('mentees')
+          .select('mentee_id')
+          .eq('cohort_id', cohortId)
+          .eq('full_name', name)
           .single();
         if (existing) existingMenteeId = existing.mentee_id;
       }
 
-      console.log('Mentee roleSelection:', roleSelection, 'email:', email, 'cohortId:', cohortId);
+      console.log('Mentee roleSelection:', roleSelection, 'slack_user_id:', slackUserId, 'cohortId:', cohortId);
 
       if (existingMenteeId) {
         console.log('Updating existing mentee:', existingMenteeId);
@@ -307,7 +326,7 @@ Deno.serve(async (req) => {
       const mentorFields: Record<string, unknown> = {
         cohort_id: cohortId,
         full_name: name,
-        email: email || null,
+        slack_user_id: slackUserId || null,
         role: role || 'Not specified',
         industry: industry || 'Technology',
         location_timezone: locationTimezone || 'Not specified',
@@ -334,14 +353,23 @@ Deno.serve(async (req) => {
         ].filter(Boolean),
       };
 
-      // Check if this mentor already exists (by cohort_id + email)
+      // Check if this mentor already exists (by cohort_id + slack_user_id, fallback to name)
       let existingMentorId: string | null = null;
-      if (email) {
+      if (slackUserId) {
         const { data: existing } = await supabaseAdmin
           .from('mentors')
           .select('mentor_id')
           .eq('cohort_id', cohortId)
-          .eq('email', email)
+          .eq('slack_user_id', slackUserId)
+          .single();
+        if (existing) existingMentorId = existing.mentor_id;
+      }
+      if (!existingMentorId && name) {
+        const { data: existing } = await supabaseAdmin
+          .from('mentors')
+          .select('mentor_id')
+          .eq('cohort_id', cohortId)
+          .eq('full_name', name)
           .single();
         if (existing) existingMentorId = existing.mentor_id;
       }

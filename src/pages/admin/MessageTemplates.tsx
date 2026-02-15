@@ -44,7 +44,6 @@ Welcome to the {COHORT_NAME} mentoring program! You've been matched with {MENTOR
 Here's what we know about your match:
 • Your focus area: {PRIMARY_CAPABILITY}
 • Shared capability: {SHARED_CAPABILITY}
-• Your mentor's email: {MENTOR_EMAIL}
 
 **Next steps:**
 1. Reach out to {MENTOR_FIRST_NAME} to introduce yourself and schedule your first session
@@ -67,7 +66,6 @@ Thank you for volunteering as a mentor in the {COHORT_NAME} program! You've been
 Here's your match overview:
 • Shared capability: {SHARED_CAPABILITY}
 • Your mentee's focus: {PRIMARY_CAPABILITY}
-• Your mentee's email: {MENTEE_EMAIL}
 
 **About your mentee:**
 They want to develop: {PRIMARY_CAPABILITY}
@@ -184,8 +182,6 @@ const SAMPLE_CONTEXT: Record<string, string> = {
   MENTORING_EXPERIENCE: 'Mentored informally for 2 years',
   MENTEE_FIRST_NAME: 'Alice',
   MENTOR_FIRST_NAME: 'Bob',
-  MENTEE_EMAIL: 'alice@mews.com',
-  MENTOR_EMAIL: 'bob@mews.com',
   SHARED_CAPABILITY: 'Strategic Thinking & Execution',
   COHORT_NAME: 'Q2 2026',
   RESOURCE_LINK: 'https://example.com/guide',
