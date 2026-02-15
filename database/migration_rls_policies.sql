@@ -35,7 +35,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.sessions
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.check_ins ENABLE ROW LEVEL SECURITY;
@@ -43,7 +43,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.check_ins
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.cohort_stages ENABLE ROW LEVEL SECURITY;
@@ -51,7 +51,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.cohort_stages
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.matching_models ENABLE ROW LEVEL SECURITY;
@@ -59,7 +59,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.matching_models
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.matching_criteria ENABLE ROW LEVEL SECURITY;
@@ -67,7 +67,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.matching_criteria
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.matching_rules ENABLE ROW LEVEL SECURITY;
@@ -75,7 +75,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.matching_rules
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.message_templates ENABLE ROW LEVEL SECURITY;
@@ -83,7 +83,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.message_templates
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.message_log ENABLE ROW LEVEL SECURITY;
@@ -91,7 +91,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.message_log
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.metric_snapshots ENABLE ROW LEVEL SECURITY;
@@ -99,7 +99,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.metric_snapshots
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.success_targets ENABLE ROW LEVEL SECURITY;
@@ -107,7 +107,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.success_targets
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.survey_templates ENABLE ROW LEVEL SECURITY;
@@ -115,7 +115,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.survey_templates
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.vip_scores ENABLE ROW LEVEL SECURITY;
@@ -123,7 +123,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.vip_scores
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.vip_rules ENABLE ROW LEVEL SECURITY;
@@ -131,7 +131,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.vip_rules
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.profile_embeddings ENABLE ROW LEVEL SECURITY;
@@ -139,7 +139,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.profile_embeddings
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.match_explanations ENABLE ROW LEVEL SECURITY;
@@ -147,7 +147,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.match_explanations
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.programs ENABLE ROW LEVEL SECURITY;
@@ -155,7 +155,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.programs
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.program_cohorts ENABLE ROW LEVEL SECURITY;
@@ -163,7 +163,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.program_cohorts
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.program_participants ENABLE ROW LEVEL SECURITY;
@@ -171,7 +171,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.program_participants
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.user_profiles ENABLE ROW LEVEL SECURITY;
@@ -179,7 +179,7 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.user_profiles
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;
 
 ALTER TABLE IF EXISTS public.milestones ENABLE ROW LEVEL SECURITY;
@@ -187,5 +187,5 @@ DO $$ BEGIN
   CREATE POLICY "Authenticated users full access" ON public.milestones
     FOR ALL USING (auth.role() = 'authenticated')
     WITH CHECK (auth.role() = 'authenticated');
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; WHEN undefined_table THEN NULL;
 END $$;

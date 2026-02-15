@@ -81,7 +81,7 @@ export interface Database {
           role: string
           experience_years: number
           location_timezone: string
-          life_experiences: string[]
+
           has_participated_before: boolean | null
           topics_to_learn: string[]
           other_topics: string | null
@@ -122,7 +122,7 @@ export interface Database {
           role: string
           experience_years: number
           location_timezone: string
-          life_experiences: string[]
+
           has_participated_before?: boolean | null
           topics_to_learn: string[]
           other_topics?: string | null
@@ -163,7 +163,6 @@ export interface Database {
           role?: string
           experience_years?: number
           location_timezone?: string
-          life_experiences?: string[]
           has_participated_before?: boolean | null
           topics_to_learn?: string[]
           other_topics?: string | null
@@ -206,7 +205,7 @@ export interface Database {
           role: string
           experience_years: number
           location_timezone: string
-          life_experiences: string[]
+
           other_experiences: string | null
           topics_to_mentor: string[]
           other_topics: string | null
@@ -253,7 +252,7 @@ export interface Database {
           role: string
           experience_years: number
           location_timezone: string
-          life_experiences: string[]
+
           other_experiences?: string | null
           topics_to_mentor: string[]
           other_topics?: string | null
@@ -300,7 +299,6 @@ export interface Database {
           role?: string
           experience_years?: number
           location_timezone?: string
-          life_experiences?: string[]
           other_experiences?: string | null
           topics_to_mentor?: string[]
           other_topics?: string | null

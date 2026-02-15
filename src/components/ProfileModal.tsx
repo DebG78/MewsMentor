@@ -8,7 +8,6 @@ import {
   Clock,
   Target,
   MessageCircle,
-  Heart,
   AlertCircle,
   Users,
   Globe,
@@ -87,7 +86,6 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
   // Get the right field names (handles both DB column names and type field names)
   const topics = profile[isMentee ? 'topics_to_learn' : 'topics_to_mentor'] || [];
   const languages = profile.languages || [];
-  const lifeExperiences = profile.life_experiences || [];
   const preferredStyle = profile.preferred_mentor_style || profile.preferred_style;
   const preferredEnergy = profile.preferred_mentor_energy || profile.preferred_energy;
   const feedbackPref = profile.feedback_preference;
@@ -187,17 +185,6 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
               <div className="flex flex-wrap gap-1.5">
                 {topics.map((topic: string, idx: number) => (
                   <Badge key={idx} variant="default" className="text-xs font-normal">{topic}</Badge>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Life Experiences */}
-          {lifeExperiences.length > 0 && (
-            <Section icon={<Heart className="w-4 h-4" />} title="Life experiences">
-              <div className="flex flex-wrap gap-1.5">
-                {lifeExperiences.map((exp: string, idx: number) => (
-                  <Badge key={idx} variant="secondary" className="text-xs font-normal">{exp}</Badge>
                 ))}
               </div>
             </Section>

@@ -1144,20 +1144,6 @@ export function ManualMatchingBoard({
           {previewProfile?.type === 'mentee' && (() => {
             const m = previewProfile.data as MenteeData;
             const hasNewFields = !!(m.primary_capability || m.mentoring_goal);
-            const lifeExperiences = [
-              ...(m.life_experiences || []),
-              ...(m.returning_from_leave ? ['Returning from leave'] : []),
-              ...(m.navigating_menopause ? ['Navigating menopause'] : []),
-              ...(m.career_break ? ['Career break'] : []),
-              ...(m.relocation ? ['Relocation'] : []),
-              ...(m.career_change ? ['Career change'] : []),
-              ...(m.health_challenges ? ['Health challenges'] : []),
-              ...(m.stepping_into_leadership ? ['Stepping into leadership'] : []),
-              ...(m.working_towards_promotion ? ['Working towards promotion'] : []),
-              ...(m.thinking_about_internal_move ? ['Thinking about internal move'] : []),
-              ...(m.other_situation ? [m.other_situation] : []),
-            ];
-            const uniqueExperiences = [...new Set(lifeExperiences)];
             return (
               <div className="space-y-5">
                 <div>
@@ -1264,17 +1250,6 @@ export function ManualMatchingBoard({
                     <div className="flex flex-wrap gap-1">
                       {m.topics_to_learn.map(topic => (
                         <Badge key={topic} variant="outline">{topic}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {uniqueExperiences.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold text-sm mb-2">Life Experiences / Situations</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {uniqueExperiences.map(exp => (
-                        <Badge key={exp} variant="secondary" className="text-xs">{exp}</Badge>
                       ))}
                     </div>
                   </div>
@@ -1403,18 +1378,6 @@ export function ManualMatchingBoard({
           {previewProfile?.type === 'mentor' && (() => {
             const m = previewProfile.data as MentorData;
             const hasNewFields = !!(m.primary_capability || m.mentor_motivation);
-            const lifeExperiences = [
-              ...(m.returning_from_leave ? ['Returning from leave'] : []),
-              ...(m.navigating_menopause ? ['Navigating menopause'] : []),
-              ...(m.career_break ? ['Career break'] : []),
-              ...(m.relocation ? ['Relocation'] : []),
-              ...(m.career_change ? ['Career change'] : []),
-              ...(m.health_challenges ? ['Health challenges'] : []),
-              ...(m.stepping_into_leadership ? ['Stepping into leadership'] : []),
-              ...(m.promotions ? ['Promotions'] : []),
-              ...(m.internal_moves ? ['Internal moves'] : []),
-              ...(m.other_experience ? [m.other_experience] : []),
-            ];
             return (
               <div className="space-y-5">
                 <div>
@@ -1579,17 +1542,6 @@ export function ManualMatchingBoard({
                       </div>
                     )}
                   </>
-                )}
-
-                {lifeExperiences.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold text-sm mb-2">Life Experiences They Can Relate To</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {lifeExperiences.map(exp => (
-                        <Badge key={exp} variant="secondary" className="text-xs">{exp}</Badge>
-                      ))}
-                    </div>
-                  </div>
                 )}
 
                 <div className="space-y-3">

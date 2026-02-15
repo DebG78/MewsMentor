@@ -20,9 +20,6 @@ export interface MenteeData {
   thinking_about_internal_move?: boolean;
   other_situation?: string;
 
-  // Life experiences array (for database storage - legacy)
-  life_experiences?: string[];
-
   // Development areas they want to learn (legacy array, still populated from capabilities)
   topics_to_learn: string[];
 

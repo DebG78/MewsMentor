@@ -21,7 +21,6 @@ interface MenteeRow {
   role: string;
   experience_years: number;
   location_timezone: string;
-  life_experiences?: string[];
   topics_to_learn?: string[];
   meeting_frequency?: string;
   languages?: string[];
@@ -46,7 +45,6 @@ interface MentorRow {
   role: string;
   experience_years: number;
   location_timezone: string;
-  life_experiences?: string[];
   topics_to_mentor?: string[];
   capacity_remaining: number;
   meeting_frequency?: string;
@@ -72,7 +70,6 @@ interface GroupedProfile {
   role: string;
   experience_years: number;
   location_timezone: string;
-  life_experiences?: string[];
   topics?: string[];
   meeting_frequency?: string;
   languages?: string[];

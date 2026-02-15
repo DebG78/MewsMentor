@@ -41,7 +41,6 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     role: dbMentee.role,
     experience_years: dbMentee.experience_years,
     location_timezone: dbMentee.location_timezone,
-    life_experiences: dbMentee.life_experiences,
     has_participated_before: dbMentee.has_participated_before ?? undefined,
     topics_to_learn: dbMentee.topics_to_learn,
     motivation: dbMentee.motivation || undefined,
@@ -71,7 +70,6 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     role: dbMentor.role,
     experience_years: dbMentor.experience_years,
     location_timezone: dbMentor.location_timezone,
-    life_experiences: dbMentor.life_experiences,
     topics_to_mentor: dbMentor.topics_to_mentor,
     has_mentored_before: dbMentor.has_mentored_before ?? false,
     mentoring_style: dbMentor.mentoring_style || '',
@@ -265,29 +263,6 @@ export async function deleteCohort(id: string): Promise<boolean> {
   return true
 }
 
-const MENTEE_LIFE_EXPERIENCE_LABELS = {
-  returning_from_leave: 'Returning from maternity/paternity/parental leave',
-  navigating_menopause: 'Navigating menopause or andropause',
-  career_break: 'Career break / sabbatical',
-  relocation: 'Relocation to a new country',
-  career_change: 'Career change or industry switch',
-  health_challenges: 'Managing health challenges (physical or mental)',
-  stepping_into_leadership: 'Stepping into leadership for the first time',
-  working_towards_promotion: 'Working towards a promotion',
-  thinking_about_internal_move: 'Thinking about an internal move'
-} as const;
-
-const MENTOR_LIFE_EXPERIENCE_LABELS = {
-  returning_from_leave: 'Returning from maternity/paternity/parental leave',
-  navigating_menopause: 'Navigating menopause or andropause',
-  career_break: 'Career break / sabbatical',
-  relocation: 'Relocation to a new country',
-  career_change: 'Career change or industry switch',
-  health_challenges: 'Managing health challenges (physical or mental)',
-  stepping_into_leadership: 'Stepping into leadership for the first time',
-  promotions: 'Promotions',
-  internal_moves: 'Internal moves'
-} as const;
 
 function parseExperienceYears(value?: string): number {
   if (!value) return 0;
@@ -313,39 +288,6 @@ function sanitizeText(value?: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function buildMenteeLifeExperiences(mentee: MenteeData): string[] {
-  const experiences: string[] = [];
-  if (mentee.returning_from_leave) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.returning_from_leave);
-  if (mentee.navigating_menopause) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.navigating_menopause);
-  if (mentee.career_break) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.career_break);
-  if (mentee.relocation) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.relocation);
-  if (mentee.career_change) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.career_change);
-  if (mentee.health_challenges) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.health_challenges);
-  if (mentee.stepping_into_leadership) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.stepping_into_leadership);
-  if (mentee.working_towards_promotion) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.working_towards_promotion);
-  if (mentee.thinking_about_internal_move) experiences.push(MENTEE_LIFE_EXPERIENCE_LABELS.thinking_about_internal_move);
-  if (mentee.other_situation?.trim()) {
-    experiences.push('Other: ' + mentee.other_situation.trim());
-  }
-  return experiences;
-}
-
-function buildMentorLifeExperiences(mentor: MentorData): string[] {
-  const experiences: string[] = [];
-  if (mentor.returning_from_leave) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.returning_from_leave);
-  if (mentor.navigating_menopause) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.navigating_menopause);
-  if (mentor.career_break) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.career_break);
-  if (mentor.relocation) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.relocation);
-  if (mentor.career_change) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.career_change);
-  if (mentor.health_challenges) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.health_challenges);
-  if (mentor.stepping_into_leadership) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.stepping_into_leadership);
-  if (mentor.promotions) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.promotions);
-  if (mentor.internal_moves) experiences.push(MENTOR_LIFE_EXPERIENCE_LABELS.internal_moves);
-  if (mentor.other_experience?.trim()) {
-    experiences.push('Other: ' + mentor.other_experience.trim());
-  }
-  return experiences;
-}
 
 function ensureLanguages(languages?: string[]): string[] {
   if (Array.isArray(languages) && languages.length > 0) {
@@ -445,7 +387,6 @@ export async function addImportDataToCohort(
         role: sanitizeText(mentee.role) || 'Pending role',
         experience_years: parseExperienceYears(mentee.experience_years),
         location_timezone: sanitizeText(mentee.location_timezone) || 'Not specified',
-        life_experiences: Array.isArray((mentee as any).life_experiences) ? (mentee as any).life_experiences : buildMenteeLifeExperiences(mentee),
         topics_to_learn: Array.isArray(mentee.topics_to_learn) ? mentee.topics_to_learn : [],
         meeting_frequency: sanitizeText(mentee.meeting_frequency) || 'Not set',
         languages,
@@ -615,7 +556,6 @@ export async function addImportDataToCohort(
         role: sanitizeText(mentor.role) || 'Pending role',
         experience_years: parseExperienceYears(mentor.experience_years),
         location_timezone: sanitizeText(mentor.location_timezone) || 'Not specified',
-        life_experiences: buildMentorLifeExperiences(mentor),
         topics_to_mentor: Array.isArray(mentor.topics_to_mentor) ? mentor.topics_to_mentor : [],
         capacity_remaining: typeof mentor.capacity_remaining === 'number' ? mentor.capacity_remaining : 0,
         meeting_frequency: sanitizeText(mentor.meeting_frequency) || 'Not set',
@@ -906,7 +846,6 @@ export async function signupMentee(menteeData: {
   role: string
   experienceYears: string
   locationTimezone: string
-  lifeExperiences: string[]
   otherExperience?: string
   hasParticipatedBefore?: boolean
   topicsToLearn: string[]
@@ -934,7 +873,6 @@ export async function signupMentee(menteeData: {
       role: menteeData.role,
       experience_years: parseInt(menteeData.experienceYears.split('-')[0]) || 0,
       location_timezone: menteeData.locationTimezone,
-      life_experiences: menteeData.lifeExperiences,
       other_experience: menteeData.otherExperience || null,
       topics_to_learn: menteeData.topicsToLearn,
       other_topics: menteeData.otherTopics || null,
@@ -971,7 +909,7 @@ export async function signupMentee(menteeData: {
         full_name: '', // To be filled later
         role_title: menteeData.role,
         location_timezone: menteeData.locationTimezone,
-        languages: menteeData.lifeExperiences.join(', '),
+        languages: 'English',
         experience_years: parseInt(menteeData.experienceYears.split('-')[0]) || 0,
         current_skills: menteeData.topicsToLearn.join(', '),
         target_skills: '',
@@ -1013,7 +951,6 @@ export async function signupMentor(mentorData: {
   role: string
   experienceYears: string
   locationTimezone: string
-  lifeExperiences: string[]
   otherExperiences?: string
   topicsToMentor: string[]
   otherTopics?: string
@@ -1040,7 +977,6 @@ export async function signupMentor(mentorData: {
       role: mentorData.role,
       experience_years: parseInt(mentorData.experienceYears.split('-')[0]) || 0,
       location_timezone: mentorData.locationTimezone,
-      life_experiences: mentorData.lifeExperiences,
       other_experiences: mentorData.otherExperiences || null,
       topics_to_mentor: mentorData.topicsToMentor,
       other_topics: mentorData.otherTopics || null,
@@ -1076,7 +1012,7 @@ export async function signupMentor(mentorData: {
         full_name: '', // To be filled later
         role_title: mentorData.role,
         location_timezone: mentorData.locationTimezone,
-        languages: mentorData.lifeExperiences.join(', '),
+        languages: 'English',
         experience_years: parseInt(mentorData.experienceYears.split('-')[0]) || 0,
         current_skills: mentorData.topicsToMentor.join(', '),
         target_skills: '',
@@ -1495,7 +1431,6 @@ export async function updateMenteeProfile(
     role?: string
     experience_years?: number
     location_timezone?: string
-    life_experiences?: string[]
     topics_to_learn?: string[]
     motivation?: string | null
     main_reason?: string | null
@@ -1540,7 +1475,6 @@ export async function updateMentorProfile(
     role?: string
     experience_years?: number
     location_timezone?: string
-    life_experiences?: string[]
     topics_to_mentor?: string[]
     has_mentored_before?: boolean | null
     mentoring_style?: string | null
