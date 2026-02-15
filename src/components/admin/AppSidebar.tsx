@@ -72,12 +72,12 @@ const analyticsItems = [
 export function AppSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { logout } = useUser()
+  const { signOut, userProfile } = useUser()
   const { toast } = useToast()
   const { theme, toggleTheme } = useTheme()
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await signOut()
     toast({
       title: "Signed out",
       description: "You have been successfully signed out.",
@@ -241,12 +241,12 @@ export function AppSidebar() {
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-xs">
-                      AD
+                      {userProfile?.email?.slice(0, 2).toUpperCase() || 'AD'}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">Admin</span>
-                    <span className="truncate text-xs opacity-60">Admin</span>
+                    <span className="truncate font-semibold">{userProfile?.email?.split('@')[0] || 'Admin'}</span>
+                    <span className="truncate text-xs opacity-60">{userProfile?.email || 'Admin'}</span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4 opacity-50" />
                 </SidebarMenuButton>
