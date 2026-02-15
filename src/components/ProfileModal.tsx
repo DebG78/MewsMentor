@@ -15,9 +15,9 @@ import {
   Zap,
   Star,
   XCircle,
-  Mail,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { toDisplayName } from '@/lib/displayName';
 
 interface OtherCohortInfo {
   cohort_id: string;
@@ -38,7 +38,7 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
   const isMentee = type === 'mentee';
   const personId = profile?.[isMentee ? 'mentee_id' : 'mentor_id'];
   const currentCohortId = profile?.cohort_id;
-  const displayName = profile?.name || profile?.full_name || personId;
+  const displayName = toDisplayName(profile?.name || profile?.full_name || personId);
 
   useEffect(() => {
     if (!isOpen || !personId) {
@@ -114,12 +114,6 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
                 </Badge>
               </div>
               <p className="text-muted-foreground mt-0.5">{profile.role}</p>
-              {profile.email && (
-                <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5" />
-                  {profile.email}
-                </p>
-              )}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5" />

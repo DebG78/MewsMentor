@@ -141,14 +141,12 @@ Deno.serve(async (req) => {
         COHORT_NAME: cohort.name,
         MENTEE_FIRST_NAME: mentee.first_name || mentee.full_name?.split(' ')[0] || '',
         MENTOR_FIRST_NAME: mentor.first_name || mentor.full_name?.split(' ')[0] || '',
-        MENTEE_EMAIL: mentee.email || '',
-        MENTOR_EMAIL: mentor.email || '',
         SHARED_CAPABILITY: sharedCap,
         ADMIN_EMAIL: adminEmail,
       };
 
       // ---- Mentee welcome DM ----
-      if (menteeTemplate && mentee.email) {
+      if (menteeTemplate && mentee.slack_user_id) {
         const menteeContext: TemplateContext = {
           ...baseContext,
           FIRST_NAME: mentee.first_name || mentee.full_name?.split(' ')[0] || '',
@@ -170,7 +168,7 @@ Deno.serve(async (req) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'dm',
-              recipient_email: mentee.email,
+              slack_user_id: mentee.slack_user_id,
               message_text: messageText,
               cohort_name: cohort.name,
             }),
@@ -180,7 +178,8 @@ Deno.serve(async (req) => {
           await supabaseAdmin.from('message_log').insert({
             cohort_id: cohortId,
             template_type: 'welcome_mentee',
-            recipient_email: mentee.email,
+            slack_user_id: mentee.slack_user_id,
+            recipient_email: mentee.slack_user_id || '',
             message_text: messageText,
             delivery_status: zapRes.ok ? 'sent' : 'failed',
             error_detail: zapRes.ok ? null : `HTTP ${zapRes.status}`,
@@ -190,11 +189,12 @@ Deno.serve(async (req) => {
           else failedCount++;
         } catch (err) {
           failedCount++;
-          errors.push(`Mentee ${mentee.email}: ${err.message}`);
+          errors.push(`Mentee ${mentee.slack_user_id}: ${err.message}`);
           await supabaseAdmin.from('message_log').insert({
             cohort_id: cohortId,
             template_type: 'welcome_mentee',
-            recipient_email: mentee.email,
+            slack_user_id: mentee.slack_user_id,
+            recipient_email: mentee.slack_user_id || '',
             message_text: renderTemplate(menteeTemplate, menteeContext),
             delivery_status: 'failed',
             error_detail: err.message,
@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
       }
 
       // ---- Mentor welcome DM ----
-      if (mentorTemplate && mentor.email) {
+      if (mentorTemplate && mentor.slack_user_id) {
         const mentorContext: TemplateContext = {
           ...baseContext,
           FIRST_NAME: mentor.first_name || mentor.full_name?.split(' ')[0] || '',
@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'dm',
-              recipient_email: mentor.email,
+              slack_user_id: mentor.slack_user_id,
               message_text: messageText,
               cohort_name: cohort.name,
             }),
@@ -234,7 +234,8 @@ Deno.serve(async (req) => {
           await supabaseAdmin.from('message_log').insert({
             cohort_id: cohortId,
             template_type: 'welcome_mentor',
-            recipient_email: mentor.email,
+            slack_user_id: mentor.slack_user_id,
+            recipient_email: mentor.slack_user_id || '',
             message_text: messageText,
             delivery_status: zapRes.ok ? 'sent' : 'failed',
             error_detail: zapRes.ok ? null : `HTTP ${zapRes.status}`,
@@ -244,11 +245,12 @@ Deno.serve(async (req) => {
           else failedCount++;
         } catch (err) {
           failedCount++;
-          errors.push(`Mentor ${mentor.email}: ${err.message}`);
+          errors.push(`Mentor ${mentor.slack_user_id}: ${err.message}`);
           await supabaseAdmin.from('message_log').insert({
             cohort_id: cohortId,
             template_type: 'welcome_mentor',
-            recipient_email: mentor.email,
+            slack_user_id: mentor.slack_user_id,
+            recipient_email: mentor.slack_user_id || '',
             message_text: renderTemplate(mentorTemplate, mentorContext),
             delivery_status: 'failed',
             error_detail: err.message,

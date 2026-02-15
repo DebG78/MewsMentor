@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { Users, Search, Eye, MapPin, Target, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { assignToCohort } from "@/lib/cohortManager";
+import { toDisplayName } from '@/lib/displayName';
 
 interface MenteeRow {
   id: string;
@@ -268,7 +269,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                   <TableCell className="font-medium">
                     <div>
                       <div className="font-medium">
-                        {profile.person_id}
+                        {toDisplayName(profile.full_name || profile.person_id)}
                       </div>
                       {profile.pronouns && (
                         <div className="text-xs text-muted-foreground">
@@ -278,13 +279,8 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="max-w-[200px]">
-                      <div className="font-medium text-sm truncate" title={profile.role}>
-                        {profile.role}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {profile.experience_years} years exp
-                      </div>
+                    <div className="max-w-[200px] font-medium text-sm truncate" title={profile.role}>
+                      {profile.role}
                     </div>
                   </TableCell>
                   <TableCell>

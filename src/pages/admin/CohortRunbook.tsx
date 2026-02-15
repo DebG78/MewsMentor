@@ -487,7 +487,7 @@ export default function CohortRunbook() {
   const SAMPLE_CONTEXT: Record<string, string> = {
     FIRST_NAME: 'Alice', FULL_NAME: 'Alice Johnson', COHORT_NAME: cohorts.find(c => c.id === selectedCohort)?.name || 'Cohort',
     MENTOR_FIRST_NAME: 'Bob', MENTEE_FIRST_NAME: 'Alice', PRIMARY_CAPABILITY: 'Strategic Thinking',
-    SHARED_CAPABILITY: 'Strategic Thinking', MENTOR_EMAIL: 'bob@mews.com', MENTEE_EMAIL: 'alice@mews.com',
+    SHARED_CAPABILITY: 'Strategic Thinking',
   };
 
   function renderPreview(template: string): string {

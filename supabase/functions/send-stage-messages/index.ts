@@ -138,14 +138,12 @@ Deno.serve(async (req) => {
         COHORT_NAME: cohort.name,
         MENTEE_FIRST_NAME: mentee.first_name || mentee.full_name?.split(' ')[0] || '',
         MENTOR_FIRST_NAME: mentor.first_name || mentor.full_name?.split(' ')[0] || '',
-        MENTEE_EMAIL: mentee.email || '',
-        MENTOR_EMAIL: mentor.email || '',
       };
 
       // Send to both participants in the pair
       const recipients = [
         {
-          email: mentee.email,
+          slack_user_id: mentee.slack_user_id,
           role: 'mentee' as const,
           context: {
             ...baseContext,
@@ -159,7 +157,7 @@ Deno.serve(async (req) => {
           },
         },
         {
-          email: mentor.email,
+          slack_user_id: mentor.slack_user_id,
           role: 'mentor' as const,
           context: {
             ...baseContext,
@@ -176,7 +174,7 @@ Deno.serve(async (req) => {
       ];
 
       for (const recipient of recipients) {
-        if (!recipient.email) {
+        if (!recipient.slack_user_id) {
           skippedCount++;
           continue;
         }
@@ -185,7 +183,7 @@ Deno.serve(async (req) => {
         const recipientTemplate = findTemplate(recipient.role);
         if (!recipientTemplate) {
           skippedCount++;
-          console.log(`[send-stage-messages] Skipping ${recipient.email}: no template for ${recipient.role}`);
+          console.log(`[send-stage-messages] Skipping ${recipient.slack_user_id}: no template for ${recipient.role}`);
           continue;
         }
 
@@ -196,13 +194,13 @@ Deno.serve(async (req) => {
           .eq('cohort_id', cohortId)
           .in('template_type', ['next_steps', 'next_steps_mentee', 'next_steps_mentor'])
           .eq('journey_phase', journeyPhase)
-          .eq('recipient_email', recipient.email)
+          .eq('slack_user_id', recipient.slack_user_id)
           .eq('delivery_status', 'sent')
           .limit(1);
 
         if (existing && existing.length > 0) {
           skippedCount++;
-          console.log(`[send-stage-messages] Skipping ${recipient.email}: already received next_steps for ${journeyPhase}`);
+          console.log(`[send-stage-messages] Skipping ${recipient.slack_user_id}: already received next_steps for ${journeyPhase}`);
           continue;
         }
 
@@ -214,7 +212,7 @@ Deno.serve(async (req) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'dm',
-              recipient_email: recipient.email,
+              slack_user_id: recipient.slack_user_id,
               message_text: messageText,
               cohort_name: cohort.name,
             }),
@@ -224,7 +222,8 @@ Deno.serve(async (req) => {
             cohort_id: cohortId,
             template_type: recipientTemplate.template_type,
             journey_phase: journeyPhase,
-            recipient_email: recipient.email,
+            slack_user_id: recipient.slack_user_id,
+            recipient_email: recipient.slack_user_id || '',
             message_text: messageText,
             delivery_status: zapRes.ok ? 'sent' : 'failed',
             error_detail: zapRes.ok ? null : `HTTP ${zapRes.status}`,
@@ -234,12 +233,13 @@ Deno.serve(async (req) => {
           else failedCount++;
         } catch (err) {
           failedCount++;
-          errors.push(`${recipient.role} ${recipient.email}: ${err.message}`);
+          errors.push(`${recipient.role} ${recipient.slack_user_id}: ${err.message}`);
           await supabaseAdmin.from('message_log').insert({
             cohort_id: cohortId,
             template_type: recipientTemplate.template_type,
             journey_phase: journeyPhase,
-            recipient_email: recipient.email,
+            slack_user_id: recipient.slack_user_id,
+            recipient_email: recipient.slack_user_id || '',
             message_text: messageText,
             delivery_status: 'failed',
             error_detail: err.message,

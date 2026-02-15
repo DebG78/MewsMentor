@@ -189,7 +189,7 @@ const Settings = () => {
                           <li>Add a <strong>Filter</strong> step: continue only if <code className="bg-background px-1 rounded">type</code> exists</li>
                           <li>Add <strong>Path</strong> step:
                             <ul className="list-disc list-inside ml-4">
-                              <li>Path A: if <code className="bg-background px-1 rounded">type = dm</code> → Slack: Send Direct Message (use <code className="bg-background px-1 rounded">recipient_email</code> to find user, <code className="bg-background px-1 rounded">message_text</code> as message)</li>
+                              <li>Path A: if <code className="bg-background px-1 rounded">type = dm</code> → Slack: Send Direct Message (use <code className="bg-background px-1 rounded">slack_user_id</code> to find user, <code className="bg-background px-1 rounded">message_text</code> as message)</li>
                               <li>Path B: if <code className="bg-background px-1 rounded">type = channel</code> → Slack: Send Channel Message (use <code className="bg-background px-1 rounded">channel</code> field, <code className="bg-background px-1 rounded">message_text</code> as message)</li>
                             </ul>
                           </li>
@@ -205,7 +205,7 @@ const Settings = () => {
                       <div>
                         <span className="font-medium">Webhook payload fields:</span>
                         <code className="block bg-background p-2 rounded mt-1 text-xs">
-                          {`{ "type": "dm"|"channel", "recipient_email": "...", "channel": "#...", "message_text": "...", "cohort_name": "..." }`}
+                          {`{ "type": "dm"|"channel", "slack_user_id": "...", "channel": "#...", "message_text": "...", "cohort_name": "..." }`}
                         </code>
                       </div>
                     </div>

@@ -20,6 +20,7 @@ import {
 import { CheckCircle, Info } from "lucide-react";
 import { MatchingOutput } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
+import { toDisplayName } from '@/lib/displayName';
 
 interface ManualMatchSelectionProps {
   matchingOutput: MatchingOutput;
@@ -125,7 +126,7 @@ export function ManualMatchSelection({ matchingOutput, onSelectionsApproved, onC
               {matchingOutput.results.map((result) => (
                 <TableRow key={result.mentee_id}>
                   <TableCell className="font-medium">
-                    {result.mentee_name || result.mentee_id}
+                    {toDisplayName(result.mentee_name || result.mentee_id)}
                   </TableCell>
                   {[0, 1, 2].map((idx) => (
                     <TableCell key={idx}>
@@ -138,7 +139,7 @@ export function ManualMatchSelection({ matchingOutput, onSelectionsApproved, onC
                             onClick={() => handleShowDetails(result.recommendations[idx])}
                           >
                             <Info className="w-3 h-3 mr-1" />
-                            {result.recommendations[idx].mentor_name}
+                            {toDisplayName(result.recommendations[idx].mentor_name)}
                           </Button>
                           <div>
                             <Badge variant={getScoreBadgeVariant(result.recommendations[idx].score.total_score)} className="text-xs">
@@ -162,7 +163,7 @@ export function ManualMatchSelection({ matchingOutput, onSelectionsApproved, onC
                       <SelectContent>
                         {result.recommendations.slice(0, 3).map((rec) => (
                           <SelectItem key={rec.mentor_id} value={rec.mentor_id}>
-                            {rec.mentor_name} ({Math.round(rec.score.total_score)})
+                            {toDisplayName(rec.mentor_name)} ({Math.round(rec.score.total_score)})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -179,7 +180,7 @@ export function ManualMatchSelection({ matchingOutput, onSelectionsApproved, onC
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedMentorDetail?.mentor_name}</DialogTitle>
+            <DialogTitle>{toDisplayName(selectedMentorDetail?.mentor_name)}</DialogTitle>
             <DialogDescription>
               {selectedMentorDetail?.mentor_role}
             </DialogDescription>

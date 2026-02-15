@@ -36,6 +36,7 @@ import {
 } from '@/types/mentoring';
 import { calculateMatchScore } from '@/lib/matchingEngine';
 import { ScoreBreakdownVisual, ScoreBadge } from '@/components/ScoreBreakdownVisual';
+import { toDisplayName } from '@/lib/displayName';
 
 interface MatchComparisonProps {
   cohort: Cohort;
@@ -342,9 +343,9 @@ export function MatchComparison({
                   )}
                   onClick={() => setSelectedRow(row)}
                 >
-                  <TableCell className="font-medium">{row.mentee_name}</TableCell>
+                  <TableCell className="font-medium">{toDisplayName(row.mentee_name)}</TableCell>
                   <TableCell>
-                    {row.manual_mentor_name || (
+                    {row.manual_mentor_name ? toDisplayName(row.manual_mentor_name) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
@@ -363,7 +364,7 @@ export function MatchComparison({
                     )}
                   </TableCell>
                   <TableCell>
-                    {row.ai_mentor_name || (
+                    {row.ai_mentor_name ? toDisplayName(row.ai_mentor_name) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
@@ -393,7 +394,7 @@ export function MatchComparison({
       >
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Match Comparison — {selectedRow?.mentee_name}</DialogTitle>
+            <DialogTitle>Match Comparison — {toDisplayName(selectedRow?.mentee_name)}</DialogTitle>
           </DialogHeader>
           {selectedRow && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -408,7 +409,7 @@ export function MatchComparison({
                     <CardContent className="p-4 space-y-3">
                       <div>
                         <div className="font-medium">
-                          {selectedRow.manual_mentor_name}
+                          {toDisplayName(selectedRow.manual_mentor_name)}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {mentorMap[selectedRow.manual_mentor_id!]?.role}
@@ -459,7 +460,7 @@ export function MatchComparison({
                     <CardContent className="p-4 space-y-3">
                       <div>
                         <div className="font-medium">
-                          {selectedRow.ai_mentor_name}
+                          {toDisplayName(selectedRow.ai_mentor_name)}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {mentorMap[selectedRow.ai_mentor_id!]?.role}

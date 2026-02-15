@@ -135,7 +135,6 @@ export async function exportParticipantList(
         mentors:mentor_id (
           id,
           full_name,
-          email,
           job_title,
           company,
           expertise,
@@ -165,7 +164,6 @@ export async function exportParticipantList(
         mentees:mentee_id (
           id,
           full_name,
-          email,
           job_title,
           company,
           goals
@@ -190,7 +188,6 @@ export async function exportParticipantList(
     { key: 'type' as const, header: 'Type' },
     { key: 'id' as const, header: 'ID' },
     { key: 'full_name' as const, header: 'Full Name' },
-    { key: 'email' as const, header: 'Email' },
     { key: 'job_title' as const, header: 'Job Title' },
     { key: 'company' as const, header: 'Company' },
   ];

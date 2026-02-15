@@ -99,7 +99,6 @@ export interface Database {
           industry: string
           profile_goals: Json
           private_notes: string | null
-          email: string | null
           // New survey revamp fields
           bio: string | null
           primary_capability: string | null
@@ -140,7 +139,6 @@ export interface Database {
           industry: string
           profile_goals?: Json
           private_notes?: string | null
-          email?: string | null
           // New survey revamp fields
           bio?: string | null
           primary_capability?: string | null
@@ -180,7 +178,6 @@ export interface Database {
           industry?: string
           profile_goals?: Json
           private_notes?: string | null
-          email?: string | null
           // New survey revamp fields
           bio?: string | null
           primary_capability?: string | null
@@ -224,7 +221,6 @@ export interface Database {
           industry: string
           profile_goals: Json
           private_notes: string | null
-          email: string | null
           // New survey revamp fields
           bio: string | null
           mentor_motivation: string | null
@@ -271,7 +267,6 @@ export interface Database {
           industry: string
           profile_goals?: Json
           private_notes?: string | null
-          email?: string | null
           // New survey revamp fields
           bio?: string | null
           mentor_motivation?: string | null
@@ -317,7 +312,6 @@ export interface Database {
           industry?: string
           profile_goals?: Json
           private_notes?: string | null
-          email?: string | null
           // New survey revamp fields
           bio?: string | null
           mentor_motivation?: string | null

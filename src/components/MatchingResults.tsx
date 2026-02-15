@@ -26,6 +26,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { toDisplayName } from '@/lib/displayName';
 
 interface MatchingResultsProps {
   importedData: ImportResult;
@@ -483,13 +484,13 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                     {matchingOutput.results.map((result) => (
                       <TableRow key={result.mentee_id}>
                         <TableCell className="font-medium">
-                          {result.mentee_name || result.mentee_id}
+                          {toDisplayName(result.mentee_name || result.mentee_id)}
                         </TableCell>
                         <TableCell>
                           {result.proposed_assignment?.mentor_name ? (
                             <div className="flex items-center gap-2">
                               <CheckCircle className="h-4 w-4 text-green-600" />
-                              {result.proposed_assignment.mentor_name}
+                              {toDisplayName(result.proposed_assignment.mentor_name)}
                             </div>
                           ) : (
                             <span className="text-muted-foreground">No match</span>
@@ -506,7 +507,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                           <div className="flex gap-1">
                             {result.recommendations.slice(1, 3).map((rec, idx) => (
                               <Badge key={idx} variant="outline" className="text-xs">
-                                {rec.mentor_name} ({Math.round(rec.score.total_score)})
+                                {toDisplayName(rec.mentor_name)} ({Math.round(rec.score.total_score)})
                               </Badge>
                             ))}
                           </div>
@@ -546,7 +547,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                   <Card key={result.mentee_id} className="border-2">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg flex items-center justify-between">
-                        <span>{result.mentee_name || result.mentee_id}</span>
+                        <span>{toDisplayName(result.mentee_name || result.mentee_id)}</span>
                         {manualSelections[result.mentee_id] && (
                           <Badge variant="default">
                             <CheckCircle className="w-3 h-3 mr-1" />
@@ -572,7 +573,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <h4 className="font-semibold text-base">{rec.mentor_name}</h4>
+                                    <h4 className="font-semibold text-base">{toDisplayName(rec.mentor_name)}</h4>
                                     <Badge variant={getScoreBadgeVariant(rec.score.total_score)}>
                                       Score: {Math.round(rec.score.total_score)}
                                     </Badge>
