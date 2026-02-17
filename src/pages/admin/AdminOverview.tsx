@@ -29,7 +29,7 @@ const cohortStatusConfig = {
 
 const capacityConfig = {
   assigned: { label: "Assigned", color: "hsl(214, 84%, 56%)" },
-  available: { label: "Available", color: "hsl(214, 20%, 85%)" },
+  available: { label: "Available", color: "hsl(199, 89%, 68%)" },
 } satisfies ChartConfig;
 
 const cohortSizeConfig = {
