@@ -166,6 +166,7 @@ export default function CohortRunbook() {
 
   useEffect(() => {
     if (selectedCohort) {
+      setExpandedStages([]);
       loadStages();
     }
   }, [selectedCohort]);
@@ -211,8 +212,7 @@ export default function CohortRunbook() {
       summaryKeys.forEach((key, i) => { summaryMap[key] = summaryResults[i]; });
       setStageMsgSummary(summaryMap);
 
-      // Start with all stages collapsed
-      setExpandedStages([]);
+      // Don't reset expandedStages here — handled by cohort change effect
     } catch (error) {
       toast({
         title: 'Error',
@@ -390,9 +390,10 @@ export default function CohortRunbook() {
   };
 
   const handleUpdateOwner = async (stageId: string, owner: string) => {
+    // Update local state immediately for responsive typing
+    setStages(prev => prev.map(s => s.id === stageId ? { ...s, owner } : s));
     try {
       await updateCohortStage(stageId, { owner });
-      loadStages();
     } catch (error) {
       toast({
         title: 'Error',
