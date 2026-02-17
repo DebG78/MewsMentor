@@ -92,6 +92,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
   const [unassignedMentors, setUnassignedMentors] = useState<MentorRow[]>([]);
   const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
+  const [activeTab, setActiveTab] = useState(selectedCohort ? "unassigned" : "mentees");
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<'mentee' | 'mentor'>('mentee');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -239,6 +240,17 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
 
   const filteredMentees = groupedMentees.filter(matchesSearch);
   const filteredMentors = groupedMentors.filter(matchesSearch);
+
+  // Auto-switch to the tab that has results when searching
+  useEffect(() => {
+    if (!searchTerm) return;
+    // If current tab shows no results but the other tab does, switch
+    if (activeTab === 'mentees' && filteredMentees.length === 0 && filteredMentors.length > 0) {
+      setActiveTab('mentors');
+    } else if (activeTab === 'mentors' && filteredMentors.length === 0 && filteredMentees.length > 0) {
+      setActiveTab('mentees');
+    }
+  }, [searchTerm, filteredMentees.length, filteredMentors.length]);
 
   const ProfileTable = ({ profiles, type }: { profiles: any[], type: 'mentee' | 'mentor' }) => {
     const isMentee = type === 'mentee';
@@ -413,7 +425,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
         </div>
       </div>
 
-      <Tabs defaultValue={selectedCohort ? "unassigned" : "mentees"} className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           {selectedCohort && (
             <TabsTrigger value="unassigned" className="flex items-center gap-2 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">
