@@ -74,9 +74,9 @@ export function AnalyticsHelpGuide() {
                       <TableCell>The person's full name (must match their profile name exactly). *Required if no email column.</TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-mono text-xs">email / respondent_email</TableCell>
+                      <TableCell className="font-mono text-xs">slack_user_id / slack_id</TableCell>
                       <TableCell>No</TableCell>
-                      <TableCell>The person's email (preferred — more reliable than name matching for common names)</TableCell>
+                      <TableCell>The person's Slack user ID (preferred — more reliable than name matching for common names)</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-mono text-xs">date / session_date / meeting_date</TableCell>
@@ -318,17 +318,18 @@ export function AnalyticsHelpGuide() {
                 </p>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Validates the API key and input data</li>
-                  <li>Looks up the respondent by email or name across all active cohorts</li>
+                  <li>Looks up the respondent by Slack user ID or name across all active cohorts</li>
                   <li>Finds their mentoring pair from the approved matches</li>
                   <li>Creates a completed session in the sessions table</li>
                   <li><strong>Auto-detects the journey phase</strong> based on how many sessions the pair has completed</li>
                   <li><strong>Auto-sends a next-steps Slack DM</strong> to the respondent — uses a role-specific template (<code>next_steps_mentee</code> / <code>next_steps_mentor</code>) if available, otherwise the generic <code>next_steps</code> template (with deduplication — each person only receives it once per phase)</li>
                 </ol>
                 <p className="text-muted-foreground mt-2">
-                  At least one of <code>respondent_name</code> or <code>respondent_email</code> is required.
-                  Email matching takes priority over name matching and is more reliable for
-                  common names. If a match is found in multiple cohorts, the request returns
-                  an error for manual resolution.
+                  At least one of <code>respondent_name</code> or <code>slack_user_id</code> is required.
+                  Slack ID matching takes priority over name matching and is more reliable for
+                  common names. The Slack user ID is also used to send next-steps DMs after
+                  the session is logged. If a match is found in multiple cohorts, the request
+                  returns an error for manual resolution.
                 </p>
                 <p className="text-muted-foreground">
                   Journey phase thresholds (e.g., sessions 1–2 = Getting Started, 3–5 = Building, etc.)
@@ -348,6 +349,7 @@ export function AnalyticsHelpGuide() {
                     <strong>Create a Microsoft Form</strong> titled "Log Your Mentoring Session" with fields:
                     <ul className="list-disc list-inside ml-6 mt-1 space-y-0.5 text-muted-foreground">
                       <li>Text: "Your full name"</li>
+                      <li>Text: "Your Slack user ID" (participants can find this in their Slack profile)</li>
                       <li>Date: "When did you meet?"</li>
                       <li>Choice: Duration (15/30/45/60/90/120 minutes)</li>
                       <li>Rating: "How was the session?" (1-5 stars)</li>
@@ -386,15 +388,16 @@ export function AnalyticsHelpGuide() {
                 <div className="bg-muted rounded-md p-3 font-mono text-xs">
                   {`{`}<br />
                   &nbsp;&nbsp;{`"respondent_name": "Alice Smith",`}<br />
-                  &nbsp;&nbsp;{`"respondent_email": "alice.smith@mews.com",`}<br />
+                  &nbsp;&nbsp;{`"slack_user_id": "U063V99F5UZ",`}<br />
                   &nbsp;&nbsp;{`"date": "2026-02-08",`}<br />
                   &nbsp;&nbsp;{`"duration_minutes": 30,`}<br />
                   &nbsp;&nbsp;{`"rating": 4`}<br />
                   {`}`}
                 </div>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  At least one of <code>respondent_name</code> or <code>respondent_email</code> is required.
-                  Email matching is preferred as it avoids issues with common names.
+                  At least one of <code>respondent_name</code> or <code>slack_user_id</code> is required.
+                  Slack ID matching is preferred as it avoids issues with common names. The respondent's
+                  Slack user ID is also used to send them next-steps DMs after the session is logged.
                 </p>
                 <p><strong>Response (success):</strong></p>
                 <div className="bg-muted rounded-md p-3 font-mono text-xs">

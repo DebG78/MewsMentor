@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
       mentee_id: string;
       cohort_id: string;
       cohort_name: string;
+      cohort_created_at: string;
       mentor_name: string;
       mentee_name: string;
       respondent_role: 'mentor' | 'mentee';
@@ -154,6 +155,7 @@ Deno.serve(async (req) => {
               mentee_id: mentee.mentee_id,
               cohort_id: cohort.id,
               cohort_name: cohort.name,
+              cohort_created_at: cohort.created_at || '',
               mentor_name: mentor?.full_name || 'Unknown',
               mentee_name: mentee.full_name || mentee.mentee_id,
               respondent_role: 'mentee',
@@ -175,6 +177,7 @@ Deno.serve(async (req) => {
               mentee_id: pair.mentee_id,
               cohort_id: cohort.id,
               cohort_name: cohort.name,
+              cohort_created_at: cohort.created_at || '',
               mentor_name: mentor.full_name || mentor.mentor_id,
               mentee_name: mentee?.full_name || 'Unknown',
               respondent_role: 'mentor',
@@ -189,12 +192,10 @@ Deno.serve(async (req) => {
       return errorResponse(404, `No active pair found for "${identifier}". Ensure the name or slack_user_id matches exactly as registered.`);
     }
 
+    // If multiple matches, auto-pick the most recently created cohort
     if (candidates.length > 1) {
-      const identifier = effectiveSlackUserId || respondent_name;
-      return errorResponse(
-        409,
-        `Multiple matches found for "${identifier}". Found in: ${candidates.map(c => `${c.cohort_name} (${c.mentee_name} & ${c.mentor_name})`).join(', ')}. Please resolve manually.`
-      );
+      candidates.sort((a, b) => b.cohort_created_at.localeCompare(a.cohort_created_at));
+      console.log(`[log-session] Multiple matches (${candidates.length}), auto-selected most recent cohort: "${candidates[0].cohort_name}" (${candidates[0].cohort_id})`);
     }
 
     const pair = candidates[0];
