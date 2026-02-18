@@ -80,124 +80,6 @@ function getDateString(): string {
 // ============================================================================
 
 /**
- * Export match list for a cohort
- */
-export async function exportMatchList(cohortId: string, cohortName?: string): Promise<void> {
-  const { data, error } = await supabase
-    .from('matches')
-    .select(`
-      id,
-      mentor_id,
-      mentee_id,
-      status,
-      score,
-      created_at,
-      assigned_at
-    `)
-    .eq('cohort_id', cohortId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching matches for export:', error);
-    throw error;
-  }
-
-  const columns = [
-    { key: 'id' as const, header: 'Match ID' },
-    { key: 'mentor_id' as const, header: 'Mentor ID' },
-    { key: 'mentee_id' as const, header: 'Mentee ID' },
-    { key: 'status' as const, header: 'Status' },
-    { key: 'score' as const, header: 'Match Score' },
-    { key: 'created_at' as const, header: 'Created At' },
-    { key: 'assigned_at' as const, header: 'Assigned At' },
-  ];
-
-  const csv = objectsToCSV(data || [], columns);
-  const filename = `matches_${cohortName || cohortId}_${getDateString()}.csv`;
-  downloadCSV(csv, filename);
-}
-
-/**
- * Export participant list for a cohort
- */
-export async function exportParticipantList(
-  cohortId: string,
-  type: 'mentor' | 'mentee' | 'all',
-  cohortName?: string
-): Promise<void> {
-  // Fetch mentors
-  let mentors: Array<Record<string, unknown>> = [];
-  if (type === 'mentor' || type === 'all') {
-    const { data, error } = await supabase
-      .from('cohort_members')
-      .select(`
-        mentor_id,
-        mentors:mentor_id (
-          id,
-          full_name,
-          job_title,
-          company,
-          expertise,
-          capacity
-        )
-      `)
-      .eq('cohort_id', cohortId)
-      .not('mentor_id', 'is', null);
-
-    if (error) {
-      console.error('Error fetching mentors:', error);
-    } else {
-      mentors = (data || []).map((d: Record<string, unknown>) => ({
-        type: 'mentor',
-        ...(d.mentors as Record<string, unknown>),
-      }));
-    }
-  }
-
-  // Fetch mentees
-  let mentees: Array<Record<string, unknown>> = [];
-  if (type === 'mentee' || type === 'all') {
-    const { data, error } = await supabase
-      .from('cohort_members')
-      .select(`
-        mentee_id,
-        mentees:mentee_id (
-          id,
-          full_name,
-          job_title,
-          company,
-          goals
-        )
-      `)
-      .eq('cohort_id', cohortId)
-      .not('mentee_id', 'is', null);
-
-    if (error) {
-      console.error('Error fetching mentees:', error);
-    } else {
-      mentees = (data || []).map((d: Record<string, unknown>) => ({
-        type: 'mentee',
-        ...(d.mentees as Record<string, unknown>),
-      }));
-    }
-  }
-
-  const participants = [...mentors, ...mentees];
-
-  const columns = [
-    { key: 'type' as const, header: 'Type' },
-    { key: 'id' as const, header: 'ID' },
-    { key: 'full_name' as const, header: 'Full Name' },
-    { key: 'job_title' as const, header: 'Job Title' },
-    { key: 'company' as const, header: 'Company' },
-  ];
-
-  const csv = objectsToCSV(participants, columns);
-  const filename = `participants_${type}_${cohortName || cohortId}_${getDateString()}.csv`;
-  downloadCSV(csv, filename);
-}
-
-/**
  * Export VIP list for a cohort
  */
 export async function exportVIPList(cohortId?: string, cohortName?: string): Promise<void> {
@@ -333,6 +215,48 @@ export async function exportMatchingModels(): Promise<void> {
 
   const csv = objectsToCSV(data || [], columns);
   const filename = `matching_models_${getDateString()}.csv`;
+  downloadCSV(csv, filename);
+}
+
+/**
+ * Export Slack IDs for all participants in a cohort
+ */
+export async function exportSlackIds(cohortId: string, cohortName?: string): Promise<void> {
+  const [menteesResult, mentorsResult] = await Promise.all([
+    supabase
+      .from('mentees')
+      .select('mentee_id, full_name, slack_user_id')
+      .eq('cohort_id', cohortId) as any,
+    supabase
+      .from('mentors')
+      .select('mentor_id, full_name, slack_user_id')
+      .eq('cohort_id', cohortId) as any,
+  ]);
+
+  if (menteesResult.error) throw menteesResult.error;
+  if (mentorsResult.error) throw mentorsResult.error;
+
+  const rows = [
+    ...(menteesResult.data || []).map((m: any) => ({
+      name: m.full_name || m.mentee_id,
+      role: 'Mentee',
+      slack_user_id: m.slack_user_id || '',
+    })),
+    ...(mentorsResult.data || []).map((m: any) => ({
+      name: m.full_name || m.mentor_id,
+      role: 'Mentor',
+      slack_user_id: m.slack_user_id || '',
+    })),
+  ];
+
+  const columns = [
+    { key: 'name' as const, header: 'Name' },
+    { key: 'role' as const, header: 'Role' },
+    { key: 'slack_user_id' as const, header: 'Slack User ID' },
+  ];
+
+  const csv = objectsToCSV(rows, columns);
+  const filename = `slack_ids_${cohortName || cohortId}_${getDateString()}.csv`;
   downloadCSV(csv, filename);
 }
 

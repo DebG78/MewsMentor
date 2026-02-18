@@ -8,11 +8,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Download, Loader2, FileSpreadsheet, Users, Star, BarChart3, BookOpen, Settings2 } from 'lucide-react';
+import { Download, Loader2, FileSpreadsheet, Star, BarChart3, BookOpen, Settings2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
-  exportMatchList,
-  exportParticipantList,
   exportVIPList,
   exportCohortMetrics,
   exportRunbookStages,
@@ -21,10 +19,6 @@ import {
 } from '@/lib/exportService';
 
 export type ExportType =
-  | 'matches'
-  | 'participants-all'
-  | 'participants-mentors'
-  | 'participants-mentees'
   | 'vips'
   | 'metrics'
   | 'runbook'
@@ -44,10 +38,6 @@ const exportConfig: Record<ExportType, {
   icon: React.ComponentType<{ className?: string }>;
   requiresCohort: boolean;
 }> = {
-  'matches': { label: 'Match List', icon: Users, requiresCohort: true },
-  'participants-all': { label: 'All Participants', icon: Users, requiresCohort: true },
-  'participants-mentors': { label: 'Mentors Only', icon: Users, requiresCohort: true },
-  'participants-mentees': { label: 'Mentees Only', icon: Users, requiresCohort: true },
   'vips': { label: 'VIP List', icon: Star, requiresCohort: false },
   'metrics': { label: 'Success Metrics', icon: BarChart3, requiresCohort: true },
   'runbook': { label: 'Runbook Stages', icon: BookOpen, requiresCohort: true },
@@ -58,7 +48,7 @@ const exportConfig: Record<ExportType, {
 export function ExportButton({
   cohortId,
   cohortName,
-  availableExports = ['matches', 'participants-all', 'vips', 'metrics', 'runbook'],
+  availableExports = ['vips', 'metrics', 'runbook'],
   variant = 'outline',
   size = 'default',
 }: ExportButtonProps) {
@@ -83,18 +73,6 @@ export function ExportButton({
 
     try {
       switch (type) {
-        case 'matches':
-          await exportMatchList(cohortId!, cohortName);
-          break;
-        case 'participants-all':
-          await exportParticipantList(cohortId!, 'all', cohortName);
-          break;
-        case 'participants-mentors':
-          await exportParticipantList(cohortId!, 'mentor', cohortName);
-          break;
-        case 'participants-mentees':
-          await exportParticipantList(cohortId!, 'mentee', cohortName);
-          break;
         case 'vips':
           await exportVIPList(cohortId, cohortName);
           break;
