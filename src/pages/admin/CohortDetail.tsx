@@ -64,6 +64,7 @@ import {
   MessageSquare,
   Briefcase,
   Search,
+  Download,
 } from "lucide-react";
 import {
   getCohortById,
@@ -77,6 +78,7 @@ import {
 } from "@/lib/cohortManager";
 import { updateMenteeProfile, updateMentorProfile, removeFromCohort } from "@/lib/supabaseService";
 import { sendWelcomeMessages } from "@/lib/messageService";
+import { exportSlackIds } from "@/lib/exportService";
 import { Cohort, ImportResult, MatchingResult } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
@@ -719,6 +721,17 @@ export default function CohortDetail() {
               <DropdownMenuItem onClick={openEditDialog}>
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Cohort Details
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={async () => {
+                try {
+                  await exportSlackIds(cohort.id, cohort.name);
+                  toast({ title: "Export Complete", description: "Slack IDs exported successfully" });
+                } catch (error) {
+                  toast({ variant: "destructive", title: "Export Failed", description: "Failed to export Slack IDs" });
+                }
+              }}>
+                <Download className="h-4 w-4 mr-2" />
+                Export Slack IDs
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
