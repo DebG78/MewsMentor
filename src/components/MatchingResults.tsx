@@ -14,6 +14,8 @@ import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { ScoreBreakdownVisual } from "@/components/ScoreBreakdownVisual";
 import {
   Users,
   Target,
@@ -23,10 +25,12 @@ import {
   Globe,
   MessageCircle,
   History,
-  Sparkles
+  Sparkles,
+  ChevronDown
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { toDisplayName } from '@/lib/displayName';
+import { cn } from "@/lib/utils";
 
 interface MatchingResultsProps {
   importedData: ImportResult;
@@ -55,6 +59,23 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
   const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
   const [isGeneratingAllExplanations, setIsGeneratingAllExplanations] = useState(false);
   const [explanationProgress, setExplanationProgress] = useState<{ completed: number; total: number } | null>(null);
+
+  // Expandable card details state
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+
+  const toggleCardExpansion = (key: string) => {
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const getMenteeData = (menteeId: string): MenteeData | undefined =>
+    importedData?.mentees?.find(m => m.id === menteeId);
+  const getMentorData = (mentorId: string): MentorData | undefined =>
+    importedData?.mentors?.find(m => m.id === mentorId);
 
   // Fetch active matching models on mount
   useEffect(() => {
@@ -601,73 +622,201 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                                 </Button>
                               </div>
 
+                              {/* Summary: top reasons + risk (always visible) */}
                               {rec.score.reasons.length > 0 && (
-                                <div className="mb-2">
-                                  <p className="text-xs font-medium text-gray-700 mb-1">Why this is a good match:</p>
-                                  <div className="space-y-1">
-                                    {rec.score.reasons.slice(0, 3).map((reason, ridx) => (
-                                      <div key={ridx} className="text-xs text-green-700 flex items-start">
-                                        <span className="mr-1">✓</span>
-                                        <span>{reason}</span>
-                                      </div>
-                                    ))}
-                                  </div>
+                                <div className="space-y-1 mb-1">
+                                  {rec.score.reasons.slice(0, 2).map((reason, ridx) => (
+                                    <div key={ridx} className="text-xs text-green-700 flex items-start">
+                                      <CheckCircle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                                      <span className="line-clamp-1">{reason}</span>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
-
                               {rec.score.risks.length > 0 && (
-                                <div>
-                                  <p className="text-xs font-medium text-gray-700 mb-1">Potential concerns:</p>
-                                  <div className="space-y-1">
-                                    {rec.score.risks.slice(0, 2).map((risk, ridx) => (
-                                      <div key={ridx} className="text-xs text-red-700 flex items-start">
-                                        <span className="mr-1">⚠</span>
-                                        <span>{risk}</span>
-                                      </div>
-                                    ))}
-                                  </div>
+                                <div className="space-y-1 mb-1">
+                                  {rec.score.risks.slice(0, 1).map((risk, ridx) => (
+                                    <div key={ridx} className="text-xs text-amber-600 flex items-start">
+                                      <AlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                                      <span className="line-clamp-1">{risk}</span>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
 
-                              {/* AI Explanation */}
-                              {cohort?.id && (
-                                <div className="mt-2 pt-2 border-t">
-                                  {explanations[`${result.mentee_id}_${rec.mentor_id}`] ? (
-                                    <div className="text-sm text-gray-700 italic">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <Sparkles className="w-3 h-3 text-purple-500" />
-                                        <span className="text-xs font-medium text-purple-600">AI Match Explanation</span>
+                              {/* Expandable detail section */}
+                              <Collapsible
+                                open={expandedCards.has(`${result.mentee_id}_${rec.mentor_id}`)}
+                                onOpenChange={() => toggleCardExpansion(`${result.mentee_id}_${rec.mentor_id}`)}
+                              >
+                                <CollapsibleTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full text-xs text-muted-foreground h-7"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ChevronDown className={cn(
+                                      "w-3 h-3 mr-1 transition-transform",
+                                      expandedCards.has(`${result.mentee_id}_${rec.mentor_id}`) && "rotate-180"
+                                    )} />
+                                    {expandedCards.has(`${result.mentee_id}_${rec.mentor_id}`) ? 'Hide' : 'Show'} match details
+                                  </Button>
+                                </CollapsibleTrigger>
+
+                                <CollapsibleContent className="mt-2 space-y-3">
+                                  {/* Score breakdown bars */}
+                                  <ScoreBreakdownVisual
+                                    score={rec.score}
+                                    variant="detailed"
+                                    showReasons={false}
+                                    showRisks={false}
+                                    className="pt-2 border-t"
+                                  />
+
+                                  {/* Capability comparison */}
+                                  {(() => {
+                                    const mentee = getMenteeData(result.mentee_id);
+                                    const mentor = getMentorData(rec.mentor_id);
+                                    if (!mentee?.primary_capability && !mentor?.primary_capability) return null;
+                                    return (
+                                      <div className="pt-2 border-t">
+                                        <p className="text-xs font-medium text-gray-700 mb-2">Capability Comparison</p>
+                                        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+                                          <span className="text-muted-foreground font-medium">Mentee wants:</span>
+                                          <div className="flex flex-wrap gap-1">
+                                            {mentee?.primary_capability && (
+                                              <Badge variant="default" className="text-xs">{mentee.primary_capability}</Badge>
+                                            )}
+                                            {mentee?.secondary_capability && (
+                                              <Badge variant="outline" className="text-xs">{mentee.secondary_capability}</Badge>
+                                            )}
+                                          </div>
+                                          <span className="text-muted-foreground font-medium">Mentor offers:</span>
+                                          <div className="flex flex-wrap gap-1">
+                                            {mentor?.primary_capability && (
+                                              <Badge variant="default" className="text-xs">{mentor.primary_capability}</Badge>
+                                            )}
+                                            {(mentor?.secondary_capabilities || []).map(cap => (
+                                              <Badge key={cap} variant="outline" className="text-xs">{cap}</Badge>
+                                            ))}
+                                          </div>
+                                          {(mentee?.seniority_band || mentor?.seniority_band) && (
+                                            <>
+                                              <span className="text-muted-foreground font-medium">Seniority:</span>
+                                              <span>{mentee?.seniority_band || '?'} &rarr; {mentor?.seniority_band || '?'}</span>
+                                            </>
+                                          )}
+                                        </div>
                                       </div>
-                                      {explanations[`${result.mentee_id}_${rec.mentor_id}`]}
+                                    );
+                                  })()}
+
+                                  {/* Practice scenario overlap */}
+                                  {(() => {
+                                    const mentee = getMenteeData(result.mentee_id);
+                                    const mentor = getMentorData(rec.mentor_id);
+                                    if (!mentee?.practice_scenarios?.length || !mentor?.practice_scenarios?.length) return null;
+                                    const menteeSet = new Set(mentee.practice_scenarios.map(s => s.toLowerCase()));
+                                    const shared = mentor.practice_scenarios.filter(s => menteeSet.has(s.toLowerCase()));
+                                    const menteeOnly = mentee.practice_scenarios.filter(
+                                      s => !mentor.practice_scenarios!.some(ms => ms.toLowerCase() === s.toLowerCase())
+                                    );
+                                    if (shared.length === 0 && menteeOnly.length === 0) return null;
+                                    return (
+                                      <div className="pt-2 border-t">
+                                        <p className="text-xs font-medium text-gray-700 mb-2">Practice Scenarios</p>
+                                        {shared.length > 0 && (
+                                          <div className="mb-1">
+                                            <span className="text-xs text-muted-foreground">Shared: </span>
+                                            {shared.map(s => (
+                                              <Badge key={s} variant="secondary" className="text-xs mr-1 mb-0.5">{s}</Badge>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {menteeOnly.length > 0 && (
+                                          <div>
+                                            <span className="text-xs text-muted-foreground">Mentee only: </span>
+                                            {menteeOnly.map(s => (
+                                              <Badge key={s} variant="outline" className="text-xs mr-1 mb-0.5 opacity-60">{s}</Badge>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Full reasons list */}
+                                  {rec.score.reasons.length > 0 && (
+                                    <div className="pt-2 border-t">
+                                      <p className="text-xs font-medium text-gray-700 mb-1">Why this is a good match:</p>
+                                      <div className="space-y-1">
+                                        {rec.score.reasons.map((reason, ridx) => (
+                                          <div key={ridx} className="text-xs text-green-700 flex items-start">
+                                            <CheckCircle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                                            <span>{reason}</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
-                                  ) : loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`] ? (
-                                    <div className="space-y-2 py-1">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <div className="animate-spin h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" />
-                                        <span className="text-xs font-medium text-purple-600">Generating AI explanation...</span>
-                                      </div>
-                                      <div className="space-y-1.5">
-                                        <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
-                                        <div className="h-3 bg-gray-200 rounded animate-pulse w-4/5" />
-                                        <div className="h-3 bg-gray-200 rounded animate-pulse w-3/5" />
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-xs"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleGenerateExplanation(result.mentee_id, rec.mentor_id, rec.score);
-                                      }}
-                                    >
-                                      <Sparkles className="w-3 h-3 mr-1" />
-                                      AI Explain Match
-                                    </Button>
                                   )}
-                                </div>
-                              )}
+
+                                  {/* Full risks list */}
+                                  {rec.score.risks.length > 0 && (
+                                    <div className="pt-2 border-t">
+                                      <p className="text-xs font-medium text-gray-700 mb-1">Potential concerns:</p>
+                                      <div className="space-y-1">
+                                        {rec.score.risks.map((risk, ridx) => (
+                                          <div key={ridx} className="text-xs text-amber-600 flex items-start">
+                                            <AlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                                            <span>{risk}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* AI Explanation */}
+                                  {cohort?.id && (
+                                    <div className="pt-2 border-t">
+                                      {explanations[`${result.mentee_id}_${rec.mentor_id}`] ? (
+                                        <div className="text-sm text-gray-700 italic">
+                                          <div className="flex items-center gap-1 mb-1">
+                                            <Sparkles className="w-3 h-3 text-purple-500" />
+                                            <span className="text-xs font-medium text-purple-600">AI Match Explanation</span>
+                                          </div>
+                                          {explanations[`${result.mentee_id}_${rec.mentor_id}`]}
+                                        </div>
+                                      ) : loadingExplanations[`${result.mentee_id}_${rec.mentor_id}`] ? (
+                                        <div className="space-y-2 py-1">
+                                          <div className="flex items-center gap-1 mb-1">
+                                            <div className="animate-spin h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" />
+                                            <span className="text-xs font-medium text-purple-600">Generating AI explanation...</span>
+                                          </div>
+                                          <div className="space-y-1.5">
+                                            <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
+                                            <div className="h-3 bg-gray-200 rounded animate-pulse w-4/5" />
+                                            <div className="h-3 bg-gray-200 rounded animate-pulse w-3/5" />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="text-xs"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleGenerateExplanation(result.mentee_id, rec.mentor_id, rec.score);
+                                          }}
+                                        >
+                                          <Sparkles className="w-3 h-3 mr-1" />
+                                          AI Explain Match
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                </CollapsibleContent>
+                              </Collapsible>
                             </CardContent>
                           </Card>
                         );

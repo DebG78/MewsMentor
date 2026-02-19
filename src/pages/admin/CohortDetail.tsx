@@ -79,7 +79,7 @@ import {
 import { updateMenteeProfile, updateMentorProfile, removeFromCohort } from "@/lib/supabaseService";
 import { sendWelcomeMessages } from "@/lib/messageService";
 import { exportSlackIds } from "@/lib/exportService";
-import { Cohort, ImportResult, MatchingResult } from "@/types/mentoring";
+import { Cohort, ImportResult, MatchingResult, MatchingOutput } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
 import { ManualMatchSelection } from "@/components/ManualMatchSelection";
@@ -92,6 +92,7 @@ import { ScoreBreakdownVisual, ScoreBadge } from "@/components/ScoreBreakdownVis
 import { ManualMatchingBoard } from "@/components/admin/ManualMatchingBoard";
 import { MatchComparison } from "@/components/admin/MatchComparison";
 import { toDisplayName } from '@/lib/displayName';
+import { calculateMatchScore } from '@/lib/matchingEngine';
 
 export default function CohortDetail() {
   const { cohortId, tab } = useParams<{ cohortId: string; tab?: string }>();
@@ -157,6 +158,72 @@ export default function CohortDetail() {
       setLoading(false);
     }
   };
+
+  // Auto-migrate any already-finalized manual matches that were saved before the conversion logic existed
+  useEffect(() => {
+    if (!cohort) return;
+    const mm = cohort.manual_matches;
+    if (!mm?.finalized || !mm.matches?.length) return;
+
+    (async () => {
+      try {
+        // Convert manual matches into MatchingResult entries
+        const newResults: MatchingResult[] = mm.matches.map(pair => {
+          const mentee = cohort.mentees.find(m => m.id === pair.mentee_id);
+          const mentor = cohort.mentors.find(m => m.id === pair.mentor_id);
+          const score = mentee && mentor
+            ? calculateMatchScore(mentee, mentor)
+            : {
+                total_score: 0,
+                features: { capability_match: 0, semantic_similarity: 0, domain_match: 0, role_seniority_fit: 0, tz_overlap_bonus: 0, capacity_penalty: 0 },
+                reasons: [],
+                risks: [],
+                logistics: { languages_shared: [], timezone_mentee: '', timezone_mentor: '', capacity_remaining: 0 },
+                icebreaker: '',
+                is_embedding_based: false,
+              };
+          return {
+            mentee_id: pair.mentee_id,
+            mentee_name: pair.mentee_name,
+            recommendations: [{ mentor_id: pair.mentor_id, mentor_name: pair.mentor_name, score }],
+            proposed_assignment: {
+              mentor_id: pair.mentor_id,
+              mentor_name: pair.mentor_name,
+              comment: pair.notes
+                ? `${pair.notes} (manual match, confidence: ${pair.confidence}/5)`
+                : `Manual match (confidence: ${pair.confidence}/5)`,
+            },
+          };
+        });
+
+        const manualMenteeIds = new Set(newResults.map(r => r.mentee_id));
+        const existingResults = (cohort.matches?.results || []).filter(
+          r => !manualMenteeIds.has(r.mentee_id)
+        );
+
+        const mergedOutput: MatchingOutput = {
+          mode: cohort.matches?.mode || 'batch',
+          stats: cohort.matches?.stats || { total_mentees: cohort.mentees.length, total_mentors: cohort.mentors.length, avg_score: 0 },
+          results: [...existingResults, ...newResults],
+          timestamp: cohort.matches?.timestamp || new Date().toISOString(),
+        };
+
+        const updatedWithMatches = await saveMatchesToCohort(cohort.id, mergedOutput);
+        if (!updatedWithMatches) return;
+
+        const fullyUpdated = await saveManualMatches(cohort.id, {
+          matches: [],
+          created_at: mm.created_at,
+          updated_at: new Date().toISOString(),
+          finalized: false,
+        });
+
+        setCohort(fullyUpdated || updatedWithMatches);
+      } catch (error) {
+        console.error('Failed to auto-migrate finalized manual matches:', error);
+      }
+    })();
+  }, [cohort?.id, cohort?.manual_matches?.finalized]);
 
   const handleDialogOpenChange = (open: boolean) => {
     setIsMatchingDialogOpen(open);
@@ -1522,11 +1589,82 @@ export default function CohortDetail() {
             cohort={cohort}
             existingManualMatches={cohort.manual_matches}
             onSave={async (manualMatches) => {
-              const updated = await saveManualMatches(cohort.id, manualMatches);
-              if (!updated) {
-                throw new Error('Failed to save manual matches');
+              if (manualMatches.finalized) {
+                // Convert manual matches into MatchingResult entries
+                const newResults: MatchingResult[] = manualMatches.matches.map(mm => {
+                  const mentee = cohort.mentees.find(m => m.id === mm.mentee_id);
+                  const mentor = cohort.mentors.find(m => m.id === mm.mentor_id);
+                  const score = mentee && mentor
+                    ? calculateMatchScore(mentee, mentor)
+                    : {
+                        total_score: 0,
+                        features: { capability_match: 0, semantic_similarity: 0, domain_match: 0, role_seniority_fit: 0, tz_overlap_bonus: 0, capacity_penalty: 0 },
+                        reasons: [],
+                        risks: [],
+                        logistics: { languages_shared: [], timezone_mentee: '', timezone_mentor: '', capacity_remaining: 0 },
+                        icebreaker: '',
+                        is_embedding_based: false,
+                      };
+
+                  return {
+                    mentee_id: mm.mentee_id,
+                    mentee_name: mm.mentee_name,
+                    recommendations: [{
+                      mentor_id: mm.mentor_id,
+                      mentor_name: mm.mentor_name,
+                      score,
+                    }],
+                    proposed_assignment: {
+                      mentor_id: mm.mentor_id,
+                      mentor_name: mm.mentor_name,
+                      comment: mm.notes
+                        ? `${mm.notes} (manual match, confidence: ${mm.confidence}/5)`
+                        : `Manual match (confidence: ${mm.confidence}/5)`,
+                    },
+                  };
+                });
+
+                // Merge with existing matches, replacing any duplicate mentee entries
+                const manualMenteeIds = new Set(newResults.map(r => r.mentee_id));
+                const existingResults = (cohort.matches?.results || []).filter(
+                  r => !manualMenteeIds.has(r.mentee_id)
+                );
+
+                const mergedOutput: MatchingOutput = {
+                  mode: cohort.matches?.mode || 'batch',
+                  stats: cohort.matches?.stats || {
+                    total_mentees: cohort.mentees.length,
+                    total_mentors: cohort.mentors.length,
+                    avg_score: 0,
+                  },
+                  results: [...existingResults, ...newResults],
+                  timestamp: cohort.matches?.timestamp || new Date().toISOString(),
+                };
+
+                // Save merged matches
+                const updatedWithMatches = await saveMatchesToCohort(cohort.id, mergedOutput);
+                if (!updatedWithMatches) {
+                  throw new Error('Failed to save finalized matches');
+                }
+
+                // Clear manual matches
+                const fullyUpdated = await saveManualMatches(cohort.id, {
+                  matches: [],
+                  created_at: manualMatches.created_at,
+                  updated_at: new Date().toISOString(),
+                  finalized: false,
+                });
+
+                setCohort(fullyUpdated || updatedWithMatches);
+                setActiveTab("matches");
+              } else {
+                // Draft save — just persist manual matches as-is
+                const updated = await saveManualMatches(cohort.id, manualMatches);
+                if (!updated) {
+                  throw new Error('Failed to save manual matches');
+                }
+                setCohort(updated);
               }
-              setCohort(updated);
             }}
             onCancel={() => setActiveTab("mentees")}
           />
@@ -1612,10 +1750,15 @@ export default function CohortDetail() {
                             {mentee.role}
                           </div>
                         )}
-                        {mentee?.experience_years && (
+                        {mentee?.seniority_band && (
+                          <div className="text-xs text-muted-foreground">
+                            Level: {mentee.seniority_band}
+                            {mentee.experience_years && ` (${mentee.experience_years} experience)`}
+                          </div>
+                        )}
+                        {!mentee?.seniority_band && mentee?.experience_years && (
                           <div className="text-xs text-muted-foreground">
                             {mentee.experience_years} experience
-                            {mentee.seniority_band && ` (${mentee.seniority_band})`}
                           </div>
                         )}
                         {mentee?.location_timezone && (
@@ -1624,7 +1767,25 @@ export default function CohortDetail() {
                             {mentee.location_timezone}
                           </div>
                         )}
-                        {mentee?.topics_to_learn && mentee.topics_to_learn.length > 0 && (
+                        {/* Capability-based fields */}
+                        {mentee?.primary_capability && (
+                          <div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">Capabilities to build:</div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0">{mentee.primary_capability}</Badge>
+                              {mentee.secondary_capability && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">{mentee.secondary_capability}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {mentee?.mentoring_goal && (
+                          <div className="text-xs text-muted-foreground">
+                            Goal: {mentee.mentoring_goal}
+                          </div>
+                        )}
+                        {/* Legacy topics fallback */}
+                        {!mentee?.primary_capability && mentee?.topics_to_learn && mentee.topics_to_learn.length > 0 && (
                           <div>
                             <div className="text-xs font-medium text-muted-foreground mb-1">Wants to learn:</div>
                             <div className="flex flex-wrap gap-1">
@@ -1664,10 +1825,15 @@ export default function CohortDetail() {
                             {mentor.role}
                           </div>
                         )}
-                        {mentor?.experience_years && (
+                        {mentor?.seniority_band && (
+                          <div className="text-xs text-muted-foreground">
+                            Level: {mentor.seniority_band}
+                            {mentor.experience_years && ` (${mentor.experience_years} experience)`}
+                          </div>
+                        )}
+                        {!mentor?.seniority_band && mentor?.experience_years && (
                           <div className="text-xs text-muted-foreground">
                             {mentor.experience_years} experience
-                            {mentor.seniority_band && ` (${mentor.seniority_band})`}
                           </div>
                         )}
                         {mentor?.location_timezone && (
@@ -1676,7 +1842,25 @@ export default function CohortDetail() {
                             {mentor.location_timezone}
                           </div>
                         )}
-                        {mentor?.topics_to_mentor && mentor.topics_to_mentor.length > 0 && (
+                        {/* Capability-based fields */}
+                        {mentor?.primary_capability && (
+                          <div>
+                            <div className="text-xs font-medium text-muted-foreground mb-1">Capabilities to mentor:</div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0">{mentor.primary_capability}</Badge>
+                              {(mentor.secondary_capabilities || []).map((cap, i) => (
+                                <Badge key={i} variant="outline" className="text-[10px] px-1.5 py-0">{cap}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {mentor?.mentor_motivation && (
+                          <div className="text-xs text-muted-foreground">
+                            Motivation: {mentor.mentor_motivation}
+                          </div>
+                        )}
+                        {/* Legacy topics fallback */}
+                        {!mentor?.primary_capability && mentor?.topics_to_mentor && mentor.topics_to_mentor.length > 0 && (
                           <div>
                             <div className="text-xs font-medium text-muted-foreground mb-1">Can mentor in:</div>
                             <div className="flex flex-wrap gap-1">
@@ -1701,7 +1885,71 @@ export default function CohortDetail() {
                     </Card>
                   </div>
 
-                  {/* Shared Topics Highlight */}
+                  {/* Capability Comparison (new survey) */}
+                  {(mentee?.primary_capability || mentor?.primary_capability) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-blue-800 mb-2">Capability Comparison</div>
+                      <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+                        <span className="text-blue-700 font-medium">Mentee wants:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {mentee?.primary_capability && (
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0">{mentee.primary_capability}</Badge>
+                          )}
+                          {mentee?.secondary_capability && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{mentee.secondary_capability}</Badge>
+                          )}
+                        </div>
+                        <span className="text-blue-700 font-medium">Mentor offers:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {mentor?.primary_capability && (
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0">{mentor.primary_capability}</Badge>
+                          )}
+                          {(mentor?.secondary_capabilities || []).map((cap, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px] px-1.5 py-0">{cap}</Badge>
+                          ))}
+                        </div>
+                        {(mentee?.seniority_band || mentor?.seniority_band) && (
+                          <>
+                            <span className="text-blue-700 font-medium">Seniority:</span>
+                            <span className="text-blue-900">{mentee?.seniority_band || '?'} &rarr; {mentor?.seniority_band || '?'}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Practice Scenario Overlap */}
+                  {mentee?.practice_scenarios && mentee.practice_scenarios.length > 0 && mentor?.practice_scenarios && mentor.practice_scenarios.length > 0 && (() => {
+                    const menteeSet = new Set(mentee.practice_scenarios.map(s => s.toLowerCase()));
+                    const shared = mentor.practice_scenarios.filter(s => menteeSet.has(s.toLowerCase()));
+                    const menteeOnly = mentee.practice_scenarios.filter(
+                      s => !mentor.practice_scenarios!.some(ms => ms.toLowerCase() === s.toLowerCase())
+                    );
+                    if (shared.length === 0 && menteeOnly.length === 0) return null;
+                    return (
+                      <div className="border rounded-lg p-3">
+                        <div className="text-xs font-medium text-gray-700 mb-2">Practice Scenarios</div>
+                        {shared.length > 0 && (
+                          <div className="mb-1.5">
+                            <span className="text-xs text-muted-foreground">Shared: </span>
+                            {shared.map(s => (
+                              <Badge key={s} variant="secondary" className="text-[10px] px-1.5 py-0 mr-1 mb-0.5">{s}</Badge>
+                            ))}
+                          </div>
+                        )}
+                        {menteeOnly.length > 0 && (
+                          <div>
+                            <span className="text-xs text-muted-foreground">Mentee only: </span>
+                            {menteeOnly.map(s => (
+                              <Badge key={s} variant="outline" className="text-[10px] px-1.5 py-0 mr-1 mb-0.5 opacity-60">{s}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Shared Topics Highlight (legacy) */}
                   {sharedTopics.length > 0 && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                       <div className="text-xs font-medium text-green-800 mb-1.5 flex items-center gap-1.5">
@@ -1757,7 +2005,8 @@ export default function CohortDetail() {
                   {/* Logistics */}
                   {score?.logistics && (
                     <div className="flex flex-wrap gap-2">
-                      {score.logistics.languages_shared.length > 0 && (
+                      {score.logistics.languages_shared.length > 0 &&
+                        !(score.logistics.languages_shared.length === 1 && score.logistics.languages_shared[0] === 'English') && (
                         <Badge variant="outline" className="text-xs">
                           <MessageSquare className="w-3 h-3 mr-1" />
                           {score.logistics.languages_shared.join(", ")}
