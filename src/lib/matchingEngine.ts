@@ -207,7 +207,10 @@ function calculateCapabilityMatch(mentee: MenteeData, mentor: MentorData): numbe
  * Compares free-text domain expertise detail fields for keyword overlap.
  */
 function calculateDomainMatch(mentee: MenteeData, mentor: MentorData): number {
-  const menteeDetail = (mentee.primary_capability_detail || '').toLowerCase();
+  const menteeDetail = [
+    mentee.primary_capability_detail || '',
+    mentee.secondary_capability_detail || '',
+  ].join(' ').toLowerCase();
   const mentorDetail = [
     mentor.primary_capability_detail || '',
     mentor.secondary_capability_detail || '',
