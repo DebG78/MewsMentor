@@ -36,7 +36,11 @@ import {
   Loader2,
   Scale,
   Filter,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import type { MatchingModel, MatchingWeights, MatchingFilters } from '@/types/matching';
 import {
   getMatchingModels,
@@ -45,6 +49,7 @@ import {
   createNewVersion,
   archiveMatchingModel,
   activateMatchingModel,
+  deleteMatchingModel,
 } from '@/lib/matchingModelService';
 import { PageHeader } from '@/components/admin/PageHeader';
 
@@ -55,6 +60,9 @@ export default function MatchingModelManager() {
   const [selectedModel, setSelectedModel] = useState<MatchingModel | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MatchingModel | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Form state for creating new model
   const [newModelName, setNewModelName] = useState('');
@@ -181,6 +189,28 @@ export default function MatchingModelManager() {
         description: 'Failed to set as default',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteMatchingModel(deleteTarget.id);
+      toast({
+        title: 'Deleted',
+        description: `${deleteTarget.name} v${deleteTarget.version} has been deleted`,
+      });
+      setDeleteTarget(null);
+      loadModels();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to delete model',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -375,6 +405,17 @@ export default function MatchingModelManager() {
                             <Archive className="w-4 h-4" />
                           </Button>
                         )}
+                        {(model.status === 'archived' || model.status === 'draft') && !model.is_default && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteTarget(model)}
+                            title="Delete"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -385,9 +426,32 @@ export default function MatchingModelManager() {
         </CardContent>
       </Card>
 
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Matching Model</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete{' '}
+              <span className="font-medium">{deleteTarget?.name} v{deleteTarget?.version}</span>?
+              This will also remove all associated criteria and rules. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Weights/Filters Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               Edit Model Settings: {selectedModel?.name} v{selectedModel?.version}
@@ -397,7 +461,7 @@ export default function MatchingModelManager() {
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="weights" className="w-full">
+          <Tabs defaultValue="weights" className="w-full min-h-0 flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="weights">
                 <Scale className="w-4 h-4 mr-2" />
@@ -409,10 +473,10 @@ export default function MatchingModelManager() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="weights" className="space-y-4 mt-4">
+            <TabsContent value="weights" className="space-y-3 mt-3 overflow-y-auto pr-1">
               {editWeights && (
                 <>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span>Capability Match</span>
                       <span className="font-medium">{editWeights.capability}%</span>
@@ -426,7 +490,7 @@ export default function MatchingModelManager() {
                       step={5}
                     />
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span>Semantic Similarity</span>
                       <span className="font-medium">{editWeights.semantic}%</span>
@@ -440,7 +504,7 @@ export default function MatchingModelManager() {
                       step={5}
                     />
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span>Domain Detail Match</span>
                       <span className="font-medium">{editWeights.domain}%</span>
@@ -454,7 +518,7 @@ export default function MatchingModelManager() {
                       step={5}
                     />
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span>Seniority Fit</span>
                       <span className="font-medium">{editWeights.seniority}%</span>
@@ -468,7 +532,7 @@ export default function MatchingModelManager() {
                       step={5}
                     />
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span>Timezone Bonus</span>
                       <span className="font-medium">{editWeights.timezone}%</span>
@@ -482,7 +546,7 @@ export default function MatchingModelManager() {
                       step={5}
                     />
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-sm">
                       <span>Capacity Penalty</span>
                       <span className="font-medium">{editWeights.capacity_penalty}%</span>
@@ -502,14 +566,84 @@ export default function MatchingModelManager() {
                       editWeights.semantic +
                       editWeights.domain +
                       editWeights.seniority +
-                      editWeights.timezone}
+                      editWeights.timezone +
+                      (editWeights.compatibility ?? 0) +
+                      (editWeights.proficiency_gap ?? 0) +
+                      (editWeights.department_diversity ?? 0)}
                     % (excluding penalty)
                   </div>
+
+                  <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="pt-3 border-t">
+                    <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-medium hover:underline">
+                      <span>Advanced Weights</span>
+                      {advancedOpen ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-3 pt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Optional fine-tuning factors. Set to 0% to disable.
+                      </p>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Compatibility</span>
+                          <span className="font-medium">{editWeights.compatibility ?? 0}%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Style, energy, feedback, and meeting frequency alignment
+                        </p>
+                        <Slider
+                          value={[editWeights.compatibility ?? 0]}
+                          onValueChange={([v]) =>
+                            setEditWeights({ ...editWeights, compatibility: v })
+                          }
+                          max={30}
+                          step={5}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Proficiency Gap</span>
+                          <span className="font-medium">{editWeights.proficiency_gap ?? 0}%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Rewards mentors with higher skill proficiency than mentee
+                        </p>
+                        <Slider
+                          value={[editWeights.proficiency_gap ?? 0]}
+                          onValueChange={([v]) =>
+                            setEditWeights({ ...editWeights, proficiency_gap: v })
+                          }
+                          max={30}
+                          step={5}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Department Diversity</span>
+                          <span className="font-medium">{editWeights.department_diversity ?? 0}%</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Bonus for cross-department matches (different teams)
+                        </p>
+                        <Slider
+                          value={[editWeights.department_diversity ?? 0]}
+                          onValueChange={([v]) =>
+                            setEditWeights({ ...editWeights, department_diversity: v })
+                          }
+                          max={30}
+                          step={5}
+                        />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </>
               )}
             </TabsContent>
 
-            <TabsContent value="filters" className="space-y-4 mt-4">
+            <TabsContent value="filters" className="space-y-4 mt-3 overflow-y-auto pr-1">
               {editFilters && (
                 <>
                   <div className="space-y-3">

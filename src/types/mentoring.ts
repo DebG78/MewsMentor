@@ -138,6 +138,10 @@ export interface MatchingFeatures {
   role_seniority_fit: number; // 0-1, seniority appropriateness (10% weight)
   tz_overlap_bonus: number; // 0-1, timezone proximity bonus (5% weight)
   capacity_penalty: number; // 0-1, penalty for low capacity (-10% weight)
+  // Advanced features (opt-in via weights)
+  compatibility_score: number; // 0-1, style/energy/feedback/frequency alignment
+  proficiency_gap: number; // 0-1, mentor proficiency above mentee
+  department_diversity: number; // 0 or 1, cross-department bonus
   // Legacy fields kept for backward compat
   topics_overlap?: number;
   industry_overlap?: number;
