@@ -1,6 +1,7 @@
 import { MatchScore } from "@/types/mentoring";
 import { getScoreComponents, ScoreComponent } from "@/utils/matchingDataTransform";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CheckCircle, AlertTriangle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -105,7 +106,8 @@ export function ScoreBreakdownVisual({
       {/* Logistics */}
       {score.logistics && (
         <div className="pt-2 border-t flex flex-wrap gap-2">
-          {score.logistics.languages_shared.length > 0 && (
+          {score.logistics.languages_shared.length > 0 &&
+            !(score.logistics.languages_shared.length === 1 && score.logistics.languages_shared[0] === 'English') && (
             <Badge variant="outline" className="text-xs">
               Languages: {score.logistics.languages_shared.join(", ")}
             </Badge>
@@ -118,10 +120,21 @@ export function ScoreBreakdownVisual({
             </Badge>
           )}
           {score.is_embedding_based && (
-            <Badge variant="outline" className="text-xs text-purple-600 border-purple-200">
-              <Sparkles className="w-3 h-3 mr-1" />
-              AI Similarity
-            </Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-xs text-purple-600 border-purple-200 cursor-help">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    AI-Enhanced Match
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="text-xs">
+                    Goals alignment was scored using AI vector embeddings instead of keyword matching, providing more nuanced similarity scoring.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       )}

@@ -56,7 +56,17 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     department: (dbMentee as any).department || undefined,
     job_grade: (dbMentee as any).job_grade || undefined,
     languages: dbMentee.languages,
-    industry: dbMentee.industry
+    industry: dbMentee.industry,
+    // Capability-based survey fields
+    bio: dbMentee.bio || undefined,
+    primary_capability: dbMentee.primary_capability || undefined,
+    primary_capability_detail: dbMentee.primary_capability_detail || undefined,
+    secondary_capability: dbMentee.secondary_capability || undefined,
+    secondary_capability_detail: dbMentee.secondary_capability_detail || undefined,
+    primary_proficiency: dbMentee.primary_proficiency ?? undefined,
+    secondary_proficiency: dbMentee.secondary_proficiency ?? undefined,
+    mentoring_goal: dbMentee.mentoring_goal || undefined,
+    practice_scenarios: dbMentee.practice_scenarios || undefined,
   }
 }
 
@@ -88,7 +98,22 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     department: (dbMentor as any).department || undefined,
     job_grade: (dbMentor as any).job_grade || undefined,
     languages: dbMentor.languages,
-    industry: dbMentor.industry
+    industry: dbMentor.industry,
+    // Capability-based survey fields
+    bio: dbMentor.bio || undefined,
+    mentor_motivation: dbMentor.mentor_motivation || undefined,
+    mentoring_experience: dbMentor.mentoring_experience || undefined,
+    first_time_support: dbMentor.first_time_support || undefined,
+    primary_capability: dbMentor.primary_capability || undefined,
+    primary_capability_detail: dbMentor.primary_capability_detail || undefined,
+    secondary_capabilities: dbMentor.secondary_capabilities || undefined,
+    secondary_capability_detail: dbMentor.secondary_capability_detail || undefined,
+    primary_proficiency: dbMentor.primary_proficiency ?? undefined,
+    practice_scenarios: dbMentor.practice_scenarios || undefined,
+    hard_earned_lesson: dbMentor.hard_earned_lesson || undefined,
+    natural_strengths: dbMentor.natural_strengths || undefined,
+    excluded_scenarios: dbMentor.excluded_scenarios || undefined,
+    match_exclusions: dbMentor.match_exclusions || undefined,
   }
 }
 

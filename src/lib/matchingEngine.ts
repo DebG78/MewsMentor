@@ -310,38 +310,173 @@ export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): Mat
     10 * features.capacity_penalty
   ));
 
+  // Compute timezone distance once for reasons and risks
+  const tzDistance = calculateTimezoneDistance(mentee.location_timezone, mentor.location_timezone);
+
   // Generate reasons for the match
   const reasons: string[] = [];
   if (features.capability_match >= 1.0) {
-    reasons.push(`Exact primary capability match: ${mentee.primary_capability || mentee.topics_to_learn?.[0] || 'shared area'}`);
+    reasons.push(`Exact primary capability match: both share "${mentee.primary_capability || mentee.topics_to_learn?.[0] || 'shared area'}" as their primary focus`);
   } else if (features.capability_match >= 0.8) {
-    reasons.push(`Capability match via mentor's secondary expertise`);
+    reasons.push(`Mentee wants "${mentee.primary_capability}" \u2014 mentor offers it as a secondary capability`);
+  } else if (features.capability_match >= 0.55) {
+    reasons.push(`Related capability cluster: mentee wants "${mentee.primary_capability}", mentor's primary is "${mentor.primary_capability}" (same theme family)`);
   } else if (features.capability_match >= 0.4) {
-    reasons.push(`Related capability cluster match`);
+    reasons.push(`Related capability cluster via secondary: mentee wants "${mentee.primary_capability}", mentor has related secondary expertise`);
   }
+
+  // Secondary capability bonus
+  if (mentee.secondary_capability) {
+    const mentorPri = mentor.primary_capability?.toLowerCase() || '';
+    const mentorSecs = (mentor.secondary_capabilities || []).map(s => s.toLowerCase());
+    if (mentorPri === mentee.secondary_capability.toLowerCase() ||
+        mentorSecs.includes(mentee.secondary_capability.toLowerCase())) {
+      reasons.push(`Secondary capability bonus: mentee also wants "${mentee.secondary_capability}" which the mentor can offer`);
+    }
+  }
+
   if (features.domain_match > 0.2) {
-    reasons.push("Overlapping domain expertise details");
+    reasons.push("Overlapping domain expertise in capability detail descriptions");
   }
-  if (features.role_seniority_fit > 0.7) {
-    reasons.push("Appropriate seniority gap");
+  if (features.role_seniority_fit >= 1.0) {
+    reasons.push(`Good seniority fit: mentee is ${mentee.seniority_band || 'unknown'}, mentor is ${mentor.seniority_band || 'unknown'} (1-2 level gap, ideal)`);
+  } else if (features.role_seniority_fit >= 0.8) {
+    reasons.push(`Good seniority fit: mentee is ${mentee.seniority_band || 'unknown'}, mentor is ${mentor.seniority_band || 'unknown'} (3-4 level gap, solid)`);
   }
   if (features.tz_overlap_bonus > 0) {
-    reasons.push("Compatible timezone");
+    if (tzDistance === 0) {
+      reasons.push(`Same timezone: both in ${mentee.location_timezone}`);
+    } else {
+      reasons.push(`Close timezones (~${tzDistance}h): ${mentee.location_timezone} / ${mentor.location_timezone}`);
+    }
   }
   if (features.semantic_similarity > 0.2) {
-    reasons.push("Aligned goals and motivation");
+    reasons.push("Aligned goals and motivation based on profile text analysis");
+  }
+
+  // Practice scenario overlap
+  if (mentee.practice_scenarios?.length && mentor.practice_scenarios?.length) {
+    const menteeScenarios = new Set(mentee.practice_scenarios.map(s => s.toLowerCase()));
+    const overlapping = mentor.practice_scenarios.filter(s => menteeScenarios.has(s.toLowerCase()));
+    if (overlapping.length > 0) {
+      reasons.push(`Shared practice scenario${overlapping.length > 1 ? 's' : ''}: ${overlapping.join(', ')}`);
+    }
+  }
+
+  // Mentoring style & preference insights
+  if (mentee.preferred_mentor_style && mentor.mentoring_style) {
+    const menteeStyle = mentee.preferred_mentor_style.toLowerCase();
+    const mentorStyle = mentor.mentoring_style.toLowerCase();
+    if (menteeStyle === mentorStyle || mentorStyle.includes(menteeStyle) || menteeStyle.includes(mentorStyle)) {
+      reasons.push(`Mentoring style alignment: mentee prefers "${mentee.preferred_mentor_style}" and mentor's style is "${mentor.mentoring_style}"`);
+    }
+  }
+  if (mentee.preferred_mentor_energy && mentor.mentor_energy) {
+    const menteeEnergy = mentee.preferred_mentor_energy.toLowerCase();
+    const mentorEnergy = mentor.mentor_energy.toLowerCase();
+    if (menteeEnergy === mentorEnergy || mentorEnergy.includes(menteeEnergy) || menteeEnergy.includes(mentorEnergy)) {
+      reasons.push(`Energy match: mentee wants "${mentee.preferred_mentor_energy}" and mentor is "${mentor.mentor_energy}"`);
+    }
+  }
+  if (mentee.feedback_preference && mentor.feedback_style) {
+    const menteeFb = mentee.feedback_preference.toLowerCase();
+    const mentorFb = mentor.feedback_style.toLowerCase();
+    if (menteeFb === mentorFb || mentorFb.includes(menteeFb) || menteeFb.includes(mentorFb)) {
+      reasons.push(`Feedback style match: mentee prefers "${mentee.feedback_preference}" and mentor gives "${mentor.feedback_style}"`);
+    }
+  }
+  if (mentee.meeting_frequency && mentor.meeting_frequency) {
+    const menteeMf = mentee.meeting_frequency.toLowerCase();
+    const mentorMf = mentor.meeting_frequency.toLowerCase();
+    if (menteeMf === mentorMf || mentorMf.includes(menteeMf) || menteeMf.includes(mentorMf)) {
+      reasons.push(`Meeting frequency agreement: both prefer ${mentee.meeting_frequency}`);
+    }
+  }
+  if (mentor.has_mentored_before && mentee.mentor_experience_importance) {
+    const importance = mentee.mentor_experience_importance.toLowerCase();
+    if (importance.includes('important') || importance.includes('very') || importance.includes('prefer')) {
+      reasons.push(`Experienced mentor: mentee values mentor experience and this mentor has mentored before`);
+    }
+  }
+  if (mentor.natural_strengths?.length) {
+    reasons.push(`Mentor's natural strengths: ${mentor.natural_strengths.join(', ')}`);
   }
 
   // Generate risks/concerns
   const risks: string[] = [];
   if (features.capacity_penalty > 0) {
-    risks.push("Limited mentor capacity");
+    risks.push(`Limited mentor capacity: only ${mentor.capacity_remaining} slot${mentor.capacity_remaining === 1 ? '' : 's'} remaining`);
   }
   if (features.capability_match < 0.2) {
-    risks.push("Limited capability overlap");
+    risks.push(`Minimal capability overlap: mentee wants "${mentee.primary_capability || 'unknown'}" but mentor focuses on "${mentor.primary_capability || 'unknown'}"`);
+  } else if (features.capability_match < 0.4) {
+    risks.push(`Weak capability overlap: mentee wants "${mentee.primary_capability || 'unknown'}", mentor's primary is "${mentor.primary_capability || 'unknown'}"`);
   }
-  if (calculateTimezoneDistance(mentee.location_timezone, mentor.location_timezone) > 2) {
-    risks.push("Timezone difference");
+  if (tzDistance > 4) {
+    risks.push(`Large timezone gap (${tzDistance}h): ${mentee.location_timezone} vs ${mentor.location_timezone} \u2014 scheduling may be challenging`);
+  } else if (tzDistance > 2) {
+    risks.push(`Moderate timezone difference (${tzDistance}h): ${mentee.location_timezone} vs ${mentor.location_timezone}`);
+  }
+  if (features.role_seniority_fit <= 0.2 && features.role_seniority_fit > 0) {
+    risks.push(`Seniority concern: mentee is ${mentee.seniority_band || 'unknown'}, mentor is ${mentor.seniority_band || 'unknown'} (mentor may be at a lower level)`);
+  } else if (features.role_seniority_fit <= 0.5 && features.role_seniority_fit > 0.2) {
+    risks.push(`Same seniority level: both at ${mentee.seniority_band || 'unknown'} \u2014 limited growth opportunity`);
+  }
+  if (features.semantic_similarity < 0.1) {
+    risks.push("Low goals alignment: mentee's stated goals and mentor's motivation have minimal textual overlap");
+  }
+
+  // Style/preference mismatch risks
+  if (mentee.preferred_mentor_style && mentor.mentoring_style) {
+    const menteeStyle = mentee.preferred_mentor_style.toLowerCase();
+    const mentorStyle = mentor.mentoring_style.toLowerCase();
+    if (menteeStyle !== mentorStyle && !mentorStyle.includes(menteeStyle) && !menteeStyle.includes(mentorStyle)) {
+      risks.push(`Style mismatch: mentee prefers "${mentee.preferred_mentor_style}" but mentor's style is "${mentor.mentoring_style}"`);
+    }
+  }
+  if (mentee.preferred_mentor_energy && mentor.mentor_energy) {
+    const menteeEnergy = mentee.preferred_mentor_energy.toLowerCase();
+    const mentorEnergy = mentor.mentor_energy.toLowerCase();
+    if (menteeEnergy !== mentorEnergy && !mentorEnergy.includes(menteeEnergy) && !menteeEnergy.includes(mentorEnergy)) {
+      risks.push(`Energy mismatch: mentee wants "${mentee.preferred_mentor_energy}" but mentor is "${mentor.mentor_energy}"`);
+    }
+  }
+  if (mentee.feedback_preference && mentor.feedback_style) {
+    const menteeFb = mentee.feedback_preference.toLowerCase();
+    const mentorFb = mentor.feedback_style.toLowerCase();
+    if (menteeFb !== mentorFb && !mentorFb.includes(menteeFb) && !menteeFb.includes(mentorFb)) {
+      risks.push(`Feedback style mismatch: mentee prefers "${mentee.feedback_preference}" but mentor gives "${mentor.feedback_style}"`);
+    }
+  }
+  if (mentee.meeting_frequency && mentor.meeting_frequency) {
+    const menteeMf = mentee.meeting_frequency.toLowerCase();
+    const mentorMf = mentor.meeting_frequency.toLowerCase();
+    if (menteeMf !== mentorMf && !mentorMf.includes(menteeMf) && !menteeMf.includes(mentorMf)) {
+      risks.push(`Meeting frequency mismatch: mentee wants ${mentee.meeting_frequency}, mentor prefers ${mentor.meeting_frequency}`);
+    }
+  }
+  if (!mentor.has_mentored_before) {
+    if (mentee.mentor_experience_importance) {
+      const importance = mentee.mentor_experience_importance.toLowerCase();
+      if (importance.includes('important') || importance.includes('very') || importance.includes('prefer')) {
+        risks.push(`Mentee values mentor experience but this is the mentor's first time mentoring`);
+      }
+    } else {
+      risks.push(`First-time mentor: ${mentor.name || 'this mentor'} has not mentored before`);
+    }
+  }
+  if (mentee.what_not_wanted) {
+    risks.push(`Mentee has stated they don't want: "${mentee.what_not_wanted}"`);
+  }
+  if (mentor.excluded_scenarios?.length && mentee.practice_scenarios?.length) {
+    const excluded = mentor.excluded_scenarios.map(s => s.toLowerCase());
+    const flagged = mentee.practice_scenarios.filter(s => excluded.includes(s.toLowerCase()));
+    if (flagged.length > 0) {
+      risks.push(`Scenario conflict: mentee wants "${flagged.join(', ')}" but mentor has excluded ${flagged.length > 1 ? 'these' : 'this'}`);
+    }
+  }
+  if (mentor.match_exclusions) {
+    risks.push(`Mentor has match exclusion notes: "${mentor.match_exclusions}"`);
   }
 
   // Generate icebreaker suggestion

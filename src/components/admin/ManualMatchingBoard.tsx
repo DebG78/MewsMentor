@@ -7,11 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import {
   Table,
   TableBody,
   TableCell,
@@ -48,11 +43,14 @@ import {
   Eye,
   Filter,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toDisplayName } from '@/lib/displayName';
 import { Cohort, MenteeData, MentorData, ManualMatch, ManualMatchingOutput } from '@/types/mentoring';
 import { useToast } from '@/hooks/use-toast';
+import { calculateMatchScore } from '@/lib/matchingEngine';
+import { ScoreBreakdownVisual } from '@/components/ScoreBreakdownVisual';
 
 interface ManualMatchingBoardProps {
   cohort: Cohort;
@@ -268,6 +266,15 @@ export function ManualMatchingBoard({
     [cohort.mentees, selectedMenteeId]
   );
 
+  // Compute match score for pending pair
+  const pendingMatchScore = useMemo(() => {
+    if (!selectedMenteeId || !pendingMentorId) return null;
+    const mentee = cohort.mentees.find(m => m.id === selectedMenteeId);
+    const mentor = cohort.mentors.find(m => m.id === pendingMentorId);
+    if (!mentee || !mentor) return null;
+    return calculateMatchScore(mentee, mentor);
+  }, [selectedMenteeId, pendingMentorId, cohort.mentees, cohort.mentors]);
+
   // Handle clicking a mentor to create a pair
   const handleMentorClick = (mentorId: string) => {
     if (!selectedMenteeId) return;
@@ -338,11 +345,21 @@ export function ManualMatchingBoard({
         updated_at: new Date().toISOString(),
         finalized,
       };
+      const pairCount = pairs.length;
       await onSave(output);
-      setIsFinalized(finalized);
+      if (finalized) {
+        // Finalization succeeded — clear local state since matches moved to Matches tab
+        setPairs([]);
+        setSelectedMenteeId(null);
+        setIsFinalized(false);
+      } else {
+        setIsFinalized(false);
+      }
       toast({
         title: finalized ? 'Manual matches finalized' : 'Draft saved',
-        description: `${pairs.length} pair${pairs.length !== 1 ? 's' : ''} saved`,
+        description: finalized
+          ? `${pairCount} pair${pairCount !== 1 ? 's' : ''} moved to Matches tab`
+          : `${pairCount} pair${pairCount !== 1 ? 's' : ''} saved`,
       });
     } catch {
       toast({
@@ -766,190 +783,121 @@ export function ManualMatchingBoard({
                   const hasOverlap = topicOverlap.length > 0;
 
                   return (
-                    <Popover
+                    <div
                       key={mentor.id}
-                      open={pendingMentorId === mentor.id}
-                      onOpenChange={open => {
-                        if (!open) setPendingMentorId(null);
-                      }}
+                      onClick={() => handleMentorClick(mentor.id)}
+                      className={cn(
+                        'p-3 border rounded-lg transition-all',
+                        selectedMenteeId
+                          ? 'cursor-pointer hover:border-primary/50 hover:bg-accent/50'
+                          : 'cursor-default',
+                        selectedMenteeId &&
+                          hasOverlap &&
+                          'border-green-300 bg-green-50/50',
+                        isFull && 'opacity-50'
+                      )}
                     >
-                      <PopoverTrigger asChild>
-                        <div
-                          onClick={() => handleMentorClick(mentor.id)}
-                          className={cn(
-                            'p-3 border rounded-lg transition-all',
-                            selectedMenteeId
-                              ? 'cursor-pointer hover:border-primary/50 hover:bg-accent/50'
-                              : 'cursor-default',
-                            selectedMenteeId &&
-                              hasOverlap &&
-                              'border-green-300 bg-green-50/50',
-                            isFull && 'opacity-50'
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                              <User className="w-4 h-4 text-blue-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-sm truncate">
-                                  {toDisplayName(mentor.name || mentor.id)}
-                                </h4>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <Badge
-                                    variant={isFull ? 'destructive' : 'secondary'}
-                                    className="text-xs"
-                                  >
-                                    {effectiveCap}/{mentor.capacity_remaining} slots
-                                  </Badge>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      setPreviewProfile({ data: mentor, type: 'mentor' });
-                                    }}
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {mentor.role}
-                              </p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium text-sm truncate">
+                              {toDisplayName(mentor.name || mentor.id)}
+                            </h4>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge
+                                variant={isFull ? 'destructive' : 'secondary'}
+                                className="text-xs"
+                              >
+                                {effectiveCap}/{mentor.capacity_remaining} slots
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setPreviewProfile({ data: mentor, type: 'mentor' });
+                                }}
+                              >
+                                <Eye className="w-3 h-3" />
+                              </Button>
                             </div>
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {mentor.primary_capability ? (
-                              <>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {mentor.role}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {mentor.primary_capability ? (
+                          <>
+                            <Badge
+                              variant={topicOverlap.some(t => t.toLowerCase() === mentor.primary_capability!.toLowerCase()) ? 'default' : 'outline'}
+                              className={cn(
+                                'text-xs',
+                                topicOverlap.some(t => t.toLowerCase() === mentor.primary_capability!.toLowerCase()) && 'bg-green-600 hover:bg-green-600'
+                              )}
+                            >
+                              <Briefcase className="w-2.5 h-2.5 mr-0.5" />
+                              {mentor.primary_capability}
+                            </Badge>
+                            {(mentor.secondary_capabilities || []).slice(0, 2).map(cap => {
+                              const isShared = topicOverlap.some(t => t.toLowerCase() === cap.toLowerCase());
+                              return (
+                                <Badge key={cap} variant={isShared ? 'default' : 'outline'} className={cn('text-xs', isShared && 'bg-green-600 hover:bg-green-600')}>
+                                  {cap}
+                                </Badge>
+                              );
+                            })}
+                            {(mentor.secondary_capabilities || []).length > 2 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{mentor.secondary_capabilities!.length - 2}
+                              </Badge>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {mentor.topics_to_mentor.slice(0, 3).map(topic => {
+                              const isShared = topicOverlap.some(
+                                t => t.toLowerCase() === topic.toLowerCase()
+                              );
+                              return (
                                 <Badge
-                                  variant={topicOverlap.some(t => t.toLowerCase() === mentor.primary_capability!.toLowerCase()) ? 'default' : 'outline'}
+                                  key={topic}
+                                  variant={isShared ? 'default' : 'outline'}
                                   className={cn(
                                     'text-xs',
-                                    topicOverlap.some(t => t.toLowerCase() === mentor.primary_capability!.toLowerCase()) && 'bg-green-600 hover:bg-green-600'
+                                    isShared && 'bg-green-600 hover:bg-green-600'
                                   )}
                                 >
                                   <Briefcase className="w-2.5 h-2.5 mr-0.5" />
-                                  {mentor.primary_capability}
+                                  {topic}
                                 </Badge>
-                                {(mentor.secondary_capabilities || []).slice(0, 2).map(cap => {
-                                  const isShared = topicOverlap.some(t => t.toLowerCase() === cap.toLowerCase());
-                                  return (
-                                    <Badge key={cap} variant={isShared ? 'default' : 'outline'} className={cn('text-xs', isShared && 'bg-green-600 hover:bg-green-600')}>
-                                      {cap}
-                                    </Badge>
-                                  );
-                                })}
-                                {(mentor.secondary_capabilities || []).length > 2 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    +{mentor.secondary_capabilities!.length - 2}
-                                  </Badge>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                {mentor.topics_to_mentor.slice(0, 3).map(topic => {
-                                  const isShared = topicOverlap.some(
-                                    t => t.toLowerCase() === topic.toLowerCase()
-                                  );
-                                  return (
-                                    <Badge
-                                      key={topic}
-                                      variant={isShared ? 'default' : 'outline'}
-                                      className={cn(
-                                        'text-xs',
-                                        isShared && 'bg-green-600 hover:bg-green-600'
-                                      )}
-                                    >
-                                      <Briefcase className="w-2.5 h-2.5 mr-0.5" />
-                                      {topic}
-                                    </Badge>
-                                  );
-                                })}
-                                {mentor.topics_to_mentor.length > 3 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    +{mentor.topics_to_mentor.length - 3}
-                                  </Badge>
-                                )}
-                              </>
+                              );
+                            })}
+                            {mentor.topics_to_mentor.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{mentor.topics_to_mentor.length - 3}
+                              </Badge>
                             )}
-                          </div>
-                          {mentor.location_timezone && (
-                            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                              <MapPin className="w-3 h-3" />
-                              {mentor.location_timezone}
-                            </div>
-                          )}
-                          {selectedMenteeId && hasOverlap && (
-                            <div className="mt-1 text-xs text-green-700 font-medium">
-                              {topicOverlap.length} shared topic{topicOverlap.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
+                          </>
+                        )}
+                      </div>
+                      {mentor.location_timezone && (
+                        <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="w-3 h-3" />
+                          {mentor.location_timezone}
                         </div>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-80" align="start">
-                        <div className="space-y-4">
-                          <div>
-                            <h4 className="font-medium text-sm mb-1">
-                              Create pair
-                            </h4>
-                            <p className="text-xs text-muted-foreground">
-                              {toDisplayName(selectedMentee?.name)} <ArrowRight className="w-3 h-3 inline" />{' '}
-                              {toDisplayName(mentor.name)}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">
-                              Confidence: {confidence}/5
-                            </label>
-                            <Slider
-                              value={[confidence]}
-                              onValueChange={v => setConfidence(v[0])}
-                              min={1}
-                              max={5}
-                              step={1}
-                              className="mt-2"
-                            />
-                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                              <span>Low</span>
-                              <span>High</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">
-                              Notes (optional)
-                            </label>
-                            <Textarea
-                              value={notes}
-                              onChange={e => setNotes(e.target.value)}
-                              placeholder="Why this pair works..."
-                              className="mt-1"
-                              rows={2}
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={() => setPendingMentorId(null)}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="flex-1"
-                              onClick={confirmPair}
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Pair
-                            </Button>
-                          </div>
+                      )}
+                      {selectedMenteeId && hasOverlap && (
+                        <div className="mt-1 text-xs text-green-700 font-medium">
+                          {topicOverlap.length} shared topic{topicOverlap.length !== 1 ? 's' : ''}
                         </div>
-                      </PopoverContent>
-                    </Popover>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1117,6 +1065,167 @@ export function ManualMatchingBoard({
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create pair dialog with match compatibility */}
+      <Dialog
+        open={pendingMentorId !== null}
+        onOpenChange={open => {
+          if (!open) setPendingMentorId(null);
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden p-0">
+          {pendingMentorId && selectedMenteeId && (() => {
+            const mentee = cohort.mentees.find(m => m.id === selectedMenteeId);
+            const mentor = cohort.mentors.find(m => m.id === pendingMentorId);
+            if (!mentee || !mentor) return null;
+
+            return (
+              <div className="overflow-y-auto max-h-[85vh] p-6">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-lg">
+                    {toDisplayName(mentee.name || mentee.id)}
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                    {toDisplayName(mentor.name || mentor.id)}
+                  </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4 pt-4">
+                  {/* Match score + breakdown */}
+                  {pendingMatchScore && (
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold">{Math.round(pendingMatchScore.total_score)}</div>
+                        <div className="text-xs text-muted-foreground">Match Score</div>
+                      </div>
+                      <div className="flex-1">
+                        <ScoreBreakdownVisual
+                          score={pendingMatchScore}
+                          variant="detailed"
+                          showReasons={false}
+                          showRisks={false}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Capability comparison */}
+                  {(mentee.primary_capability || mentor.primary_capability) && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-xs font-medium text-blue-800 mb-2">Capability Comparison</div>
+                      <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+                        <span className="text-blue-700 font-medium">Mentee wants:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {mentee.primary_capability && (
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0">{mentee.primary_capability}</Badge>
+                          )}
+                          {mentee.secondary_capability && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{mentee.secondary_capability}</Badge>
+                          )}
+                        </div>
+                        <span className="text-blue-700 font-medium">Mentor offers:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {mentor.primary_capability && (
+                            <Badge variant="default" className="text-[10px] px-1.5 py-0">{mentor.primary_capability}</Badge>
+                          )}
+                          {(mentor.secondary_capabilities || []).map(cap => (
+                            <Badge key={cap} variant="outline" className="text-[10px] px-1.5 py-0">{cap}</Badge>
+                          ))}
+                        </div>
+                        {(mentee.seniority_band || mentor.seniority_band) && (
+                          <>
+                            <span className="text-blue-700 font-medium">Seniority:</span>
+                            <span className="text-blue-900">{mentee.seniority_band || '?'} &rarr; {mentor.seniority_band || '?'}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reasons */}
+                  {pendingMatchScore && pendingMatchScore.reasons.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium mb-1.5 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                        Why this is a good match
+                      </div>
+                      <div className="space-y-1">
+                        {pendingMatchScore.reasons.map((reason, i) => (
+                          <div key={i} className="text-sm text-muted-foreground pl-5">
+                            {reason}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Risks */}
+                  {pendingMatchScore && pendingMatchScore.risks.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium mb-1.5 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                        Potential concerns
+                      </div>
+                      <div className="space-y-1">
+                        {pendingMatchScore.risks.map((risk, i) => (
+                          <div key={i} className="text-sm text-muted-foreground pl-5">
+                            {risk}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confidence + Notes */}
+                  <div className="pt-3 border-t space-y-3">
+                    <div>
+                      <label className="text-sm font-medium">
+                        Your confidence: {confidence}/5
+                      </label>
+                      <Slider
+                        value={[confidence]}
+                        onValueChange={v => setConfidence(v[0])}
+                        min={1}
+                        max={5}
+                        step={1}
+                        className="mt-2"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>Low</span>
+                        <span>High</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">
+                        Notes (optional)
+                      </label>
+                      <Textarea
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        placeholder="Why this pair works..."
+                        className="mt-1"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setPendingMentorId(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button className="flex-1" onClick={confirmPair}>
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Pair
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
