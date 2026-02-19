@@ -287,7 +287,9 @@ export async function activateMatchingModel(id: string): Promise<void> {
 }
 
 /**
- * Delete a matching model (only if draft)
+ * Delete a matching model (draft or archived only).
+ * Active/default models cannot be deleted.
+ * If a cohort references the model, the database FK constraint will block deletion.
  */
 export async function deleteMatchingModel(id: string): Promise<void> {
   const model = await getMatchingModelById(id);
@@ -295,8 +297,12 @@ export async function deleteMatchingModel(id: string): Promise<void> {
     throw new Error('Model not found');
   }
 
-  if (model.status !== 'draft') {
-    throw new Error('Can only delete draft models');
+  if (model.status !== 'draft' && model.status !== 'archived') {
+    throw new Error('Can only delete draft or archived models');
+  }
+
+  if (model.is_default) {
+    throw new Error('Cannot delete the default model');
   }
 
   const { error } = await supabase
@@ -305,6 +311,10 @@ export async function deleteMatchingModel(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) {
+    // FK violation from cohorts referencing this model
+    if (error.code === '23503') {
+      throw new Error('Cannot delete this model because it is referenced by one or more cohorts');
+    }
     console.error('Error deleting matching model:', error);
     throw error;
   }

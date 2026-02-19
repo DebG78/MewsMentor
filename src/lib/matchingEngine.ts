@@ -105,6 +105,13 @@ export function calculateFeatures(mentee: MenteeData, mentor: MentorData): Match
   // Detect if we're using new survey data (has primary_capability)
   const hasNewFields = !!(mentee.primary_capability || mentor.primary_capability);
 
+  // Advanced features (computed regardless of survey version)
+  const advancedFeatures = {
+    compatibility_score: calculateCompatibility(mentee, mentor),
+    proficiency_gap: calculateProficiencyGap(mentee, mentor),
+    department_diversity: calculateDepartmentDiversity(mentee, mentor),
+  };
+
   if (hasNewFields) {
     return {
       capability_match: calculateCapabilityMatch(mentee, mentor),
@@ -113,6 +120,7 @@ export function calculateFeatures(mentee: MenteeData, mentor: MentorData): Match
       semantic_similarity: calculateSemanticSimilarity(mentee, mentor),
       tz_overlap_bonus: calculateTimezoneBonus(mentee.location_timezone, mentor.location_timezone),
       capacity_penalty: calculateCapacityPenalty(mentor.capacity_remaining),
+      ...advancedFeatures,
     };
   }
 
@@ -124,6 +132,7 @@ export function calculateFeatures(mentee: MenteeData, mentor: MentorData): Match
     semantic_similarity: calculateSemanticSimilarity(mentee, mentor),
     tz_overlap_bonus: calculateTimezoneBonus(mentee.location_timezone, mentor.location_timezone),
     capacity_penalty: calculateCapacityPenalty(mentor.capacity_remaining),
+    ...advancedFeatures,
     // Legacy fields
     topics_overlap: calculateTopicsOverlap(mentee.topics_to_learn, mentor.topics_to_mentor),
     industry_overlap: 1,
@@ -296,11 +305,62 @@ function calculateCapacityPenalty(capacityRemaining: number): number {
   return capacityRemaining === 1 ? 1 : 0;
 }
 
+// ============================================================================
+// ADVANCED SCORING FUNCTIONS (opt-in via weights)
+// ============================================================================
+
+/**
+ * Compatibility score based on style, energy, feedback, and meeting frequency preferences.
+ * Averages all sub-factors where both values exist (0–1 scale).
+ */
+function calculateCompatibility(mentee: MenteeData, mentor: MentorData): number {
+  const comparePair = (menteeVal?: string, mentorVal?: string): number | null => {
+    if (!menteeVal || !mentorVal) return null; // Skip if either missing
+    const a = menteeVal.toLowerCase();
+    const b = mentorVal.toLowerCase();
+    if (a === b || b.includes(a) || a.includes(b)) return 1.0;
+    return 0;
+  };
+
+  const scores = [
+    comparePair(mentee.preferred_mentor_style, mentor.mentoring_style),
+    comparePair(mentee.preferred_mentor_energy, mentor.mentor_energy),
+    comparePair(mentee.feedback_preference, mentor.feedback_style),
+    comparePair(mentee.meeting_frequency, mentor.meeting_frequency),
+  ].filter((s): s is number => s !== null);
+
+  if (scores.length === 0) return 0;
+  return scores.reduce((sum, s) => sum + s, 0) / scores.length;
+}
+
+/**
+ * Proficiency gap score — rewards mentors with higher proficiency than their mentee.
+ * Gap 1–2: 1.0 (ideal), Gap 3+: 0.8, Same: 0.4, Negative: 0.1
+ */
+function calculateProficiencyGap(mentee: MenteeData, mentor: MentorData): number {
+  if (!mentee.primary_proficiency || !mentor.primary_proficiency) return 0;
+
+  const gap = mentor.primary_proficiency - mentee.primary_proficiency;
+  if (gap >= 1 && gap <= 2) return 1.0;
+  if (gap >= 3) return 0.8;
+  if (gap === 0) return 0.4;
+  return 0.1; // Mentee has higher proficiency than mentor
+}
+
+/**
+ * Department diversity — rewards cross-department matches.
+ * Different department: 1.0, Same department: 0.0
+ */
+function calculateDepartmentDiversity(mentee: MenteeData, mentor: MentorData): number {
+  if (!mentee.department || !mentor.department) return 0;
+  return mentee.department.toLowerCase() !== mentor.department.toLowerCase() ? 1.0 : 0;
+}
+
 // Calculate final match score with new capability-based weights
 export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): MatchScore {
   const features = calculateFeatures(mentee, mentor);
 
-  // New scoring formula: Capability 45%, Semantic 30%, Domain 5%, Seniority 10%, TZ 5%, Capacity -10%
+  // Scoring formula: Core weights + Advanced weights (default 0, no effect unless enabled)
   const totalScore = Math.max(0, Math.min(100,
     45 * features.capability_match +
     30 * features.semantic_similarity +
@@ -308,6 +368,7 @@ export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): Mat
     10 * features.role_seniority_fit +
     5 * features.tz_overlap_bonus -
     10 * features.capacity_penalty
+    // Advanced factors use default 0 weight in this path (no effect)
   ));
 
   // Compute timezone distance once for reasons and risks
@@ -477,6 +538,21 @@ export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): Mat
   }
   if (mentor.match_exclusions) {
     risks.push(`Mentor has match exclusion notes: "${mentor.match_exclusions}"`);
+  }
+
+  // Advanced factor reasons
+  if (features.compatibility_score >= 0.75) {
+    reasons.push(`Strong compatibility: well-aligned on mentoring style, energy, and feedback preferences`);
+  } else if (features.compatibility_score > 0 && features.compatibility_score < 0.25) {
+    risks.push(`Low compatibility: misaligned preferences for mentoring style, energy, or feedback`);
+  }
+  if (features.proficiency_gap >= 0.8) {
+    reasons.push(`Good proficiency gap: mentor's skill level is well above mentee's (ideal for growth)`);
+  } else if (features.proficiency_gap > 0 && features.proficiency_gap <= 0.1) {
+    risks.push(`Proficiency concern: mentee may be at a higher skill level than mentor`);
+  }
+  if (features.department_diversity === 1.0 && mentee.department && mentor.department) {
+    reasons.push(`Cross-department match: ${mentee.department} / ${mentor.department} (fresh perspectives)`);
   }
 
   // Generate icebreaker suggestion
@@ -714,6 +790,42 @@ export function calculateMatchScoreWithModel(
       weighted_score: features.tz_overlap_bonus * weights.timezone,
     },
   ];
+
+  // Advanced weights (only included in breakdown if weight > 0)
+  const compatibilityWeight = weights.compatibility ?? 0;
+  const proficiencyWeight = weights.proficiency_gap ?? 0;
+  const departmentWeight = weights.department_diversity ?? 0;
+
+  if (compatibilityWeight > 0) {
+    scoreBreakdown.push({
+      criterion: 'compatibility',
+      criterion_name: 'Compatibility',
+      raw_score: features.compatibility_score,
+      max_possible: 1,
+      weight: compatibilityWeight,
+      weighted_score: features.compatibility_score * compatibilityWeight,
+    });
+  }
+  if (proficiencyWeight > 0) {
+    scoreBreakdown.push({
+      criterion: 'proficiency_gap',
+      criterion_name: 'Proficiency Gap',
+      raw_score: features.proficiency_gap,
+      max_possible: 1,
+      weight: proficiencyWeight,
+      weighted_score: features.proficiency_gap * proficiencyWeight,
+    });
+  }
+  if (departmentWeight > 0) {
+    scoreBreakdown.push({
+      criterion: 'department_diversity',
+      criterion_name: 'Department Diversity',
+      raw_score: features.department_diversity,
+      max_possible: 1,
+      weight: departmentWeight,
+      weighted_score: features.department_diversity * departmentWeight,
+    });
+  }
 
   // Calculate total score
   const positiveScore = scoreBreakdown.reduce((sum, item) => sum + item.weighted_score, 0);
@@ -1035,6 +1147,7 @@ function calculateMatchScoreWithEmbeddings(
   const features = calculateFeaturesWithEmbeddings(mentee, mentor, embeddingCache);
 
   // Same weights as calculateMatchScore but with embedding-enhanced semantic similarity
+  // Advanced factors use default 0 weight in this path (no effect)
   const totalScore = Math.max(0, Math.min(100,
     45 * features.capability_match +
     30 * features.semantic_similarity +

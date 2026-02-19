@@ -421,19 +421,19 @@ export function HelpGuide() {
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell>Language overlap</TableCell>
-                      <TableCell>At least 1 shared language</TableCell>
-                      <TableCell>Removes pairs with no common language</TableCell>
-                    </TableRow>
-                    <TableRow>
                       <TableCell>Timezone difference</TableCell>
-                      <TableCell>Maximum 3 hours apart</TableCell>
-                      <TableCell>Removes pairs too far apart</TableCell>
+                      <TableCell>Maximum 6 hours apart (configurable)</TableCell>
+                      <TableCell>Removes pairs too far apart to schedule meetings</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>Mentor capacity</TableCell>
                       <TableCell>Must be &gt; 0</TableCell>
                       <TableCell>Removes mentors who are full</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Excluded scenarios</TableCell>
+                      <TableCell>No overlap</TableCell>
+                      <TableCell>Removes pairs where the mentee's practice scenarios overlap with the mentor's excluded scenarios</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -443,11 +443,11 @@ export function HelpGuide() {
             {/* Feature Scoring */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Step 2: Feature Scoring</CardTitle>
+                <CardTitle className="text-base">Step 2: Core Feature Scoring</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Each mentee-mentor pair is scored on 7 features:
+                  Each mentee-mentor pair is scored on these core features:
                 </p>
                 <Table>
                   <TableHeader>
@@ -459,34 +459,29 @@ export function HelpGuide() {
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-semibold">Topics Overlap</TableCell>
-                      <TableCell><Badge>40%</Badge></TableCell>
-                      <TableCell className="text-sm">Jaccard similarity between mentee's topics to learn and mentor's topics to mentor</TableCell>
+                      <TableCell className="font-semibold">Capability Match</TableCell>
+                      <TableCell><Badge>45%</Badge></TableCell>
+                      <TableCell className="text-sm">Tiered scoring: exact primary match (100%), mentor secondary (80%), same cluster (55%/40%), plus bonuses for secondary capability and practice scenario overlap</TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-semibold">Goals Alignment</TableCell>
-                      <TableCell><Badge>20%</Badge></TableCell>
-                      <TableCell className="text-sm">Keyword-based or AI embeddings (cosine similarity) comparing goals and bio text</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-semibold">Industry Overlap</TableCell>
-                      <TableCell><Badge variant="secondary">15%</Badge></TableCell>
-                      <TableCell className="text-sm">Currently always 100% (all employees = same industry)</TableCell>
+                      <TableCell className="font-semibold">Semantic Similarity</TableCell>
+                      <TableCell><Badge>30%</Badge></TableCell>
+                      <TableCell className="text-sm">Keyword-based or AI embeddings (cosine similarity) comparing mentee goals/bio with mentor motivation/lessons</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-semibold">Seniority Fit</TableCell>
                       <TableCell><Badge variant="secondary">10%</Badge></TableCell>
-                      <TableCell className="text-sm">Mentor should ideally be more senior. Less senior = 50%.</TableCell>
+                      <TableCell className="text-sm">Mentor 1-2 levels above = 100%, 3-4 above = 80%, same level = 50%, mentor below = 20%</TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-semibold">Timezone Overlap</TableCell>
+                      <TableCell className="font-semibold">Domain Detail Match</TableCell>
                       <TableCell><Badge variant="outline">5%</Badge></TableCell>
-                      <TableCell className="text-sm">100% if within 2 hours, 0% otherwise</TableCell>
+                      <TableCell className="text-sm">Keyword overlap between free-text capability detail descriptions</TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell className="font-semibold">Language Match</TableCell>
+                      <TableCell className="font-semibold">Timezone Bonus</TableCell>
                       <TableCell><Badge variant="outline">5%</Badge></TableCell>
-                      <TableCell className="text-sm">100% if they share the mentee's primary language</TableCell>
+                      <TableCell className="text-sm">Same timezone = 100%, within 2 hours = 50%, further = 0%</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell className="font-semibold">Capacity Penalty</TableCell>
@@ -498,6 +493,48 @@ export function HelpGuide() {
               </CardContent>
             </Card>
 
+            {/* Advanced Weights */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Step 2b: Advanced Weights (Optional)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  These additional factors are disabled by default (weight = 0%). Enable them via the
+                  "Advanced Weights" section when editing a matching model.
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Feature</TableHead>
+                      <TableHead>Default</TableHead>
+                      <TableHead>How it's calculated</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-semibold">Compatibility</TableCell>
+                      <TableCell><Badge variant="outline">0%</Badge></TableCell>
+                      <TableCell className="text-sm">Averages alignment on mentoring style, energy, feedback preference, and meeting frequency. Only counts sub-factors where both people provided answers.</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-semibold">Proficiency Gap</TableCell>
+                      <TableCell><Badge variant="outline">0%</Badge></TableCell>
+                      <TableCell className="text-sm">Rewards mentors with higher skill proficiency than their mentee. Gap of 1-2 levels = 100%, gap of 3+ = 80%, same level = 40%, mentee higher = 10%.</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-semibold">Department Diversity</TableCell>
+                      <TableCell><Badge variant="outline">0%</Badge></TableCell>
+                      <TableCell className="text-sm">Bonus for cross-department matches (100% if different departments, 0% if same). Encourages fresh perspectives across teams.</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Advanced weights can be set up to 30% each. They add to the core score (total is clamped at 100).
+                </p>
+              </CardContent>
+            </Card>
+
             {/* Score Formula */}
             <Card>
               <CardHeader>
@@ -505,11 +542,20 @@ export function HelpGuide() {
               </CardHeader>
               <CardContent>
                 <div className="bg-muted rounded-md p-4 font-mono text-sm">
-                  Total = 40 x topics + 20 x goals + 15 x industry + 10 x seniority
+                  Total = 45 x capability + 30 x semantic + 10 x seniority
                   <br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + 5 x timezone + 5 x language - 10 x capacity_penalty
+                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + 5 x domain + 5 x timezone - 10 x capacity_penalty
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + compatibility_weight x compatibility
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + proficiency_weight x proficiency_gap
+                  <br />
+                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; + department_weight x department_diversity
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">Score is clamped between 0 and 100.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Score is clamped between 0 and 100. Core weights are fixed per the defaults above.
+                  Advanced weights are configurable per matching model (default 0).
+                </p>
               </CardContent>
             </Card>
 
@@ -521,8 +567,8 @@ export function HelpGuide() {
               <CardContent className="text-sm">
                 <p className="mb-2">When two mentors have the same total score, ties are broken in this order:</p>
                 <ol className="list-decimal list-inside space-y-1">
-                  <li>Higher topics overlap wins</li>
-                  <li>Higher goals alignment wins</li>
+                  <li>Higher capability match wins</li>
+                  <li>Higher semantic similarity wins</li>
                   <li>Higher remaining capacity wins (spreads load)</li>
                   <li>Mentor name alphabetically (A-Z)</li>
                 </ol>

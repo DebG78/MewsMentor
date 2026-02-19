@@ -7,6 +7,10 @@ export interface MatchingWeights {
   seniority: number;
   timezone: number;
   capacity_penalty: number;
+  // Advanced weights (opt-in, default 0)
+  compatibility: number;
+  proficiency_gap: number;
+  department_diversity: number;
   // Legacy fields kept for backward compat with saved models
   topics?: number;
   industry?: number;
@@ -175,6 +179,10 @@ export const DEFAULT_MATCHING_WEIGHTS: MatchingWeights = {
   seniority: 10,
   timezone: 5,
   capacity_penalty: 10,
+  // Advanced weights (opt-in, default 0 — no effect unless admin enables)
+  compatibility: 0,
+  proficiency_gap: 0,
+  department_diversity: 0,
 };
 
 // Default filters constant
