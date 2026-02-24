@@ -47,9 +47,6 @@ import {
   AlertTriangle,
   Plus,
   Trash2,
-  Link as LinkIcon,
-  FileText,
-  ExternalLink,
   ArrowLeft,
   Play,
   Pause,
@@ -59,7 +56,7 @@ import {
   X,
   Edit,
 } from 'lucide-react';
-import type { CohortStage, StageStatus, StageType, ChecklistItem, DocumentLink } from '@/types/runbook';
+import type { CohortStage, StageStatus, StageType, ChecklistItem } from '@/types/runbook';
 import { STAGE_METADATA } from '@/types/runbook';
 import {
   getCohortStages,
@@ -72,14 +69,12 @@ import {
   toggleChecklistItem,
   addChecklistItem,
   removeChecklistItem,
-  addDocument,
-  removeDocument,
   getRunbookProgress,
   deleteCohortStage,
   deleteAllCohortStages,
   completeAllStages,
 } from '@/lib/runbookService';
-import { getAllCohorts, updateCohort } from '@/lib/supabaseService';
+import { getAllCohorts } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
 import {
   getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
@@ -87,7 +82,6 @@ import {
   TEMPLATE_TYPES,
   type MessageTemplate, type MessageLogSummary, type Participant,
 } from '@/lib/messageService';
-import { DEFAULT_SESSION_THRESHOLDS, type SessionThresholds, type JourneyPhase } from '@/types/mentoring';
 
 // Icon mapping for stage types
 const stageIcons: Record<StageType, React.ComponentType<{ className?: string }>> = {
@@ -114,7 +108,7 @@ export default function CohortRunbook() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string; session_thresholds?: SessionThresholds | null }>>([]);
+  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedCohort, setSelectedCohort] = useState<string>(cohortId || '');
   const [stages, setStages] = useState<CohortStage[]>([]);
   const [progress, setProgress] = useState({ total: 0, completed: 0, percentComplete: 0 });
@@ -122,12 +116,6 @@ export default function CohortRunbook() {
   const [expandedStages, setExpandedStages] = useState<string[]>([]);
 
   // Dialog states
-  const [isAddDocDialogOpen, setIsAddDocDialogOpen] = useState(false);
-  const [selectedStageForDoc, setSelectedStageForDoc] = useState<string | null>(null);
-  const [newDocName, setNewDocName] = useState('');
-  const [newDocUrl, setNewDocUrl] = useState('');
-  const [newDocType, setNewDocType] = useState<'doc' | 'sheet' | 'pdf' | 'link'>('link');
-
   const [isAddChecklistDialogOpen, setIsAddChecklistDialogOpen] = useState(false);
   const [selectedStageForChecklist, setSelectedStageForChecklist] = useState<string | null>(null);
   const [newChecklistText, setNewChecklistText] = useState('');
@@ -161,10 +149,6 @@ export default function CohortRunbook() {
   // Template picker dialog
   const [addTemplateForStage, setAddTemplateForStage] = useState<string | null>(null);
 
-  // Session threshold editing state
-  const [editingThresholds, setEditingThresholds] = useState<SessionThresholds | null>(null);
-  const [isSavingThresholds, setIsSavingThresholds] = useState(false);
-
   // Default template types for auto-populating each stage
   const STAGE_DEFAULT_TYPES: Record<string, { types: string[]; phase?: string }> = {
     launch: { types: ['welcome_mentee', 'welcome_mentor', 'channel_announcement'] },
@@ -186,7 +170,7 @@ export default function CohortRunbook() {
   const loadCohorts = async () => {
     try {
       const data = await getAllCohorts();
-      setCohorts(data.map(c => ({ id: c.id, name: c.name, session_thresholds: c.session_thresholds })));
+      setCohorts(data.map(c => ({ id: c.id, name: c.name })));
       if (!selectedCohort && data.length > 0) {
         setSelectedCohort(data[0].id);
       }
@@ -374,43 +358,6 @@ export default function CohortRunbook() {
       toast({
         title: 'Error',
         description: 'Failed to remove checklist item',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleAddDocument = async () => {
-    if (!selectedStageForDoc || !newDocName.trim() || !newDocUrl.trim()) return;
-
-    try {
-      await addDocument(selectedStageForDoc, {
-        name: newDocName.trim(),
-        url: newDocUrl.trim(),
-        type: newDocType,
-      });
-      toast({ title: 'Document added' });
-      setIsAddDocDialogOpen(false);
-      setNewDocName('');
-      setNewDocUrl('');
-      setSelectedStageForDoc(null);
-      loadStages();
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to add document',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleRemoveDocument = async (stageId: string, docId: string) => {
-    try {
-      await removeDocument(stageId, docId);
-      loadStages();
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to remove document',
         variant: 'destructive',
       });
     }
@@ -684,26 +631,6 @@ export default function CohortRunbook() {
       });
     } finally {
       setIsSendingStageMessages(false);
-    }
-  };
-
-  const handleSaveThresholds = async () => {
-    if (!selectedCohort || !editingThresholds) return;
-    setIsSavingThresholds(true);
-    try {
-      await updateCohort(selectedCohort, { session_thresholds: editingThresholds });
-      setCohorts(prev => prev.map(c =>
-        c.id === selectedCohort ? { ...c, session_thresholds: editingThresholds } : c
-      ));
-      toast({ title: 'Session thresholds saved' });
-    } catch (err: any) {
-      toast({
-        title: 'Failed to save thresholds',
-        description: err.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSavingThresholds(false);
     }
   };
 
@@ -1017,53 +944,6 @@ export default function CohortRunbook() {
                         </div>
                       </div>
 
-                      {/* Documents */}
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <Label className="text-xs">Documents</Label>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedStageForDoc(stage.id);
-                              setIsAddDocDialogOpen(true);
-                            }}
-                          >
-                            <Plus className="w-3 h-3 mr-1" /> Add Link
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {stage.documents.map(doc => (
-                            <div
-                              key={doc.id}
-                              className="flex items-center gap-1 bg-muted px-2 py-1 rounded text-sm group"
-                            >
-                              <FileText className="w-3 h-3" />
-                              <a
-                                href={doc.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:underline"
-                              >
-                                {doc.name}
-                              </a>
-                              <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="opacity-0 group-hover:opacity-100 h-5 w-5 p-0 ml-1"
-                                onClick={() => handleRemoveDocument(stage.id, doc.id)}
-                              >
-                                <Trash2 className="w-3 h-3 text-destructive" />
-                              </Button>
-                            </div>
-                          ))}
-                          {stage.documents.length === 0 && (
-                            <span className="text-sm text-muted-foreground">No documents linked</span>
-                          )}
-                        </div>
-                      </div>
-
                       {/* Notes */}
                       <div>
                         <Label className="text-xs">Notes</Label>
@@ -1308,79 +1188,6 @@ export default function CohortRunbook() {
                         );
                       })()}
 
-                      {/* Session Threshold Config — only for setup stage */}
-                      {stage.stage_type === 'setup' && (() => {
-                        const currentCohort = cohorts.find(c => c.id === selectedCohort);
-                        const thresholds = editingThresholds
-                          || currentCohort?.session_thresholds
-                          || DEFAULT_SESSION_THRESHOLDS;
-                        const phases: { key: JourneyPhase; label: string }[] = [
-                          { key: 'getting_started', label: 'Getting Started' },
-                          { key: 'building', label: 'Building' },
-                          { key: 'midpoint', label: 'Midpoint' },
-                          { key: 'wrapping_up', label: 'Wrapping Up' },
-                        ];
-
-                        return (
-                          <div className="border-t pt-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Settings className="w-4 h-4 text-muted-foreground" />
-                              <Label className="text-xs">Journey Phase Thresholds</Label>
-                            </div>
-                            <p className="text-xs text-muted-foreground mb-3">
-                              Configure how many completed sessions map to each journey phase. Used to auto-detect phase and send relevant messages.
-                            </p>
-                            <div className="grid grid-cols-2 gap-3">
-                              {phases.map(phase => {
-                                const range = thresholds[phase.key] || { min: 0, max: null };
-                                return (
-                                  <div key={phase.key} className="flex items-center gap-2">
-                                    <span className="text-xs w-28 truncate">{phase.label}</span>
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      className="h-7 w-16 text-xs"
-                                      value={range.min}
-                                      onChange={(e) => {
-                                        const updated = { ...thresholds, [phase.key]: { ...range, min: Number(e.target.value) } };
-                                        setEditingThresholds(updated);
-                                      }}
-                                    />
-                                    <span className="text-xs text-muted-foreground">to</span>
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      className="h-7 w-16 text-xs"
-                                      placeholder="∞"
-                                      value={range.max ?? ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value ? Number(e.target.value) : null;
-                                        const updated = { ...thresholds, [phase.key]: { ...range, max: val } };
-                                        setEditingThresholds(updated);
-                                      }}
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {editingThresholds && (
-                              <Button
-                                size="sm"
-                                className="mt-3"
-                                onClick={handleSaveThresholds}
-                                disabled={isSavingThresholds}
-                              >
-                                {isSavingThresholds ? (
-                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                )}
-                                Save Thresholds
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      })()}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
@@ -1412,54 +1219,6 @@ export default function CohortRunbook() {
               Cancel
             </Button>
             <Button onClick={handleAddChecklistItem}>Add Item</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Document Dialog */}
-      <Dialog open={isAddDocDialogOpen} onOpenChange={setIsAddDocDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Document Link</DialogTitle>
-            <DialogDescription>Link a document or resource to this stage</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Document Name</Label>
-              <Input
-                value={newDocName}
-                onChange={(e) => setNewDocName(e.target.value)}
-                placeholder="e.g., Program Guidelines"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>URL</Label>
-              <Input
-                value={newDocUrl}
-                onChange={(e) => setNewDocUrl(e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={newDocType} onValueChange={(v) => setNewDocType(v as typeof newDocType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="doc">Document</SelectItem>
-                  <SelectItem value="sheet">Spreadsheet</SelectItem>
-                  <SelectItem value="pdf">PDF</SelectItem>
-                  <SelectItem value="link">External Link</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDocDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddDocument}>Add Document</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

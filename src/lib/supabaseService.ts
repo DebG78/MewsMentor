@@ -28,7 +28,6 @@ function dbCohortToCohort(dbCohort: CohortRow, mentees: MenteeData[], mentors: M
     success_rate_target: dbCohort.success_rate_target || 85,
     mentor_survey_id: (dbCohort as any).mentor_survey_id || undefined,
     mentee_survey_id: (dbCohort as any).mentee_survey_id || undefined,
-    session_thresholds: (dbCohort as any).session_thresholds || undefined
   }
 }
 
@@ -229,7 +228,6 @@ export async function updateCohort(id: string, updates: Partial<Cohort>): Promis
     ...(updates.manual_matches !== undefined && { manual_matches: updates.manual_matches as any }),
     ...(updates.mentor_survey_id !== undefined && { mentor_survey_id: updates.mentor_survey_id }),
     ...(updates.mentee_survey_id !== undefined && { mentee_survey_id: updates.mentee_survey_id }),
-    ...(updates.session_thresholds !== undefined && { session_thresholds: updates.session_thresholds as any }),
     updated_at: new Date().toISOString()
   }
 

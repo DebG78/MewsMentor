@@ -40,35 +40,3 @@ export function renderTemplate(template: string, context: TemplateContext): stri
   });
 }
 
-// ============================================================================
-// Session threshold defaults and phase detection
-// ============================================================================
-
-export interface SessionThresholdRange {
-  min: number;
-  max: number | null;
-}
-
-export type SessionThresholds = Record<string, SessionThresholdRange>;
-
-export const DEFAULT_SESSION_THRESHOLDS: SessionThresholds = {
-  getting_started: { min: 1, max: 2 },
-  building: { min: 3, max: 5 },
-  midpoint: { min: 6, max: 7 },
-  wrapping_up: { min: 8, max: null },
-};
-
-export function detectJourneyPhase(
-  sessionCount: number,
-  thresholds: SessionThresholds
-): string | null {
-  const phases = ['getting_started', 'building', 'midpoint', 'wrapping_up'];
-  for (const phase of phases) {
-    const range = thresholds[phase];
-    if (!range) continue;
-    if (sessionCount >= range.min && (range.max === null || sessionCount <= range.max)) {
-      return phase;
-    }
-  }
-  return null;
-}

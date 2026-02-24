@@ -331,11 +331,6 @@ export function AnalyticsHelpGuide() {
                   the session is logged. If a match is found in multiple cohorts, the request
                   returns an error for manual resolution.
                 </p>
-                <p className="text-muted-foreground">
-                  Journey phase thresholds (e.g., sessions 1–2 = Getting Started, 3–5 = Building, etc.)
-                  are configurable per cohort in the Runbook's Setup stage. Defaults are used if no custom
-                  thresholds are set.
-                </p>
               </CardContent>
             </Card>
 
@@ -455,7 +450,6 @@ export function AnalyticsHelpGuide() {
                   <li>Approve matches, noting any overrides from algorithm recommendations</li>
                   <li>Check People Analytics topic demand vs supply for the new cohort</li>
                   <li>Set up an MS Form for session logging and share with participants</li>
-                  <li>Configure <strong>journey phase thresholds</strong> in the Runbook's Setup stage (e.g., sessions 1–2 = Getting Started)</li>
                   <li>Create <strong>next-steps message templates</strong> in Settings &rarr; Message Templates for each journey phase</li>
                 </ul>
               </CardContent>

@@ -380,14 +380,6 @@ const Settings = () => {
                           returns <code className="bg-background px-1 rounded">{`{ sent, failed, skipped }`}</code> counts.
                         </p>
                       </div>
-                      <div>
-                        <span className="font-medium">Configuring session thresholds:</span>
-                        <p className="mt-1 ml-2 text-muted-foreground">
-                          In the Runbook's <strong>Setup</strong> stage, you'll find a "Journey Phase Thresholds" section where you can
-                          configure how many completed sessions map to each phase. These thresholds are saved per cohort and used
-                          by both auto-detect (log-session) and manual sends.
-                        </p>
-                      </div>
                     </div>
                   </div>
 

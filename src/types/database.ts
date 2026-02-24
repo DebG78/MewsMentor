@@ -26,7 +26,6 @@ export interface Database {
           manual_matches: Json | null
           mentor_survey_id: string | null
           mentee_survey_id: string | null
-          session_thresholds: Json | null
           created_at: string
           updated_at: string
         }
@@ -46,7 +45,6 @@ export interface Database {
           manual_matches?: Json | null
           mentor_survey_id?: string | null
           mentee_survey_id?: string | null
-          session_thresholds?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -66,7 +64,6 @@ export interface Database {
           manual_matches?: Json | null
           mentor_survey_id?: string | null
           mentee_survey_id?: string | null
-          session_thresholds?: Json | null
           created_at?: string
           updated_at?: string
         }
