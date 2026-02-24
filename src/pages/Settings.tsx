@@ -174,10 +174,11 @@ const Settings = () => {
                       <Badge variant="outline">Zapier</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      All Slack messages (welcome DMs, next-steps messages, and channel announcements) are sent via a Zapier webhook.
-                      Three edge functions use this webhook:{' '}
+                      All Slack messages (welcome DMs, next-steps messages, bulk messages, and channel announcements) are sent via a Zapier webhook.
+                      Four edge functions use this webhook:{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code> (launch),{' '}
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code> (manual midpoint/closure blasts), and{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code> (manual midpoint/closure blasts),{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-bulk-messages</code> (ad-hoc messages to any group), and{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> (auto-sends next-steps after each logged session).
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
@@ -390,6 +391,62 @@ const Settings = () => {
                     </div>
                   </div>
 
+                  {/* Bulk Messaging / Compose & Send */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Bulk Messaging &amp; Compose &amp; Send
+                      <Badge variant="outline">New</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Send ad-hoc Slack DMs to any group of participants — unmatched mentees, everyone in a cohort,
+                      or people in the holding area. Useful for keeping unmatched participants warm between cohorts,
+                      sending updates, or any other custom communication.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">Two ways to send:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Settings &rarr; Messages &rarr; Compose &amp; Send tab</strong> — full compose flow: choose audience source, select recipients, pick or write a template, preview, and send</li>
+                          <li><strong>Cohort Detail &rarr; Actions menu &rarr; Message Unmatched</strong> — quick action pre-populated with unmatched mentees in that cohort</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Audience sources:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>All in cohort</strong> — every mentee and mentor assigned to a cohort</li>
+                          <li><strong>Unmatched in cohort</strong> — mentees who were not matched (no approved or manual match)</li>
+                          <li><strong>Holding area</strong> — people with <code className="bg-background px-1 rounded">cohort_id = 'unassigned'</code> waiting for placement</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium">Custom template types:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground">
+                          When creating a new message template, select <strong>"Custom..."</strong> from the type dropdown to enter
+                          your own type name (e.g. <code className="bg-background px-1 rounded">waitlist_nurture</code>,{' '}
+                          <code className="bg-background px-1 rounded">cohort_closed</code>,{' '}
+                          <code className="bg-background px-1 rounded">re_engagement</code>). Custom types are stored alongside
+                          built-in types and appear in all template pickers.
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium">How it works under the hood:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>The Compose &amp; Send UI calls the <code className="bg-background px-1 rounded">send-bulk-messages</code> edge function</li>
+                          <li>Each recipient gets a personalised message (placeholders like <code className="bg-background px-1 rounded">{'{FIRST_NAME}'}</code>, <code className="bg-background px-1 rounded">{'{PRIMARY_CAPABILITY}'}</code> are filled per person)</li>
+                          <li>Messages are sent as Slack DMs via the same Zapier webhook</li>
+                          <li>Every message is logged to the <code className="bg-background px-1 rounded">message_log</code> table and visible in the Message Log tab</li>
+                          <li>Recipients without a <code className="bg-background px-1 rounded">slack_user_id</code> are flagged in the UI and cannot be selected</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium">Available placeholders:</span>
+                        <code className="block bg-background p-2 rounded mt-1 text-xs">
+                          {'{FIRST_NAME}'}, {'{FULL_NAME}'}, {'{ROLE_TITLE}'}, {'{PRIMARY_CAPABILITY}'}, {'{SECONDARY_CAPABILITY}'}, {'{MENTORING_GOAL}'}, {'{BIO}'}, {'{COHORT_NAME}'}, {'{ADMIN_EMAIL}'}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Summary of all secrets */}
                   <div className="space-y-3 border-t pt-6">
                     <h3 className="text-base font-semibold">All Supabase Secrets Summary</h3>
@@ -407,6 +464,7 @@ const Settings = () => {
                       <strong>Edge functions to deploy:</strong>{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code>,{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code>,{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-bulk-messages</code>,{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code>,{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code>
                     </p>

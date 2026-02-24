@@ -239,6 +239,7 @@ export const TEMPLATE_TYPES = [
   { value: 'next_steps', label: 'Next Steps (generic)' },
   { value: 'next_steps_mentee', label: 'Next Steps - Mentee' },
   { value: 'next_steps_mentor', label: 'Next Steps - Mentor' },
+  { value: '_custom', label: 'Custom...' },
 ] as const;
 
 export const JOURNEY_PHASES = [
@@ -261,3 +262,186 @@ export const AVAILABLE_PLACEHOLDERS = [
   // Cohort
   '{COHORT_NAME}', '{RESOURCE_LINK}', '{SURVEY_LINK}', '{ADMIN_EMAIL}',
 ] as const;
+
+// ============================================================================
+// PARTICIPANT HELPERS (for bulk messaging)
+// ============================================================================
+
+export interface Participant {
+  id: string;
+  type: 'mentee' | 'mentor';
+  full_name: string;
+  first_name: string;
+  slack_user_id: string | null;
+  primary_capability: string | null;
+  secondary_capability: string | null;
+  bio: string | null;
+  mentoring_goal: string | null;
+  role: string | null;
+  cohort_id: string;
+}
+
+function menteeToParticipant(m: any): Participant {
+  return {
+    id: m.mentee_id,
+    type: 'mentee',
+    full_name: m.full_name || '',
+    first_name: m.first_name || m.full_name?.split(' ')[0] || '',
+    slack_user_id: m.slack_user_id || null,
+    primary_capability: m.primary_capability || null,
+    secondary_capability: m.secondary_capability || null,
+    bio: m.bio || null,
+    mentoring_goal: m.mentoring_goal || null,
+    role: m.role || null,
+    cohort_id: m.cohort_id,
+  };
+}
+
+function mentorToParticipant(m: any): Participant {
+  return {
+    id: m.mentor_id,
+    type: 'mentor',
+    full_name: m.full_name || '',
+    first_name: m.first_name || m.full_name?.split(' ')[0] || '',
+    slack_user_id: m.slack_user_id || null,
+    primary_capability: m.primary_capability || null,
+    secondary_capability: m.secondary_capability || null,
+    bio: m.bio || null,
+    mentoring_goal: m.mentor_motivation || null,
+    role: m.role || null,
+    cohort_id: m.cohort_id,
+  };
+}
+
+/**
+ * Get all mentees + mentors in a cohort.
+ */
+export async function getCohortParticipants(cohortId: string): Promise<Participant[]> {
+  const [menteesRes, mentorsRes] = await Promise.all([
+    supabase.from('mentees').select('*').eq('cohort_id', cohortId),
+    supabase.from('mentors').select('*').eq('cohort_id', cohortId),
+  ]);
+
+  const mentees = (menteesRes.data || []).map(menteeToParticipant);
+  const mentors = (mentorsRes.data || []).map(mentorToParticipant);
+  return [...mentees, ...mentors];
+}
+
+/**
+ * Get unmatched mentees in a cohort (those without a proposed_assignment in matching results).
+ */
+export async function getUnmatchedInCohort(cohortId: string): Promise<Participant[]> {
+  // Get the cohort to read matching results
+  const { data: cohort, error } = await supabase
+    .from('cohorts')
+    .select('matches, manual_matches')
+    .eq('id', cohortId)
+    .single();
+
+  if (error || !cohort) return [];
+
+  // Collect all matched mentee IDs from both algo and manual matches
+  const matchedMenteeIds = new Set<string>();
+  const algoResults = (cohort.matches as any)?.results || [];
+  for (const r of algoResults) {
+    if (r.proposed_assignment?.mentor_id) {
+      matchedMenteeIds.add(r.mentee_id);
+    }
+  }
+  const manualMatches = (cohort.manual_matches as any)?.matches || [];
+  for (const m of manualMatches) {
+    matchedMenteeIds.add(m.mentee_id);
+  }
+
+  // Get all mentees in cohort and filter to unmatched
+  const { data: mentees } = await supabase
+    .from('mentees')
+    .select('*')
+    .eq('cohort_id', cohortId);
+
+  return (mentees || [])
+    .filter(m => !matchedMenteeIds.has(m.mentee_id))
+    .map(menteeToParticipant);
+}
+
+/**
+ * Get everyone in the holding area (cohort_id = 'unassigned').
+ */
+export async function getHoldingAreaParticipants(): Promise<Participant[]> {
+  const [menteesRes, mentorsRes] = await Promise.all([
+    supabase.from('mentees').select('*').eq('cohort_id', 'unassigned'),
+    supabase.from('mentors').select('*').eq('cohort_id', 'unassigned'),
+  ]);
+
+  const mentees = (menteesRes.data || []).map(menteeToParticipant);
+  const mentors = (mentorsRes.data || []).map(mentorToParticipant);
+  return [...mentees, ...mentors];
+}
+
+// ============================================================================
+// SEND BULK MESSAGES (calls edge function)
+// ============================================================================
+
+export interface BulkRecipient {
+  slack_user_id: string;
+  context: Record<string, string>;
+}
+
+export interface SendBulkResult {
+  success: boolean;
+  sent: number;
+  failed: number;
+  errors?: string[];
+}
+
+/**
+ * Build the template context for a participant.
+ */
+export function buildParticipantContext(
+  participant: Participant,
+  cohortName?: string,
+): Record<string, string> {
+  return {
+    FIRST_NAME: participant.first_name,
+    FULL_NAME: participant.full_name,
+    ROLE_TITLE: participant.role || '',
+    PRIMARY_CAPABILITY: participant.primary_capability || '',
+    SECONDARY_CAPABILITY: participant.secondary_capability || '',
+    MENTORING_GOAL: participant.mentoring_goal || '',
+    BIO: participant.bio || '',
+    COHORT_NAME: cohortName || '',
+    ADMIN_EMAIL: 'mentoring@mews.com',
+  };
+}
+
+/**
+ * Send bulk messages via the send-bulk-messages edge function.
+ */
+export async function sendBulkMessages(params: {
+  cohortId: string;
+  templateType: string;
+  templateBody: string;
+  recipients: BulkRecipient[];
+}): Promise<SendBulkResult> {
+  const { data: result, error: fnError } = await supabase.functions.invoke(
+    'send-bulk-messages',
+    {
+      body: {
+        cohort_id: params.cohortId,
+        template_type: params.templateType,
+        template_body: params.templateBody,
+        recipients: params.recipients,
+      },
+    }
+  );
+
+  if (fnError) {
+    const detail = (fnError as any)?.context?.message
+      || (fnError as any)?.context?.error
+      || fnError.message
+      || 'Failed to send bulk messages';
+    throw new Error(detail);
+  }
+
+  return result as SendBulkResult;
+}

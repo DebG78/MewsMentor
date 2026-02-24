@@ -35,6 +35,7 @@ export interface CreateSessionInput {
   duration_minutes?: number;
   status?: SessionStatus;
   notes?: string;
+  journey_phase?: string;
 }
 
 export interface UpdateSessionInput {
@@ -132,6 +133,7 @@ export async function createSession(input: CreateSessionInput): Promise<SessionR
       duration_minutes: input.duration_minutes || 60,
       status: input.status || 'scheduled',
       notes: input.notes,
+      ...(input.journey_phase ? { journey_phase: input.journey_phase } : {}),
     })
     .select()
     .single();

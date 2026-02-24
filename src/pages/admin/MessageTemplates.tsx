@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -19,8 +20,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, MoreVertical, Loader2, Copy, Trash2, Edit, Eye, ChevronDown, ChevronRight, PackagePlus } from 'lucide-react';
+import { Plus, MoreVertical, Loader2, Copy, Trash2, Edit, Eye, ChevronDown, ChevronRight, PackagePlus, Send } from 'lucide-react';
 import { PageHeader } from "@/components/admin/PageHeader";
+import ComposeAndSend from "@/components/admin/ComposeAndSend";
 import {
   getMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, getMessageLog,
   TEMPLATE_TYPES, JOURNEY_PHASES, AVAILABLE_PLACEHOLDERS,
@@ -196,7 +198,10 @@ function renderPreview(template: string): string {
 }
 
 function getTypeLabel(value: string): string {
-  return TEMPLATE_TYPES.find(t => t.value === value)?.label || value;
+  const builtIn = TEMPLATE_TYPES.find(t => t.value === value && t.value !== '_custom');
+  if (builtIn) return builtIn.label;
+  // Custom types: format snake_case to Title Case
+  return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function getPhaseLabel(value: string | null): string {
@@ -286,6 +291,7 @@ export default function MessageTemplates() {
 
   // Form fields
   const [formType, setFormType] = useState('welcome_mentee');
+  const [formCustomType, setFormCustomType] = useState('');
   const [formPhase, setFormPhase] = useState<string>('');
   const [formCohortId, setFormCohortId] = useState<string>('_global');
   const [formBody, setFormBody] = useState('');
@@ -339,6 +345,7 @@ export default function MessageTemplates() {
   function openCreateDialog() {
     setEditingTemplate(null);
     setFormType('welcome_mentee');
+    setFormCustomType('');
     setFormPhase('');
     setFormCohortId('_global');
     setFormBody('');
@@ -349,7 +356,9 @@ export default function MessageTemplates() {
 
   function openEditDialog(template: MessageTemplate) {
     setEditingTemplate(template);
-    setFormType(template.template_type);
+    const isBuiltIn = TEMPLATE_TYPES.some(t => t.value === template.template_type && t.value !== '_custom');
+    setFormType(isBuiltIn ? template.template_type : '_custom');
+    setFormCustomType(isBuiltIn ? '' : template.template_type);
     setFormPhase(template.journey_phase || '');
     setFormCohortId(template.cohort_id || '_global');
     setFormBody(template.body);
@@ -360,7 +369,9 @@ export default function MessageTemplates() {
 
   function openDuplicateDialog(template: MessageTemplate) {
     setEditingTemplate(null);
-    setFormType(template.template_type);
+    const isBuiltIn = TEMPLATE_TYPES.some(t => t.value === template.template_type && t.value !== '_custom');
+    setFormType(isBuiltIn ? template.template_type : '_custom');
+    setFormCustomType(isBuiltIn ? '' : template.template_type);
     setFormPhase(template.journey_phase || '');
     setFormCohortId(template.cohort_id || '_global');
     setFormBody(template.body);
@@ -375,6 +386,11 @@ export default function MessageTemplates() {
   }
 
   async function handleSave() {
+    const resolvedType = formType === '_custom' ? formCustomType.trim() : formType;
+    if (!resolvedType) {
+      toast({ title: 'Template type is required', variant: 'destructive' });
+      return;
+    }
     if (!formBody.trim()) {
       toast({ title: 'Body is required', variant: 'destructive' });
       return;
@@ -383,8 +399,8 @@ export default function MessageTemplates() {
     try {
       await upsertMessageTemplate({
         ...(editingTemplate ? { id: editingTemplate.id } : {}),
-        template_type: formType,
-        journey_phase: formType === 'next_steps' ? formPhase || null : null,
+        template_type: resolvedType,
+        journey_phase: resolvedType.startsWith('next_steps') ? formPhase || null : null,
         cohort_id: formCohortId === '_global' ? null : formCohortId,
         body: formBody,
         is_active: formActive,
@@ -513,6 +529,10 @@ export default function MessageTemplates() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="compose">
+            <Send className="w-3.5 h-3.5 mr-1.5" />
+            Compose & Send
+          </TabsTrigger>
           <TabsTrigger value="log">Message Log</TabsTrigger>
         </TabsList>
 
@@ -605,6 +625,17 @@ export default function MessageTemplates() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ============ COMPOSE & SEND TAB ============ */}
+        <TabsContent value="compose">
+          <ComposeAndSend
+            cohorts={cohorts}
+            templates={templates}
+            onMessagesSent={() => {
+              if (logCohortId) loadMessageLog(logCohortId);
+            }}
+          />
         </TabsContent>
 
         {/* ============ MESSAGE LOG TAB ============ */}
@@ -761,7 +792,7 @@ export default function MessageTemplates() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Template Type</Label>
-                <Select value={formType} onValueChange={setFormType}>
+                <Select value={formType} onValueChange={(v) => { setFormType(v); if (v !== '_custom') setFormCustomType(''); }}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -771,9 +802,17 @@ export default function MessageTemplates() {
                     ))}
                   </SelectContent>
                 </Select>
+                {formType === '_custom' && (
+                  <Input
+                    value={formCustomType}
+                    onChange={(e) => setFormCustomType(e.target.value)}
+                    placeholder="e.g. waitlist_nurture, cohort_closed"
+                    className="mt-2"
+                  />
+                )}
               </div>
 
-              {formType === 'next_steps' && (
+              {(formType === '_custom' ? formCustomType : formType).startsWith('next_steps') && (
                 <div className="space-y-2">
                   <Label>Journey Phase</Label>
                   <Select value={formPhase} onValueChange={setFormPhase}>

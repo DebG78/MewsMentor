@@ -101,6 +101,7 @@ export function SessionLogImport({ onImported }: SessionLogImportProps) {
           scheduled_datetime: item.date,
           duration_minutes: item.duration_minutes,
           status: 'completed',
+          journey_phase: item.journey_phase,
         });
         successCount++;
       } catch {

@@ -1070,6 +1070,20 @@ export default function CohortRunbook() {
                                 </button>
                               </div>
                             )}
+
+                            {/* Tip about messaging unmatched */}
+                            {isLaunch && (
+                              <p className="text-xs text-muted-foreground mt-3 bg-muted/50 rounded px-3 py-2">
+                                <strong>Tip:</strong> To message unmatched mentees (e.g. waitlist updates), use the{' '}
+                                <button
+                                  className="text-primary underline"
+                                  onClick={() => navigate(`/admin/settings?tab=messages`)}
+                                >
+                                  Compose &amp; Send
+                                </button>{' '}
+                                tab in Messages, or the "Message Unmatched" action in the Cohort Detail page.
+                              </p>
+                            )}
                           </div>
                         );
                       })()}

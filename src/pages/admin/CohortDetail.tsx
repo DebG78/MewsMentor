@@ -24,6 +24,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -31,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -65,6 +67,7 @@ import {
   Briefcase,
   Search,
   Download,
+  Loader2,
 } from "lucide-react";
 import {
   getCohortById,
@@ -77,7 +80,10 @@ import {
   saveManualMatches,
 } from "@/lib/cohortManager";
 import { updateMenteeProfile, updateMentorProfile, removeFromCohort } from "@/lib/supabaseService";
-import { sendWelcomeMessages } from "@/lib/messageService";
+import {
+  sendWelcomeMessages, getMessageTemplates, sendBulkMessages,
+  buildParticipantContext, type MessageTemplate, type Participant,
+} from "@/lib/messageService";
 import { exportSlackIds } from "@/lib/exportService";
 import { Cohort, ImportResult, MatchingResult, MatchingOutput } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
@@ -120,6 +126,12 @@ export default function CohortDetail() {
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string; type: 'mentee' | 'mentor' } | null>(null);
   const [editDescription, setEditDescription] = useState("");
   const [editManager, setEditManager] = useState("");
+  const [isMessageUnmatchedOpen, setIsMessageUnmatchedOpen] = useState(false);
+  const [messageTemplates, setMessageTemplates] = useState<MessageTemplate[]>([]);
+  const [selectedMsgTemplateId, setSelectedMsgTemplateId] = useState<string>('');
+  const [msgBody, setMsgBody] = useState('');
+  const [msgSelectedIds, setMsgSelectedIds] = useState<Set<string>>(new Set());
+  const [sendingMessages, setSendingMessages] = useState(false);
 
   useEffect(() => {
     loadCohort();
@@ -800,6 +812,24 @@ export default function CohortDetail() {
                 <Download className="h-4 w-4 mr-2" />
                 Export Slack IDs
               </DropdownMenuItem>
+              {unmatchedMentees.length > 0 && (
+                <DropdownMenuItem onClick={async () => {
+                  try {
+                    const tpls = await getMessageTemplates();
+                    setMessageTemplates(tpls.filter(t => t.is_active));
+                  } catch { /* ignore */ }
+                  // Pre-select all unmatched mentees with slack IDs
+                  setMsgSelectedIds(new Set(
+                    unmatchedMentees.filter(m => m.slack_user_id).map(m => m.id)
+                  ));
+                  setSelectedMsgTemplateId('');
+                  setMsgBody('');
+                  setIsMessageUnmatchedOpen(true);
+                }}>
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Message Unmatched ({unmatchedMentees.length})
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
                 const sendMessages = window.confirm(
@@ -2120,6 +2150,149 @@ export default function CohortDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Message Unmatched Dialog */}
+      <Dialog open={isMessageUnmatchedOpen} onOpenChange={setIsMessageUnmatchedOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Message Unmatched Mentees</DialogTitle>
+            <DialogDescription>
+              Send a message to {unmatchedMentees.length} unmatched mentee{unmatchedMentees.length !== 1 ? 's' : ''} in this cohort
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Recipients */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Recipients</Label>
+                <Button
+                  variant="ghost" size="sm" className="h-7 text-xs"
+                  onClick={() => {
+                    const sendable = unmatchedMentees.filter(m => m.slack_user_id);
+                    setMsgSelectedIds(prev =>
+                      prev.size === sendable.length ? new Set() : new Set(sendable.map(m => m.id))
+                    );
+                  }}
+                >
+                  {msgSelectedIds.size === unmatchedMentees.filter(m => m.slack_user_id).length ? 'Deselect all' : 'Select all'}
+                </Button>
+              </div>
+              <div className="border rounded-md max-h-[200px] overflow-y-auto divide-y">
+                {unmatchedMentees.map(m => (
+                  <label
+                    key={m.id}
+                    className={`flex items-center gap-3 px-3 py-2 hover:bg-accent/50 cursor-pointer ${!m.slack_user_id ? 'opacity-50' : ''}`}
+                  >
+                    <Checkbox
+                      checked={msgSelectedIds.has(m.id)}
+                      onCheckedChange={() => {
+                        setMsgSelectedIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                          return next;
+                        });
+                      }}
+                      disabled={!m.slack_user_id}
+                    />
+                    <span className="text-sm flex-1">{m.name || m.id}</span>
+                    {!m.slack_user_id && <span className="text-[10px] text-muted-foreground">No Slack ID</span>}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{msgSelectedIds.size} selected</p>
+            </div>
+
+            {/* Template picker */}
+            <div className="space-y-2">
+              <Label>Template (optional)</Label>
+              <Select value={selectedMsgTemplateId} onValueChange={(v) => {
+                setSelectedMsgTemplateId(v);
+                const tpl = messageTemplates.find(t => t.id === v);
+                if (tpl) setMsgBody(tpl.body);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template or write below..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {messageTemplates.map(t => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.template_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      {t.cohort_id ? ' [cohort]' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Message body */}
+            <div className="space-y-2">
+              <Label>Message</Label>
+              <Textarea
+                value={msgBody}
+                onChange={(e) => setMsgBody(e.target.value)}
+                placeholder="Hi {FIRST_NAME}, we wanted to let you know..."
+                rows={8}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use {'{FIRST_NAME}'}, {'{FULL_NAME}'}, {'{PRIMARY_CAPABILITY}'}, {'{COHORT_NAME}'}, {'{ADMIN_EMAIL}'} for personalization
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setIsMessageUnmatchedOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!msgBody.trim() || msgSelectedIds.size === 0 || sendingMessages}
+              onClick={async () => {
+                setSendingMessages(true);
+                try {
+                  const recipients = unmatchedMentees
+                    .filter(m => msgSelectedIds.has(m.id) && m.slack_user_id)
+                    .map(m => ({
+                      slack_user_id: m.slack_user_id!,
+                      context: {
+                        FIRST_NAME: m.first_name || m.name?.split(' ')[0] || '',
+                        FULL_NAME: m.name || '',
+                        ROLE_TITLE: m.role || '',
+                        PRIMARY_CAPABILITY: m.primary_capability || '',
+                        MENTORING_GOAL: m.mentoring_goal || '',
+                        BIO: m.bio || '',
+                        COHORT_NAME: cohort.name,
+                        ADMIN_EMAIL: 'mentoring@mews.com',
+                      },
+                    }));
+
+                  const result = await sendBulkMessages({
+                    cohortId: cohort.id,
+                    templateType: selectedMsgTemplateId
+                      ? (messageTemplates.find(t => t.id === selectedMsgTemplateId)?.template_type || 'bulk_message')
+                      : 'bulk_message',
+                    templateBody: msgBody,
+                    recipients,
+                  });
+
+                  toast({
+                    title: 'Messages sent',
+                    description: `${result.sent} sent, ${result.failed} failed out of ${recipients.length} recipients.`,
+                    variant: result.failed > 0 ? 'destructive' : 'default',
+                  });
+                  setIsMessageUnmatchedOpen(false);
+                } catch (err: any) {
+                  toast({ title: 'Error sending messages', description: err.message, variant: 'destructive' });
+                } finally {
+                  setSendingMessages(false);
+                }
+              }}
+            >
+              {sendingMessages && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Send to {msgSelectedIds.size}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

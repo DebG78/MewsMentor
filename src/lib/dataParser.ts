@@ -6,6 +6,7 @@ import {
   DEVELOPMENT_TOPICS,
   EXPERIENCE_MAPPING,
   Cohort,
+  type JourneyPhase,
 } from "@/types/mentoring";
 import type { CreateVIPScoreInput, PersonType } from '@/types/vip';
 import type { CreateMetricSnapshotInput } from '@/types/metrics';
@@ -1254,6 +1255,7 @@ export interface SessionLogRow {
   date: string;
   duration_minutes: number;
   rating: number;
+  journey_phase?: JourneyPhase;
   raw_row_index: number;
 }
 
@@ -1368,11 +1370,28 @@ export function parseSessionLogCSV(
       warnings.push(`Row ${rowNum}: No rating provided for "${name}", defaulting to 3`);
     }
 
+    // Journey phase column — optional, supports display labels and internal keys
+    const phaseRaw = (
+      findColumnValue(row, ['journey_phase', 'phase', 'stage', 'journey_stage', 'which_stage', 'current_stage']) || ''
+    ).trim().toLowerCase();
+    const PHASE_LABEL_MAP: Record<string, JourneyPhase> = {
+      'getting started': 'getting_started',
+      'getting_started': 'getting_started',
+      'building': 'building',
+      'midpoint': 'midpoint',
+      'midpoint check-in': 'midpoint',
+      'midpoint_check_in': 'midpoint',
+      'wrapping up': 'wrapping_up',
+      'wrapping_up': 'wrapping_up',
+    };
+    const journey_phase: JourneyPhase | undefined = PHASE_LABEL_MAP[phaseRaw];
+
     const logRow: SessionLogRow = {
       respondent_name: name,
       date: parsedDate.toISOString(),
       duration_minutes: duration,
       rating,
+      journey_phase,
       raw_row_index: i,
     };
 
