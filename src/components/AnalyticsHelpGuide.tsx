@@ -278,6 +278,63 @@ export function AnalyticsHelpGuide() {
 
             <Card>
               <CardHeader>
+                <CardTitle className="text-base">End-of-Mentoring Survey</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <p><strong>How data arrives:</strong> Automatically via Power Automate (per response)</p>
+                <p><strong>When:</strong> End of each cohort</p>
+                <p>
+                  Each form submission is sent to the <code className="text-xs bg-muted px-1 py-0.5 rounded">import-end-survey</code> edge function,
+                  which saves the individual response and <strong>auto-computes metric snapshots</strong> for the cohort.
+                  See <strong>Settings → Integrations</strong> for Power Automate setup instructions.
+                </p>
+                <p className="font-medium mt-2">Metrics auto-populated:</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Metric</TableHead>
+                      <TableHead>Source Questions</TableHead>
+                      <TableHead>Calculation</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">mentee_satisfaction_score</TableCell>
+                      <TableCell>Q8 (skill clarity) + Q9 (focus clarity) + Q18 (overall worth)</TableCell>
+                      <TableCell>Average of 3 scores per mentee, then avg across mentees</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">mentor_satisfaction_score</TableCell>
+                      <TableCell>Q3 (support growth) + Q5 (saw impact) + Q6 (time worthwhile)</TableCell>
+                      <TableCell>Average of 3 scores per mentor, then avg across mentors</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">nps_score</TableCell>
+                      <TableCell>Q20 (would join again)</TableCell>
+                      <TableCell>Yes = promoter, No = detractor, Maybe = passive. NPS = %promoters - %detractors</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">goal_achievement_rate</TableCell>
+                      <TableCell>Q8 (skill clarity)</TableCell>
+                      <TableCell>% of mentees scoring Q8 ≥ 4 out of 5</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">mentor_retention_rate</TableCell>
+                      <TableCell>Q20 (would join again)</TableCell>
+                      <TableCell>% of mentors answering "Yes"</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-xs">match_satisfaction_score</TableCell>
+                      <TableCell>Q14 (pairing satisfaction)</TableCell>
+                      <TableCell>Average of Q14 across all respondents</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle className="text-base">Tips for Data Consistency</CardTitle>
               </CardHeader>
               <CardContent className="text-sm space-y-2">

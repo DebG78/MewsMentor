@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { Cohort, MenteeData, MentorData, ImportResult, MatchingOutput, MatchingHistoryEntry, ManualMatchingOutput } from '@/types/mentoring'
 import type { Database } from '@/types/database'
+import type { EndSurveyResponse, EndSurveySummary } from '@/types/metrics'
 
 type CohortRow = Database['public']['Tables']['cohorts']['Row']
 type CohortInsert = Database['public']['Tables']['cohorts']['Insert']
@@ -1612,6 +1613,92 @@ export async function updateMentorProfile(
   } catch (error) {
     console.error('Error in updateMentorProfile:', error)
     return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+// ============================================================================
+// END-OF-MENTORING SURVEY
+// ============================================================================
+
+export async function getEndSurveyResponses(cohortId: string): Promise<EndSurveyResponse[]> {
+  const { data, error } = await supabase
+    .from('end_survey_responses')
+    .select('*')
+    .eq('cohort_id', cohortId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching end survey responses:', error)
+    return []
+  }
+
+  return (data || []) as EndSurveyResponse[]
+}
+
+export async function getEndSurveySummary(cohortId: string): Promise<EndSurveySummary> {
+  const responses = await getEndSurveyResponses(cohortId)
+
+  const mentorResponses = responses.filter(r => r.respondent_type === 'mentor' || r.respondent_type === 'both')
+  const menteeResponses = responses.filter(r => r.respondent_type === 'mentee' || r.respondent_type === 'both')
+
+  const avgFn = (values: (number | undefined | null)[]): number | null => {
+    const valid = values.filter((v): v is number => v != null)
+    if (valid.length === 0) return null
+    return Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10
+  }
+
+  // Mentor satisfaction: avg of Q3, Q5, Q6 per mentor, then avg across mentors
+  const mentorSatValues = mentorResponses
+    .map(r => {
+      const scores = [r.mentor_support_growth, r.mentor_saw_impact, r.mentor_time_worthwhile].filter((v): v is number => v != null)
+      return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+    })
+    .filter((v): v is number => v !== null)
+
+  // Mentee satisfaction: avg of Q8, Q9, Q18 per mentee, then avg across mentees
+  const menteeSatValues = menteeResponses
+    .map(r => {
+      const scores = [r.mentee_skill_clarity, r.mentee_focus_clarity, r.overall_worth].filter((v): v is number => v != null)
+      return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+    })
+    .filter((v): v is number => v !== null)
+
+  // NPS from would_join_again
+  const validJoinAgain = responses.filter(r => r.would_join_again)
+  let npsScore: number | null = null
+  if (validJoinAgain.length > 0) {
+    const promoters = validJoinAgain.filter(r => r.would_join_again === 'yes').length
+    const detractors = validJoinAgain.filter(r => r.would_join_again === 'no').length
+    npsScore = Math.round(((promoters - detractors) / validJoinAgain.length) * 100)
+  }
+
+  // Mentor retention rate
+  const mentorJoinAgain = mentorResponses.filter(r => r.would_join_again)
+  let mentorRetentionRate: number | null = null
+  if (mentorJoinAgain.length > 0) {
+    const yesCount = mentorJoinAgain.filter(r => r.would_join_again === 'yes').length
+    mentorRetentionRate = Math.round((yesCount / mentorJoinAgain.length) * 100)
+  }
+
+  // Goal achievement rate
+  const menteeSkillScores = menteeResponses.map(r => r.mentee_skill_clarity).filter((v): v is number => v != null)
+  let goalAchievementRate: number | null = null
+  if (menteeSkillScores.length > 0) {
+    const achieved = menteeSkillScores.filter(v => v >= 4).length
+    goalAchievementRate = Math.round((achieved / menteeSkillScores.length) * 100)
+  }
+
+  return {
+    totalResponses: responses.length,
+    mentorCount: mentorResponses.length,
+    menteeCount: menteeResponses.length,
+    avgMentorSatisfaction: avgFn(mentorSatValues),
+    avgMenteeSatisfaction: avgFn(menteeSatValues),
+    avgMatchSatisfaction: avgFn(responses.map(r => r.match_satisfaction)),
+    avgOverallWorth: avgFn(responses.map(r => r.overall_worth)),
+    npsScore,
+    mentorRetentionRate,
+    goalAchievementRate,
   }
 }
 

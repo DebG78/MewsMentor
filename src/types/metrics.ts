@@ -66,6 +66,59 @@ export interface CreateMetricSnapshotInput {
   notes?: string;
 }
 
+// ============================================================================
+// END-OF-MENTORING SURVEY TYPES
+// ============================================================================
+
+export interface EndSurveyResponse {
+  id: string;
+  cohort_id: string;
+  slack_user_id?: string;
+  respondent_name?: string;
+  respondent_type: 'mentor' | 'mentee' | 'both';
+  survey_date: string;
+
+  // Mentor questions (Q3-Q7)
+  mentor_support_growth?: number;
+  mentor_used_new_skills?: number;
+  mentor_saw_impact?: number;
+  mentor_time_worthwhile?: number;
+  mentor_behavior_change?: string;
+
+  // Mentee questions (Q8-Q12)
+  mentee_skill_clarity?: number;
+  mentee_focus_clarity?: number;
+  mentee_perspective_challenged?: number;
+  mentee_prepared_between?: number;
+  mentee_unexpected_development?: string;
+
+  // Experience questions (Q13-Q21)
+  cross_team_collaboration?: number;
+  match_satisfaction?: number;
+  comfortable_being_open?: number;
+  meeting_frequency?: string;
+  session_became_useful?: string;
+  overall_worth?: number;
+  easy_momentum?: number;
+  would_join_again?: 'yes' | 'no' | 'maybe';
+  open_feedback?: string;
+
+  created_at: string;
+}
+
+export interface EndSurveySummary {
+  totalResponses: number;
+  mentorCount: number;
+  menteeCount: number;
+  avgMentorSatisfaction: number | null;
+  avgMenteeSatisfaction: number | null;
+  avgMatchSatisfaction: number | null;
+  avgOverallWorth: number | null;
+  npsScore: number | null;
+  mentorRetentionRate: number | null;
+  goalAchievementRate: number | null;
+}
+
 // Calculated metric with target comparison
 export interface MetricWithStatus {
   target: SuccessTarget;
@@ -151,6 +204,7 @@ export const METRIC_LABELS: Record<string, string> = {
   goal_achievement_rate: 'Goal Achievement Rate',
   mentor_retention_rate: 'Mentor Retention Rate',
   early_dropout_rate: 'Early Dropout Rate',
+  match_satisfaction_score: 'Match Satisfaction',
 };
 
 // Unit formatters

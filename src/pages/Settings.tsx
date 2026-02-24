@@ -349,6 +349,89 @@ const Settings = () => {
                     </div>
                   </div>
 
+                  {/* End-of-Mentoring Survey Import via Power Automate */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      End-of-Mentoring Survey Import
+                      <Badge variant="outline">Power Automate</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Import end-of-mentoring survey responses from Microsoft Forms. The <code className="text-xs bg-muted px-1 py-0.5 rounded">import-end-survey</code> edge
+                      function saves individual responses and <strong>auto-computes metric snapshots</strong> (mentee satisfaction,
+                      mentor satisfaction, NPS, goal achievement rate, mentor retention rate, match satisfaction) after each submission.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">Power Automate flow setup:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Trigger: <strong>When a new response is submitted</strong> (Microsoft Forms — end survey form)</li>
+                          <li>Action: <strong>Get response details</strong> (Microsoft Forms)</li>
+                          <li>Action: <strong>HTTP</strong> → POST</li>
+                          <li>URI: <code className="bg-background px-1 rounded">https://YOUR_PROJECT.supabase.co/functions/v1/import-end-survey</code></li>
+                          <li>Append <code className="bg-background px-1 rounded">?cohort_id=YOUR_COHORT_ID</code> to target a specific cohort, <strong>or omit it</strong> to auto-detect from the respondent's Slack ID</li>
+                          <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_END_SURVEY_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">HTTP body — map MS Forms dynamic content:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground mb-2">
+                          Use the MS Forms dynamic content picker to map each question. The edge function uses keyword-based matching,
+                          so the column headers from your form will be matched automatically.
+                        </p>
+                        <pre className="bg-background p-3 rounded text-xs overflow-x-auto text-muted-foreground">
+{`{
+  "Please share with us your slack ID": "@{outputs('Get_response_details')?['body/...slack...']}",
+  "For this cohort I participated as": "@{outputs('Get_response_details')?['body/...participated...']}",
+  "Mentoring helped me improve how I support others growth": "@{...Q3...}",
+  "I used skills in mentoring that I dont regularly use in my role": "@{...Q4...}",
+  "I could see a positive impact on my mentee": "@{...Q5...}",
+  "The time I invested in mentoring felt worthwhile": "@{...Q6...}",
+  "How has mentoring changed the way you support or interact with others at work": "@{...Q7...}",
+  "I now have a clearer understanding of how to practice this skill": "@{...Q8...}",
+  "My mentor helped me clarify what I should focus on developing next": "@{...Q9...}",
+  "My mentor challenged my perspective rather than just giving answers": "@{...Q10...}",
+  "I actively prepared or reflected between sessions": "@{...Q11...}",
+  "What is something you ended up developing through mentoring that you didnt expect": "@{...Q12...}",
+  "Mentoring improved how I collaborate or communicate outside my usual team": "@{...Q13...}",
+  "How well did your mentor-mentee pairing work for you": "@{...Q14...}",
+  "I felt comfortable being open during mentoring conversations": "@{...Q15...}",
+  "How often did you meet": "@{...Q16...}",
+  "Around which session did conversations start becoming genuinely useful": "@{...Q17...}",
+  "Overall this mentoring relationship was worth the time invested": "@{...Q18...}",
+  "It was easy to maintain momentum between sessions": "@{...Q19...}",
+  "Would you join mentoring again": "@{...Q20...}",
+  "Anything you would like to share with us": "@{...Q21...}"
+}`}
+                        </pre>
+                      </div>
+                      <div>
+                        <span className="font-medium">Cohort auto-detection (when no ?cohort_id):</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Looks up the respondent by Slack ID across all <strong>active</strong> cohorts</li>
+                          <li>If found in multiple cohorts, selects the one with the most completed sessions</li>
+                          <li>Falls back to the most recently created cohort if tied</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Metrics auto-computed after each response:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Mentee Satisfaction</strong> — avg of Q8 + Q9 + Q18 for mentee respondents</li>
+                          <li><strong>Mentor Satisfaction</strong> — avg of Q3 + Q5 + Q6 for mentor respondents</li>
+                          <li><strong>NPS Score</strong> — from Q20 (Yes = promoter, No = detractor, Maybe = passive)</li>
+                          <li><strong>Goal Achievement Rate</strong> — % of mentees scoring Q8 ≥ 4</li>
+                          <li><strong>Mentor Retention Rate</strong> — % of mentors answering Q20 = Yes</li>
+                          <li><strong>Match Satisfaction</strong> — avg of Q14 across all respondents</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium">Supabase secret required:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><code className="bg-background px-1 rounded">END_SURVEY_API_KEY</code> — shared key for authenticating end survey calls</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Next-Steps Stage Messaging */}
                   <div className="space-y-3">
                     <h3 className="text-base font-semibold flex items-center gap-2">
@@ -450,6 +533,7 @@ const Settings = () => {
                       <div><code>SLACK_MENTORING_CHANNEL</code> — e.g. #mentoring (used for channel announcements)</div>
                       <div><code>SURVEY_IMPORT_API_KEY</code> — API key for survey import (used by Power Automate)</div>
                       <div><code>LOG_SESSION_API_KEY</code> — API key for session logging (used by Power Automate)</div>
+                      <div><code>END_SURVEY_API_KEY</code> — API key for end-of-mentoring survey import (used by Power Automate)</div>
                       <div><code>ADMIN_EMAIL</code> — Admin contact email for templates (optional, defaults to mentoring@mews.com)</div>
                     </div>
                     <p className="text-sm text-muted-foreground mt-3">
@@ -458,7 +542,8 @@ const Settings = () => {
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code>,{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-bulk-messages</code>,{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code>,{' '}
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code>
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">import-survey-response</code>,{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">import-end-survey</code>
                     </p>
                   </div>
                 </CardContent>
