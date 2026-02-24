@@ -59,6 +59,15 @@ export function applyHardFilters(
     }
   }
 
+  // First-time mentor filter (Q18): hard block if mentee explicitly requires prior experience
+  if (mentee.mentor_experience_importance) {
+    const pref = mentee.mentor_experience_importance.toLowerCase();
+    const requiresExperience = pref.includes('no') && pref.includes('prior');
+    if (requiresExperience && !mentor.has_mentored_before) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -313,7 +322,8 @@ function calculateCapacityPenalty(capacityRemaining: number): number {
 // ============================================================================
 
 /**
- * Compatibility score based on style, energy, feedback, and meeting frequency preferences.
+ * Compatibility score based on style, energy, feedback, meeting frequency, and mentoring
+ * style alignment (mentor_help_wanted vs natural_strengths).
  * Averages all sub-factors where both values exist (0–1 scale).
  */
 function calculateCompatibility(mentee: MenteeData, mentor: MentorData): number {
@@ -325,11 +335,37 @@ function calculateCompatibility(mentee: MenteeData, mentor: MentorData): number 
     return 0;
   };
 
+  // Session style: use new-survey meeting_style with legacy mentoring_style as fallback
+  const mentorSessionStyle = mentor.meeting_style || mentor.mentoring_style;
+
+  // mentor_help_wanted (Q17) vs natural_strengths (Q31): both use aligned option lists.
+  // Normalize by stripping the "Someone who..." / "I..." prefixes, then measure word overlap.
+  const styleAlignmentScore = (() => {
+    const wanted = mentee.mentor_help_wanted;
+    const strengths = mentor.natural_strengths;
+    if (!wanted?.length || !strengths?.length) return null;
+
+    const tokenize = (s: string) =>
+      s.toLowerCase()
+        .replace(/^someone who (will |can )?/i, '')
+        .replace(/^i (help |provide |share |hold |challenge |navigate |role-plays? )?/i, '')
+        .split(/[\s()\/,+]+/)
+        .filter(w => w.length > 3);
+
+    const wantedTokens = new Set(wanted.flatMap(tokenize));
+    const strengthTokens = new Set(strengths.flatMap(tokenize));
+    if (wantedTokens.size === 0) return null;
+
+    const overlap = [...wantedTokens].filter(t => strengthTokens.has(t)).length;
+    return Math.min(1, overlap / wantedTokens.size);
+  })();
+
   const scores = [
-    comparePair(mentee.preferred_mentor_style, mentor.mentoring_style),
+    comparePair(mentee.preferred_mentor_style, mentorSessionStyle),
     comparePair(mentee.preferred_mentor_energy, mentor.mentor_energy),
     comparePair(mentee.feedback_preference, mentor.feedback_style),
     comparePair(mentee.meeting_frequency, mentor.meeting_frequency),
+    styleAlignmentScore,
   ].filter((s): s is number => s !== null);
 
   if (scores.length === 0) return 0;
@@ -363,15 +399,16 @@ function calculateDepartmentDiversity(mentee: MenteeData, mentor: MentorData): n
 export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): MatchScore {
   const features = calculateFeatures(mentee, mentor);
 
-  // Scoring formula: Core weights + Advanced weights (default 0, no effect unless enabled)
+  // Scoring formula: weights sum to 100 at max (ignoring capacity penalty)
+  // capability(45) + semantic(30) + domain(5) + seniority(10) + timezone(5) + compatibility(5) = 100
   const totalScore = Math.max(0, Math.min(100,
     45 * features.capability_match +
     30 * features.semantic_similarity +
     5 * features.domain_match +
     10 * features.role_seniority_fit +
-    5 * features.tz_overlap_bonus -
+    5 * features.tz_overlap_bonus +
+    5 * features.compatibility_score -
     10 * features.capacity_penalty
-    // Advanced factors use default 0 weight in this path (no effect)
   ));
 
   // Compute timezone distance once for reasons and risks

@@ -688,6 +688,8 @@ export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: n
     languages: ['English'],
     goals_text: goalsText,
 
+    department: shared.team,
+
     // Preferences (mapped from new fields or kept from matching headers)
     preferred_mentor_style: mentee?.preferred_style,
     feedback_preference: mentee?.feedback_preference,
@@ -704,6 +706,7 @@ export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: n
     secondary_proficiency: mentee?.secondary_proficiency,
     mentoring_goal: mentee?.mentoring_goal,
     practice_scenarios: mentee?.practice_scenarios || [],
+    mentor_help_wanted: mentee?.mentor_help_wanted || [],
   };
 }
 
@@ -739,6 +742,7 @@ export function parseNewFormatMentorRow(row: Record<string, string>, rowIndex: n
     location_timezone: shared.location_timezone,
     seniority_band: shared.seniority_band,
     industry: shared.industry,
+    department: shared.team,
 
     // Legacy fields (populated for backward compat)
     topics_to_mentor: topicsToMentor,

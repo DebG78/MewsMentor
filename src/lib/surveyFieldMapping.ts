@@ -17,7 +17,7 @@
  */
 export function findColumnByKeywords(
   row: Record<string, string>,
-  keywordGroups: string[][]
+  keywordGroups: readonly (readonly string[])[]
 ): string | undefined {
   for (const keywords of keywordGroups) {
     for (const key of Object.keys(row)) {
@@ -36,7 +36,7 @@ export function findColumnByKeywords(
  */
 export function findHeaderByKeywords(
   row: Record<string, string>,
-  keywordGroups: string[][]
+  keywordGroups: readonly (readonly string[])[]
 ): string | undefined {
   for (const keywords of keywordGroups) {
     for (const key of Object.keys(row)) {
@@ -123,6 +123,7 @@ export function parseCapacityText(value: string | undefined, defaultValue: numbe
 export const SHARED_BIO_PATTERNS = {
   seniority_band: [['current level']],
   role: [['role title'], ['current role']],
+  team: [["team's name"], ['write down your team'], ['team name']],
   industry: [['select your function'], ['your function']],
   location_timezone: [['time-zone'], ['time zone'], ['preferred time']],
   bio: [['context about your role'], ['provide a little context'], ['role and focus']],
@@ -160,14 +161,15 @@ export const MENTOR_PATTERNS = {
   mentoring_experience: [['first time mentoring'], ['first time mentor']],
   first_time_support: [['support would help you feel confident'], ['what support']],
   primary_capability: [['primary capability', 'strongest'], ['primary capability', 'mentoring on']],
+  capabilities_all: [['feel confident mentoring'], ['confident mentoring others'], ['capabilities', 'confident']],  // Q25 full list (CSV fallback)
   primary_capability_detail: [['domain expertise', 'more info']],  // in mentor context
-  secondary_capabilities: [['secondary capability']],  // multi-select
+  secondary_capabilities: [['secondary capabilit']],  // handles both "capability" and "capabilities" (plural PA label)
   // secondary_capability_detail: handled by position
-  primary_proficiency: [['proficiency', 'primary']],
+  primary_proficiency: [['proficiency', 'primary', 'mentor'], ['proficiency', 'primary', 'strongest']],  // disambiguates from mentee proficiency
   practice_scenarios: [['practice scenarios', 'strongest'], ['scenarios you\'re strongest']],
   hard_earned_lesson: [['hard-earned lesson'], ['hard earned lesson']],
   natural_strengths: [['naturally bring'], ['natural strengths']],
-  meeting_style: [['session style']],
+  meeting_style: [['session style', 'mentor'], ['session style', 'style (mentor']],  // disambiguates from mentee session style
   topics_not_to_mentor: [['do not want to mentor'], ['prefer not to mentor']],
   excluded_scenarios: [['prefer not to support'], ['scenarios you prefer not']],
   match_exclusions: [['make a match not work'], ['anything else']],
@@ -177,7 +179,7 @@ export const MENTOR_PATTERNS = {
 // Seniority band parsing
 // ============================================================================
 
-const VALID_SENIORITY_BANDS = ['S1', 'S2', 'M1', 'M2', 'D1', 'D2', 'VP', 'SVP', 'LT'];
+const VALID_SENIORITY_BANDS = ['IC1', 'IC2', 'IC3', 'IC4', 'IC5', 'S1', 'S2', 'M1', 'M2', 'D1', 'D2', 'VP', 'SVP', 'LT'];
 
 /**
  * Parse and normalize a seniority band value from the survey.
@@ -213,6 +215,7 @@ export interface NewSurveySharedFields {
   slack_user_id?: string;
   seniority_band: string;
   role: string;
+  team?: string;
   industry: string;
   location_timezone: string;
   bio?: string;
@@ -258,7 +261,7 @@ export interface NewSurveyMentorFields {
  * Extract shared bio fields from a new-format survey row.
  */
 export function extractSharedFields(row: Record<string, string>): NewSurveySharedFields {
-  const f = (patterns: string[][]) => findColumnByKeywords(row, patterns);
+  const f = (patterns: readonly (readonly string[])[]) => findColumnByKeywords(row, patterns);
 
   // Determine role selection
   const roleRaw = f(SHARED_BIO_PATTERNS.role_selection) || '';
@@ -276,6 +279,7 @@ export function extractSharedFields(row: Record<string, string>): NewSurveyShare
     slack_user_id: f(SHARED_BIO_PATTERNS.slack_user_id),
     seniority_band: parseSeniorityBand(f(SHARED_BIO_PATTERNS.seniority_band)),
     role: f(SHARED_BIO_PATTERNS.role) || '',
+    team: f(SHARED_BIO_PATTERNS.team),
     industry: f(SHARED_BIO_PATTERNS.industry) || '',
     location_timezone: f(SHARED_BIO_PATTERNS.location_timezone) || '',
     bio: f(SHARED_BIO_PATTERNS.bio),
@@ -288,7 +292,7 @@ export function extractSharedFields(row: Record<string, string>): NewSurveyShare
  * Returns null if no mentee data is populated.
  */
 export function extractMenteeFields(row: Record<string, string>): NewSurveyMenteeFields | null {
-  const f = (patterns: string[][]) => findColumnByKeywords(row, patterns);
+  const f = (patterns: readonly (readonly string[])[]) => findColumnByKeywords(row, patterns);
 
   const primaryCap = f(MENTEE_PATTERNS.primary_capability);
   const goal = f(MENTEE_PATTERNS.mentoring_goal);
@@ -330,10 +334,18 @@ export function extractMenteeFields(row: Record<string, string>): NewSurveyMente
  * Returns null if no mentor data is populated.
  */
 export function extractMentorFields(row: Record<string, string>): NewSurveyMentorFields | null {
-  const f = (patterns: string[][]) => findColumnByKeywords(row, patterns);
+  const f = (patterns: readonly (readonly string[])[]) => findColumnByKeywords(row, patterns);
 
-  const primaryCap = f(MENTOR_PATTERNS.primary_capability);
+  let primaryCap = f(MENTOR_PATTERNS.primary_capability);
   const motivation = f(MENTOR_PATTERNS.mentor_motivation);
+
+  // Q25 fallback: "Select the capabilities you feel confident mentoring others in"
+  // Parse as multi-select; first item becomes primary, rest become secondary_capabilities
+  const allCapabilitiesRaw = f(MENTOR_PATTERNS.capabilities_all);
+  const allCapabilities = parseMultiSelect(allCapabilitiesRaw);
+  if (!primaryCap && allCapabilities.length > 0) {
+    primaryCap = allCapabilities[0];
+  }
 
   // If no primary capability and no motivation, likely not a mentor response
   if (!primaryCap && !motivation) return null;
@@ -361,7 +373,8 @@ export function extractMentorFields(row: Record<string, string>): NewSurveyMento
     first_time_support: parseMultiSelect(f(MENTOR_PATTERNS.first_time_support)),
     primary_capability: primaryCap,
     primary_capability_detail: detailKeys[mentorDetailOffset] ? row[detailKeys[mentorDetailOffset]]?.trim() || undefined : undefined,
-    secondary_capabilities: parseMultiSelect(f(MENTOR_PATTERNS.secondary_capabilities)),
+    secondary_capabilities: parseMultiSelect(f(MENTOR_PATTERNS.secondary_capabilities)) ||
+      (allCapabilities.length > 1 ? allCapabilities.slice(1) : []),
     secondary_capability_detail: detailKeys[mentorDetailOffset + 1] ? row[detailKeys[mentorDetailOffset + 1]]?.trim() || undefined : undefined,
     primary_proficiency: parseProficiency(f(MENTOR_PATTERNS.primary_proficiency)),
     practice_scenarios: parseMultiSelect(f(MENTOR_PATTERNS.practice_scenarios)),

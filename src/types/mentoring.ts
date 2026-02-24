@@ -57,6 +57,7 @@ export interface MenteeData {
   secondary_proficiency?: number; // 1-4
   mentoring_goal?: string;
   practice_scenarios?: string[];
+  mentor_help_wanted?: string[]; // Q17: kind of mentor help wanted (new survey)
 }
 
 export interface MentorData {
