@@ -9,6 +9,7 @@ export interface MessageTemplate {
   cohort_id: string | null;
   template_type: string;
   journey_phase: string | null;
+  stage_type: string | null;
   body: string;
   is_active: boolean;
   created_at: string;
@@ -63,6 +64,7 @@ export async function upsertMessageTemplate(
         template_type: template.template_type,
         journey_phase: template.journey_phase || null,
         cohort_id: template.cohort_id || null,
+        stage_type: template.stage_type || null,
         is_active: template.is_active ?? true,
         updated_at: new Date().toISOString(),
       })
@@ -81,6 +83,7 @@ export async function upsertMessageTemplate(
       template_type: template.template_type,
       journey_phase: template.journey_phase || null,
       cohort_id: template.cohort_id || null,
+      stage_type: template.stage_type || null,
       is_active: template.is_active ?? true,
     })
     .select()
@@ -240,6 +243,14 @@ export const TEMPLATE_TYPES = [
   { value: 'next_steps_mentee', label: 'Next Steps - Mentee' },
   { value: 'next_steps_mentor', label: 'Next Steps - Mentor' },
   { value: '_custom', label: 'Custom...' },
+] as const;
+
+export const STAGE_TYPES = [
+  { value: 'launch', label: 'Launch' },
+  { value: 'midpoint', label: 'Midpoint' },
+  { value: 'closure', label: 'Closure' },
+  { value: 'setup', label: 'Setup' },
+  { value: 'reporting', label: 'Reporting' },
 ] as const;
 
 export const JOURNEY_PHASES = [

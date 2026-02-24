@@ -20,12 +20,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, MoreVertical, Loader2, Copy, Trash2, Edit, Eye, ChevronDown, ChevronRight, PackagePlus, Send } from 'lucide-react';
+import { Plus, MoreVertical, Loader2, Copy, Trash2, Edit, Eye, ChevronDown, ChevronRight, PackagePlus, Send, Search } from 'lucide-react';
 import { PageHeader } from "@/components/admin/PageHeader";
 import ComposeAndSend from "@/components/admin/ComposeAndSend";
 import {
   getMessageTemplates, upsertMessageTemplate, deleteMessageTemplate, getMessageLog,
-  TEMPLATE_TYPES, JOURNEY_PHASES, AVAILABLE_PLACEHOLDERS,
+  TEMPLATE_TYPES, JOURNEY_PHASES, STAGE_TYPES, AVAILABLE_PLACEHOLDERS,
   type MessageTemplate, type MessageLogEntry,
 } from '@/lib/messageService';
 import { getAllCohorts } from '@/lib/supabaseService';
@@ -209,6 +209,11 @@ function getPhaseLabel(value: string | null): string {
   return JOURNEY_PHASES.find(p => p.value === value)?.label || value;
 }
 
+function getStageLabel(value: string | null): string {
+  if (!value) return '';
+  return STAGE_TYPES.find(s => s.value === value)?.label || value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 interface MessageBatch {
   id: string;
   template_type: string;
@@ -293,11 +298,16 @@ export default function MessageTemplates() {
   const [formType, setFormType] = useState('welcome_mentee');
   const [formCustomType, setFormCustomType] = useState('');
   const [formPhase, setFormPhase] = useState<string>('');
+  const [formStage, setFormStage] = useState<string>('');
   const [formCohortId, setFormCohortId] = useState<string>('_global');
   const [formBody, setFormBody] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Template list filters
+  const [filterStage, setFilterStage] = useState<string>('_all');
+  const [filterSearch, setFilterSearch] = useState<string>('');
 
   useEffect(() => {
     loadData();
@@ -347,6 +357,7 @@ export default function MessageTemplates() {
     setFormType('welcome_mentee');
     setFormCustomType('');
     setFormPhase('');
+    setFormStage('');
     setFormCohortId('_global');
     setFormBody('');
     setFormActive(true);
@@ -360,6 +371,7 @@ export default function MessageTemplates() {
     setFormType(isBuiltIn ? template.template_type : '_custom');
     setFormCustomType(isBuiltIn ? '' : template.template_type);
     setFormPhase(template.journey_phase || '');
+    setFormStage(template.stage_type || '');
     setFormCohortId(template.cohort_id || '_global');
     setFormBody(template.body);
     setFormActive(template.is_active);
@@ -373,6 +385,7 @@ export default function MessageTemplates() {
     setFormType(isBuiltIn ? template.template_type : '_custom');
     setFormCustomType(isBuiltIn ? '' : template.template_type);
     setFormPhase(template.journey_phase || '');
+    setFormStage(template.stage_type || '');
     setFormCohortId(template.cohort_id || '_global');
     setFormBody(template.body);
     setFormActive(true);
@@ -401,6 +414,7 @@ export default function MessageTemplates() {
         ...(editingTemplate ? { id: editingTemplate.id } : {}),
         template_type: resolvedType,
         journey_phase: resolvedType.startsWith('next_steps') ? formPhase || null : null,
+        stage_type: formStage || null,
         cohort_id: formCohortId === '_global' ? null : formCohortId,
         body: formBody,
         is_active: formActive,
@@ -433,6 +447,7 @@ export default function MessageTemplates() {
         body: template.body,
         is_active: !template.is_active,
         journey_phase: template.journey_phase,
+        stage_type: template.stage_type,
         cohort_id: template.cohort_id,
       });
       await loadData();
@@ -540,7 +555,34 @@ export default function MessageTemplates() {
         <TabsContent value="templates">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">All Templates</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">All Templates</CardTitle>
+                {templates.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search templates..."
+                        value={filterSearch}
+                        onChange={(e) => setFilterSearch(e.target.value)}
+                        className="pl-8 h-9 w-[200px]"
+                      />
+                    </div>
+                    <Select value={filterStage} onValueChange={setFilterStage}>
+                      <SelectTrigger className="w-[140px] h-9">
+                        <SelectValue placeholder="Filter by stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">All stages</SelectItem>
+                        <SelectItem value="_none">No stage</SelectItem>
+                        {STAGE_TYPES.map(s => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {templates.length === 0 ? (
@@ -552,11 +594,28 @@ export default function MessageTemplates() {
                     Add Default Templates
                   </Button>
                 </div>
-              ) : (
+              ) : (() => {
+                const filtered = templates.filter(t => {
+                  if (filterStage === '_none' && t.stage_type) return false;
+                  if (filterStage !== '_all' && filterStage !== '_none' && t.stage_type !== filterStage) return false;
+                  if (filterSearch) {
+                    const q = filterSearch.toLowerCase();
+                    const typeLabel = getTypeLabel(t.template_type).toLowerCase();
+                    const body = t.body.toLowerCase();
+                    if (!typeLabel.includes(q) && !body.includes(q) && !t.template_type.toLowerCase().includes(q)) return false;
+                  }
+                  return true;
+                });
+                return filtered.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">
+                    No templates match your filters.
+                  </p>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Type</TableHead>
+                      <TableHead>Stage</TableHead>
                       <TableHead>Journey Phase</TableHead>
                       <TableHead>Scope</TableHead>
                       <TableHead>Active</TableHead>
@@ -565,10 +624,17 @@ export default function MessageTemplates() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {templates.map(template => (
+                    {filtered.map(template => (
                       <TableRow key={template.id}>
                         <TableCell>
                           <Badge variant="outline">{getTypeLabel(template.template_type)}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {template.stage_type ? (
+                            <Badge variant="secondary">{getStageLabel(template.stage_type)}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {template.journey_phase ? (
@@ -622,7 +688,8 @@ export default function MessageTemplates() {
                     ))}
                   </TableBody>
                 </Table>
-              )}
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -827,6 +894,21 @@ export default function MessageTemplates() {
                   </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label>Runbook Stage</Label>
+                <Select value={formStage || '_none'} onValueChange={(v) => setFormStage(v === '_none' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">No stage</SelectItem>
+                    {STAGE_TYPES.map(s => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="space-y-2">
                 <Label>Cohort Scope</Label>

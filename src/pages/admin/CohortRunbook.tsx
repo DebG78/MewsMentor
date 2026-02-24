@@ -56,6 +56,8 @@ import {
   RotateCcw,
   MessageSquare,
   Send,
+  X,
+  Edit,
 } from 'lucide-react';
 import type { CohortStage, StageStatus, StageType, ChecklistItem, DocumentLink } from '@/types/runbook';
 import { STAGE_METADATA } from '@/types/runbook';
@@ -81,8 +83,9 @@ import { getAllCohorts, updateCohort } from '@/lib/supabaseService';
 import { cn } from '@/lib/utils';
 import {
   getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
+  sendBulkMessages, getCohortParticipants, buildParticipantContext,
   TEMPLATE_TYPES,
-  type MessageTemplate, type MessageLogSummary,
+  type MessageTemplate, type MessageLogSummary, type Participant,
 } from '@/lib/messageService';
 import { DEFAULT_SESSION_THRESHOLDS, type SessionThresholds, type JourneyPhase } from '@/types/mentoring';
 
@@ -136,7 +139,7 @@ export default function CohortRunbook() {
   const [isCompleteAllDialogOpen, setIsCompleteAllDialogOpen] = useState(false);
 
   // Message template state
-  const [stageTemplates, setStageTemplates] = useState<MessageTemplate[]>([]);
+  const [allTemplates, setAllTemplates] = useState<MessageTemplate[]>([]);
   const [stageMsgSummary, setStageMsgSummary] = useState<Record<string, MessageLogSummary>>({});
   const [isSendingMessages, setIsSendingMessages] = useState(false);
   const [isSendConfirmOpen, setIsSendConfirmOpen] = useState(false);
@@ -149,12 +152,21 @@ export default function CohortRunbook() {
   const [sendStagePhase, setSendStagePhase] = useState<string>('');
   const [sendStageLabel, setSendStageLabel] = useState<string>('');
 
+  // Flexible template assignment per stage (local state — not persisted)
+  const [stageAssignedTemplates, setStageAssignedTemplates] = useState<Record<string, MessageTemplate[]>>({});
+  // One-time message body overrides per template ID
+  const [stageMessageOverrides, setStageMessageOverrides] = useState<Record<string, string>>({});
+  // Currently editing template inline
+  const [editingInlineTemplate, setEditingInlineTemplate] = useState<string | null>(null);
+  // Template picker dialog
+  const [addTemplateForStage, setAddTemplateForStage] = useState<string | null>(null);
+
   // Session threshold editing state
   const [editingThresholds, setEditingThresholds] = useState<SessionThresholds | null>(null);
   const [isSavingThresholds, setIsSavingThresholds] = useState(false);
 
-  // Stage type → template type mapping
-  const STAGE_TEMPLATE_MAP: Record<string, { types: string[]; phase?: string }> = {
+  // Default template types for auto-populating each stage
+  const STAGE_DEFAULT_TYPES: Record<string, { types: string[]; phase?: string }> = {
     launch: { types: ['welcome_mentee', 'welcome_mentor', 'channel_announcement'] },
     midpoint: { types: ['next_steps', 'next_steps_mentee', 'next_steps_mentor'], phase: 'midpoint' },
     closure: { types: ['next_steps', 'next_steps_mentee', 'next_steps_mentor'], phase: 'wrapping_up' },
@@ -199,11 +211,34 @@ export default function CohortRunbook() {
       ]);
       setStages(stagesData);
       setProgress(progressData);
-      setStageTemplates(templatesData);
+      setAllTemplates(templatesData);
+
+      // Auto-populate stage template assignments from stage_type tag (primary) + legacy defaults (fallback)
+      const assignments: Record<string, MessageTemplate[]> = {};
+      for (const stage of stagesData) {
+        // Primary: templates tagged with this stage_type
+        const taggedTemplates = templatesData.filter(t => t.stage_type === stage.stage_type);
+        if (taggedTemplates.length > 0) {
+          assignments[stage.id] = taggedTemplates;
+        } else {
+          // Fallback: legacy hardcoded type matching
+          const defaults = STAGE_DEFAULT_TYPES[stage.stage_type];
+          if (defaults) {
+            assignments[stage.id] = templatesData.filter(t => {
+              if (!defaults.types.includes(t.template_type)) return false;
+              if (defaults.phase && t.template_type.startsWith('next_steps') && t.journey_phase !== defaults.phase) return false;
+              return true;
+            });
+          }
+        }
+      }
+      setStageAssignedTemplates(assignments);
+      setStageMessageOverrides({});
+      setEditingInlineTemplate(null);
 
       // Load message log summaries for stages that have templates
       const summaryPromises: Record<string, Promise<MessageLogSummary>> = {};
-      for (const [stageType, config] of Object.entries(STAGE_TEMPLATE_MAP)) {
+      for (const [stageType, config] of Object.entries(STAGE_DEFAULT_TYPES)) {
         summaryPromises[stageType] = getMessageLogSummary(selectedCohort, config.types);
       }
       const summaryKeys = Object.keys(summaryPromises);
@@ -468,20 +503,41 @@ export default function CohortRunbook() {
     }
   };
 
-  // Get templates relevant to a specific runbook stage
-  function getTemplatesForStage(stageType: StageType): MessageTemplate[] {
-    const config = STAGE_TEMPLATE_MAP[stageType];
-    if (!config) return [];
+  function getTypeLabel(value: string): string {
+    const builtIn = TEMPLATE_TYPES.find(t => t.value === value && t.value !== '_custom');
+    if (builtIn) return builtIn.label;
+    return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
 
-    return stageTemplates.filter(t => {
-      if (!config.types.includes(t.template_type)) return false;
-      if (config.phase && t.template_type === 'next_steps' && t.journey_phase !== config.phase) return false;
-      return true;
+  function getEffectiveBody(templateId: string): string {
+    return stageMessageOverrides[templateId] ?? allTemplates.find(t => t.id === templateId)?.body ?? '';
+  }
+
+  function handleAssignTemplate(stageId: string, template: MessageTemplate) {
+    setStageAssignedTemplates(prev => {
+      const current = prev[stageId] || [];
+      if (current.some(t => t.id === template.id)) return prev;
+      return { ...prev, [stageId]: [...current, template] };
+    });
+    setAddTemplateForStage(null);
+  }
+
+  function handleUnassignTemplate(stageId: string, templateId: string) {
+    setStageAssignedTemplates(prev => ({
+      ...prev,
+      [stageId]: (prev[stageId] || []).filter(t => t.id !== templateId),
+    }));
+    // Clean up any override
+    setStageMessageOverrides(prev => {
+      const next = { ...prev };
+      delete next[templateId];
+      return next;
     });
   }
 
-  function getTypeLabel(value: string): string {
-    return TEMPLATE_TYPES.find(t => t.value === value)?.label || value;
+  function hasAnyOverrides(stageId: string): boolean {
+    const templates = stageAssignedTemplates[stageId] || [];
+    return templates.some(t => stageMessageOverrides[t.id] !== undefined);
   }
 
   // Sample preview renderer
@@ -500,13 +556,45 @@ export default function CohortRunbook() {
     setIsSendConfirmOpen(false);
     setIsSendingMessages(true);
     try {
-      const result = await sendWelcomeMessages(selectedCohort);
-      toast({
-        title: 'Welcome messages sent',
-        description: `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`,
-      });
-      // Auto-check "Send match notifications" checklist item in the launch stage
       const launchStage = stages.find(s => s.stage_type === 'launch');
+      const hasOverrides = launchStage && hasAnyOverrides(launchStage.id);
+
+      if (hasOverrides && launchStage) {
+        // Use bulk send with overridden bodies
+        const participants = await getCohortParticipants(selectedCohort);
+        const cohortName = cohorts.find(c => c.id === selectedCohort)?.name || '';
+        const assigned = stageAssignedTemplates[launchStage.id] || [];
+        let totalSent = 0, totalFailed = 0;
+
+        for (const tpl of assigned) {
+          const body = getEffectiveBody(tpl.id);
+          if (!body) continue;
+          const recipients = participants
+            .filter(p => p.slack_user_id)
+            .map(p => ({ slack_user_id: p.slack_user_id!, context: buildParticipantContext(p, cohortName) }));
+          if (recipients.length === 0) continue;
+          const result = await sendBulkMessages({
+            cohortId: selectedCohort,
+            templateType: tpl.template_type,
+            templateBody: body,
+            recipients,
+          });
+          totalSent += result.sent;
+          totalFailed += result.failed;
+        }
+        toast({
+          title: 'Messages sent',
+          description: `${totalSent} sent, ${totalFailed} failed`,
+        });
+      } else {
+        // No overrides — use the standard edge function
+        const result = await sendWelcomeMessages(selectedCohort);
+        toast({
+          title: 'Welcome messages sent',
+          description: `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`,
+        });
+      }
+      // Auto-check "Send match notifications" checklist item in the launch stage
       if (launchStage) {
         const sendItem = launchStage.checklist.find(
           i => i.text.toLowerCase().includes('send match notification') && !i.completed
@@ -527,9 +615,59 @@ export default function CohortRunbook() {
     }
   };
 
+  // Send messages for any stage using bulk send (for overrides or custom templates)
+  const handleSendStageWithBulk = async (stageId: string, templateType: string) => {
+    if (!selectedCohort) return;
+    setIsSendingStageMessages(true);
+    try {
+      const participants = await getCohortParticipants(selectedCohort);
+      const cohortName = cohorts.find(c => c.id === selectedCohort)?.name || '';
+      const assigned = stageAssignedTemplates[stageId] || [];
+      let totalSent = 0, totalFailed = 0;
+
+      for (const tpl of assigned) {
+        const body = getEffectiveBody(tpl.id);
+        if (!body) continue;
+        const recipients = participants
+          .filter(p => p.slack_user_id)
+          .map(p => ({ slack_user_id: p.slack_user_id!, context: buildParticipantContext(p, cohortName) }));
+        if (recipients.length === 0) continue;
+        const result = await sendBulkMessages({
+          cohortId: selectedCohort,
+          templateType: tpl.template_type,
+          templateBody: body,
+          recipients,
+        });
+        totalSent += result.sent;
+        totalFailed += result.failed;
+      }
+      toast({
+        title: 'Messages sent',
+        description: `${totalSent} sent, ${totalFailed} failed`,
+      });
+      loadStages();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to send messages',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingStageMessages(false);
+    }
+  };
+
   const handleSendStageMessages = async () => {
     if (!selectedCohort || !sendStagePhase) return;
     setIsSendStageConfirmOpen(false);
+
+    // Check if the stage has overrides — if so, use bulk send
+    const stageType = sendStagePhase === 'midpoint' ? 'midpoint' : 'closure';
+    const stage = stages.find(s => s.stage_type === stageType);
+    if (stage && hasAnyOverrides(stage.id)) {
+      return handleSendStageWithBulk(stage.id, stageType);
+    }
+
     setIsSendingStageMessages(true);
     try {
       const result = await sendStageMessages(selectedCohort, sendStagePhase);
@@ -938,19 +1076,29 @@ export default function CohortRunbook() {
                         />
                       </div>
 
-                      {/* Messages section — only for launch, midpoint, closure */}
-                      {STAGE_TEMPLATE_MAP[stage.stage_type] && (() => {
-                        const config = STAGE_TEMPLATE_MAP[stage.stage_type];
-                        const relevantTemplates = getTemplatesForStage(stage.stage_type);
+                      {/* Messages section — for launch, midpoint, closure (or any stage with assigned templates) */}
+                      {(STAGE_DEFAULT_TYPES[stage.stage_type] || (stageAssignedTemplates[stage.id] && stageAssignedTemplates[stage.id].length > 0)) && (() => {
+                        const defaults = STAGE_DEFAULT_TYPES[stage.stage_type];
+                        const assignedTemplates = stageAssignedTemplates[stage.id] || [];
                         const summary = stageMsgSummary[stage.stage_type];
                         const isLaunch = stage.stage_type === 'launch';
-                        const isStageWithPhase = !!config.phase;
+                        const isStageWithPhase = !!defaults?.phase;
 
                         return (
                           <div className="border-t pt-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <MessageSquare className="w-4 h-4 text-muted-foreground" />
-                              <Label className="text-xs">Messages</Label>
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                                <Label className="text-xs">Messages</Label>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => setAddTemplateForStage(stage.id)}
+                              >
+                                <Plus className="w-3 h-3 mr-1" /> Add Template
+                              </Button>
                             </div>
 
                             {isStageWithPhase && (
@@ -960,59 +1108,131 @@ export default function CohortRunbook() {
                               </p>
                             )}
 
-                            {relevantTemplates.length === 0 ? (
+                            {assignedTemplates.length === 0 ? (
                               <p className="text-sm text-muted-foreground">
-                                No templates configured.{' '}
+                                No templates assigned.{' '}
+                                <button
+                                  className="text-primary underline"
+                                  onClick={() => setAddTemplateForStage(stage.id)}
+                                >
+                                  Add one
+                                </button>
+                                {' '}or{' '}
                                 <button
                                   className="text-primary underline"
                                   onClick={() => navigate('/admin/settings?tab=messages')}
                                 >
-                                  Create one
+                                  create a new template
                                 </button>
                               </p>
                             ) : (
                               <div className="space-y-2">
-                                {relevantTemplates.map(tpl => (
-                                  <div
-                                    key={tpl.id}
-                                    className="flex items-start gap-3 p-2 bg-muted/50 rounded-md"
-                                  >
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium">{getTypeLabel(tpl.template_type)}</span>
-                                        {!tpl.is_active && (
-                                          <Badge variant="outline" className="text-[10px] h-4">Inactive</Badge>
-                                        )}
+                                {assignedTemplates.map(tpl => {
+                                  const isOverridden = stageMessageOverrides[tpl.id] !== undefined;
+                                  const isEditing = editingInlineTemplate === tpl.id;
+                                  const effectiveBody = getEffectiveBody(tpl.id);
+
+                                  return (
+                                    <div key={tpl.id} className="border rounded-md">
+                                      <div className="flex items-start gap-3 p-2">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium">{getTypeLabel(tpl.template_type)}</span>
+                                            {!tpl.is_active && (
+                                              <Badge variant="outline" className="text-[10px] h-4">Inactive</Badge>
+                                            )}
+                                            {isOverridden && (
+                                              <Badge variant="secondary" className="text-[10px] h-4 bg-amber-100 text-amber-800">Modified</Badge>
+                                            )}
+                                          </div>
+                                          {!isEditing && (
+                                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                              {effectiveBody.substring(0, 100)}{effectiveBody.length > 100 ? '...' : ''}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 text-xs"
+                                            onClick={() => { setPreviewBody(renderPreview(effectiveBody)); setIsPreviewOpen(true); }}
+                                          >
+                                            <Eye className="w-3 h-3 mr-1" />Preview
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 text-xs"
+                                            onClick={() => {
+                                              if (isEditing) {
+                                                setEditingInlineTemplate(null);
+                                              } else {
+                                                setEditingInlineTemplate(tpl.id);
+                                                // Pre-populate override from current effective body if not already overridden
+                                                if (!isOverridden) {
+                                                  setStageMessageOverrides(prev => ({ ...prev, [tpl.id]: tpl.body }));
+                                                }
+                                              }
+                                            }}
+                                          >
+                                            <Edit className="w-3 h-3 mr-1" />
+                                            {isEditing ? 'Done' : 'Edit for this send'}
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                            onClick={() => handleUnassignTemplate(stage.id, tpl.id)}
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </Button>
+                                        </div>
                                       </div>
-                                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                                        {tpl.body.substring(0, 100)}{tpl.body.length > 100 ? '...' : ''}
-                                      </p>
+
+                                      {/* Inline editor */}
+                                      {isEditing && (
+                                        <div className="px-2 pb-2 space-y-2">
+                                          <Textarea
+                                            value={stageMessageOverrides[tpl.id] ?? tpl.body}
+                                            onChange={(e) => setStageMessageOverrides(prev => ({ ...prev, [tpl.id]: e.target.value }))}
+                                            rows={6}
+                                            className="text-xs font-mono"
+                                            placeholder="Edit the message body for this send..."
+                                          />
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-[10px] text-muted-foreground flex-1">
+                                              Use {'{FIRST_NAME}'}, {'{MENTOR_FIRST_NAME}'}, {'{COHORT_NAME}'}, etc. for placeholders.
+                                              This edit is a one-time override — the saved template is not changed.
+                                            </p>
+                                            {isOverridden && (
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 text-[10px]"
+                                                onClick={() => {
+                                                  setStageMessageOverrides(prev => {
+                                                    const next = { ...prev };
+                                                    delete next[tpl.id];
+                                                    return next;
+                                                  });
+                                                  setEditingInlineTemplate(null);
+                                                }}
+                                              >
+                                                Reset to original
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                    <div className="flex gap-1 shrink-0">
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-7 text-xs"
-                                        onClick={() => { setPreviewBody(tpl.body); setIsPreviewOpen(true); }}
-                                      >
-                                        <Eye className="w-3 h-3 mr-1" />Preview
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-7 text-xs"
-                                        onClick={() => navigate('/admin/settings?tab=messages')}
-                                      >
-                                        Edit
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
 
                             {/* Send button for launch stage */}
-                            {isLaunch && relevantTemplates.length > 0 && (
+                            {isLaunch && assignedTemplates.length > 0 && (
                               <Button
                                 size="sm"
                                 className="mt-3"
@@ -1029,12 +1249,12 @@ export default function CohortRunbook() {
                             )}
 
                             {/* Send button for midpoint/closure stages */}
-                            {isStageWithPhase && relevantTemplates.length > 0 && (
+                            {isStageWithPhase && assignedTemplates.length > 0 && (
                               <Button
                                 size="sm"
                                 className="mt-3"
                                 onClick={() => {
-                                  setSendStagePhase(config.phase!);
+                                  setSendStagePhase(defaults!.phase!);
                                   setSendStageLabel(
                                     stage.stage_type === 'midpoint' ? 'Midpoint' : 'Wrapping Up'
                                   );
@@ -1361,6 +1581,61 @@ export default function CohortRunbook() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Template Picker Dialog */}
+      <Dialog open={!!addTemplateForStage} onOpenChange={(open) => { if (!open) setAddTemplateForStage(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Template to Stage</DialogTitle>
+            <DialogDescription>
+              Choose from your saved message templates. You can edit any template inline after adding it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {allTemplates
+              .filter(t => t.is_active)
+              .filter(t => {
+                // Don't show templates already assigned to this stage
+                const assigned = addTemplateForStage ? (stageAssignedTemplates[addTemplateForStage] || []) : [];
+                return !assigned.some(a => a.id === t.id);
+              })
+              .map(t => (
+                <button
+                  key={t.id}
+                  className="w-full text-left p-3 rounded-md hover:bg-muted transition-colors border"
+                  onClick={() => { if (addTemplateForStage) handleAssignTemplate(addTemplateForStage, t); }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{getTypeLabel(t.template_type)}</span>
+                    {t.stage_type && (
+                      <Badge variant="secondary" className="text-[10px] h-4">{t.stage_type}</Badge>
+                    )}
+                    {t.journey_phase && (
+                      <Badge variant="outline" className="text-[10px] h-4">{t.journey_phase}</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                    {t.body.substring(0, 120)}{t.body.length > 120 ? '...' : ''}
+                  </p>
+                </button>
+              ))}
+            {allTemplates.filter(t => t.is_active).length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No active templates found.{' '}
+                <button
+                  className="text-primary underline"
+                  onClick={() => { setAddTemplateForStage(null); navigate('/admin/settings?tab=messages'); }}
+                >
+                  Create one in Settings
+                </button>
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddTemplateForStage(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
