@@ -1,9 +1,18 @@
+// ============================================================================
+// DEPRECATED for sign-up survey imports (Feb 2026)
+// Sign-up surveys are now imported via CSV bulk upload through the admin UI.
+// This edge function is kept for backward compatibility with existing
+// Power Automate webhooks (e.g. end-of-program surveys) but should NOT
+// be used for new sign-up survey integrations.
+// For sign-up imports, use: Admin UI → Data Import → CSV Upload
+// ============================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 // ============================================================================
 // Survey field mapping (mirrors src/lib/surveyFieldMapping.ts for Deno)
+// V2 format only — V3 simplified survey uses CSV bulk upload instead.
 // ============================================================================
 
 function findFieldByKeywords(

@@ -11,34 +11,55 @@ export interface TopicDemandSupply {
   gap: number;    // demand - supply (positive = unmet demand)
 }
 
+/**
+ * Split free-text capabilities into individual phrases for analytics grouping.
+ * Splits on commas, semicolons, and " and " to extract distinct capability mentions.
+ */
+function splitFreeTextCapabilities(text: string): string[] {
+  return text
+    .split(/[,;]|\band\b/i)
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s.length > 2);
+}
+
 export function getTopicDemandSupply(cohorts: Cohort[]): TopicDemandSupply[] {
   const demandMap = new Map<string, number>();
   const supplyMap = new Map<string, number>();
 
   for (const cohort of cohorts) {
     for (const mentee of cohort.mentees) {
-      // New survey: use primary/secondary capability
-      if (mentee.primary_capability) {
+      // V3: free-text capabilities_wanted
+      if (mentee.capabilities_wanted) {
+        for (const phrase of splitFreeTextCapabilities(mentee.capabilities_wanted)) {
+          demandMap.set(phrase, (demandMap.get(phrase) || 0) + 1);
+        }
+      } else if (mentee.primary_capability) {
+        // V2: use primary/secondary capability
         demandMap.set(mentee.primary_capability, (demandMap.get(mentee.primary_capability) || 0) + 1);
         if (mentee.secondary_capability) {
           demandMap.set(mentee.secondary_capability, (demandMap.get(mentee.secondary_capability) || 0) + 1);
         }
       } else {
-        // Legacy: use topics_to_learn
+        // V1 Legacy: use topics_to_learn
         for (const topic of mentee.topics_to_learn || []) {
           demandMap.set(topic, (demandMap.get(topic) || 0) + 1);
         }
       }
     }
     for (const mentor of cohort.mentors) {
-      // New survey: use primary capability + secondary capabilities array
-      if (mentor.primary_capability) {
+      // V3: free-text capabilities_offered
+      if (mentor.capabilities_offered) {
+        for (const phrase of splitFreeTextCapabilities(mentor.capabilities_offered)) {
+          supplyMap.set(phrase, (supplyMap.get(phrase) || 0) + 1);
+        }
+      } else if (mentor.primary_capability) {
+        // V2: use primary capability + secondary capabilities array
         supplyMap.set(mentor.primary_capability, (supplyMap.get(mentor.primary_capability) || 0) + 1);
         for (const cap of mentor.secondary_capabilities || []) {
           supplyMap.set(cap, (supplyMap.get(cap) || 0) + 1);
         }
       } else {
-        // Legacy: use topics_to_mentor
+        // V1 Legacy: use topics_to_mentor
         for (const topic of mentor.topics_to_mentor || []) {
           supplyMap.set(topic, (supplyMap.get(topic) || 0) + 1);
         }
@@ -78,10 +99,54 @@ function getExperienceBand(years: string): string {
   return '15+ years';
 }
 
+/**
+ * Extract the compensation grade band (e.g. "L3") from a compensation_grade string like "L3 Senior Manager".
+ */
+function getCompGradeBand(grade: string): string {
+  const match = grade.match(/^(L\d)/i);
+  return match ? match[1].toUpperCase() : 'Unknown';
+}
+
 export function getExperienceDistribution(cohorts: Cohort[]): ExperienceBand[] {
   const bands = new Map<string, { mentors: number; mentees: number }>();
 
-  // Check if any cohort uses new seniority bands (S1, S2, M1, etc.)
+  // V3: Check if any cohort uses compensation grade (L1-L7)
+  const hasCompGrade = cohorts.some(c =>
+    c.mentees.some(m => m.compensation_grade && /^L\d/i.test(m.compensation_grade)) ||
+    c.mentors.some(m => m.compensation_grade && /^L\d/i.test(m.compensation_grade))
+  );
+
+  if (hasCompGrade) {
+    const orderedBands = ['L7', 'L6', 'L5', 'L4', 'L3', 'L2', 'L1', 'Unknown'];
+    for (const band of orderedBands) {
+      bands.set(band, { mentors: 0, mentees: 0 });
+    }
+
+    for (const cohort of cohorts) {
+      for (const mentee of cohort.mentees) {
+        const band = mentee.compensation_grade ? getCompGradeBand(mentee.compensation_grade) : 'Unknown';
+        const entry = bands.get(band) || { mentors: 0, mentees: 0 };
+        entry.mentees++;
+        bands.set(band, entry);
+      }
+      for (const mentor of cohort.mentors) {
+        const band = mentor.compensation_grade ? getCompGradeBand(mentor.compensation_grade) : 'Unknown';
+        const entry = bands.get(band) || { mentors: 0, mentees: 0 };
+        entry.mentors++;
+        bands.set(band, entry);
+      }
+    }
+
+    return orderedBands
+      .map(band => ({
+        band,
+        mentors: bands.get(band)?.mentors || 0,
+        mentees: bands.get(band)?.mentees || 0,
+      }))
+      .filter(b => b.mentors > 0 || b.mentees > 0);
+  }
+
+  // V2: Check if any cohort uses seniority bands (S1, S2, M1, etc.)
   const hasNewFormat = cohorts.some(c =>
     c.mentees.some(m => m.seniority_band && /^[SMDVL]/.test(m.seniority_band)) ||
     c.mentors.some(m => m.seniority_band && /^[SMDVL]/.test(m.seniority_band))
@@ -117,7 +182,7 @@ export function getExperienceDistribution(cohorts: Cohort[]): ExperienceBand[] {
       .filter(b => b.mentors > 0 || b.mentees > 0);
   }
 
-  // Legacy format: use experience_years
+  // V1 Legacy format: use experience_years
   const orderedBands = ['0-2 years', '3-5 years', '6-10 years', '11-15 years', '15+ years', 'Unknown'];
   for (const band of orderedBands) {
     bands.set(band, { mentors: 0, mentees: 0 });
@@ -245,10 +310,12 @@ export function getFeatureContributions(cohort: Cohort): FeatureContribution[] {
   if (!cohort.matches?.results) return [];
 
   const featureSums: Record<string, { sum: number; count: number }> = {
+    llm_content_score: { sum: 0, count: 0 },
     capability_match: { sum: 0, count: 0 },
     semantic_similarity: { sum: 0, count: 0 },
     domain_match: { sum: 0, count: 0 },
     role_seniority_fit: { sum: 0, count: 0 },
+    department_diversity: { sum: 0, count: 0 },
     tz_overlap_bonus: { sum: 0, count: 0 },
   };
 
@@ -269,10 +336,12 @@ export function getFeatureContributions(cohort: Cohort): FeatureContribution[] {
   }
 
   const featureLabels: Record<string, string> = {
+    llm_content_score: 'AI Content Match',
     capability_match: 'Capability',
     semantic_similarity: 'Goals Alignment',
     domain_match: 'Domain Detail',
     role_seniority_fit: 'Seniority',
+    department_diversity: 'Dept. Diversity',
     tz_overlap_bonus: 'Timezone',
   };
 
@@ -342,7 +411,9 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
     if (cohort.status === 'active') activeCohorts++;
 
     for (const mentee of cohort.mentees) {
-      if (mentee.primary_capability) {
+      if (mentee.capabilities_wanted) {
+        for (const phrase of splitFreeTextCapabilities(mentee.capabilities_wanted)) topics.add(phrase);
+      } else if (mentee.primary_capability) {
         topics.add(mentee.primary_capability);
         if (mentee.secondary_capability) topics.add(mentee.secondary_capability);
       } else {
@@ -350,7 +421,9 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
       }
     }
     for (const mentor of cohort.mentors) {
-      if (mentor.primary_capability) {
+      if (mentor.capabilities_offered) {
+        for (const phrase of splitFreeTextCapabilities(mentor.capabilities_offered)) topics.add(phrase);
+      } else if (mentor.primary_capability) {
         topics.add(mentor.primary_capability);
         for (const c of mentor.secondary_capabilities || []) topics.add(c);
       } else {

@@ -9,7 +9,12 @@ import {
   MatchingStats,
   SENIORITY_SCORES,
   LEGACY_SENIORITY_SCORES,
+  COMPENSATION_GRADE_SCORES,
+  parseCompensationGrade,
 } from "@/types/mentoring";
+import { countryToTimezoneOffset } from './surveyFieldMapping';
+import type { LLMPairScore } from './llmMatchingService';
+import { scorePairsWithLLM } from './llmMatchingService';
 import type {
   MatchingModel,
   MatchingWeights,
@@ -19,7 +24,19 @@ import type {
   ConstraintViolation,
   MatchingRule,
 } from "@/types/matching";
+import type { LLMScoringProgress } from './llmMatchingService';
 import { cosineSimilarity } from "./embeddingUtils";
+
+// Progress callback for multi-step matching
+export type MatchingStep = 'embeddings' | 'llm_scoring' | 'scoring' | 'done';
+export interface MatchingProgress {
+  step: MatchingStep;
+  stepLabel: string;
+  /** 0-100 progress within the current step */
+  stepProgress: number;
+  /** LLM scoring detail (only during llm_scoring step) */
+  llmDetail?: { completed: number; total: number };
+}
 import { getOrComputeEmbeddings, type EmbeddingCache } from "./embeddingService";
 import { areSameCluster } from "./capabilityClusters";
 
@@ -59,11 +76,26 @@ export function applyHardFilters(
     }
   }
 
-  // First-time mentor filter (Q18): hard block if mentee explicitly requires prior experience
-  if (mentee.mentor_experience_importance) {
-    const pref = mentee.mentor_experience_importance.toLowerCase();
-    const requiresExperience = pref.includes('no') && pref.includes('prior');
+  // First-time mentor filter: hard block if mentee explicitly requires prior experience
+  // V3: open_to_first_time_mentor field, V2: mentor_experience_importance
+  const firstTimePref = mentee.open_to_first_time_mentor || mentee.mentor_experience_importance;
+  if (firstTimePref) {
+    const pref = firstTimePref.toLowerCase();
+    const requiresExperience = (pref.includes('no') && pref.includes('prior')) ||
+      (pref.includes('no') && !pref.includes('yes')) ||
+      pref.includes('prefer experienced');
     if (requiresExperience && !mentor.has_mentored_before) {
+      return false;
+    }
+  }
+
+  // V3: topics_prefer_not (mentor's free-text exclusion) vs mentee's capabilities_wanted
+  if (mentor.topics_prefer_not && mentee.capabilities_wanted) {
+    const excludeWords = mentor.topics_prefer_not.toLowerCase().split(/[\s,;]+/).filter(w => w.length > 3);
+    const wantedWords = mentee.capabilities_wanted.toLowerCase().split(/[\s,;]+/).filter(w => w.length > 3);
+    // Hard block if there's significant keyword overlap (3+ shared words)
+    const overlap = excludeWords.filter(w => wantedWords.includes(w));
+    if (overlap.length >= 3) {
       return false;
     }
   }
@@ -96,6 +128,11 @@ function calculateTimezoneDistance(tz1: string, tz2: string): number {
   // Try exact match first, then keyword-based fallback
   const resolveOffset = (tz: string): number => {
     if (timezoneMap[tz] !== undefined) return timezoneMap[tz];
+
+    // V3 format: "UTC+1", "UTC-5", "UTC+5.5"
+    const utcMatch = tz.match(/UTC([+-]?\d+(?:\.\d+)?)/i);
+    if (utcMatch) return parseFloat(utcMatch[1]);
+
     const lower = tz.toLowerCase();
     if (lower.includes('cet') || lower.includes('cest')) return 1;
     if (lower.includes('gmt') || lower.includes('bst')) return 0;
@@ -110,9 +147,24 @@ function calculateTimezoneDistance(tz1: string, tz2: string): number {
 }
 
 // Feature score calculations
+/**
+ * Detect which survey version the data is from.
+ * V3: has capabilities_wanted/capabilities_offered (free-text) or compensation_grade
+ * V2: has primary_capability (from capability framework)
+ * V1: legacy topic-based
+ */
+function detectDataVersion(mentee: MenteeData, mentor: MentorData): 'v3' | 'v2' | 'v1' {
+  if (mentee.capabilities_wanted || mentor.capabilities_offered || mentee.compensation_grade || mentor.compensation_grade) {
+    return 'v3';
+  }
+  if (mentee.primary_capability || mentor.primary_capability) {
+    return 'v2';
+  }
+  return 'v1';
+}
+
 export function calculateFeatures(mentee: MenteeData, mentor: MentorData): MatchingFeatures {
-  // Detect if we're using new survey data (has primary_capability)
-  const hasNewFields = !!(mentee.primary_capability || mentor.primary_capability);
+  const version = detectDataVersion(mentee, mentor);
 
   // Advanced features (computed regardless of survey version)
   const advancedFeatures = {
@@ -121,7 +173,20 @@ export function calculateFeatures(mentee: MenteeData, mentor: MentorData): Match
     department_diversity: calculateDepartmentDiversity(mentee, mentor),
   };
 
-  if (hasNewFields) {
+  if (version === 'v3') {
+    // V3: LLM scores populated externally, other features computed here
+    return {
+      capability_match: 0, // Replaced by llm_content_score for V3 (populated externally)
+      domain_match: 0,     // Replaced by llm_content_score for V3
+      role_seniority_fit: calculateRoleSeniorityFitV3(mentee, mentor),
+      semantic_similarity: calculateSemanticSimilarity(mentee, mentor),
+      tz_overlap_bonus: calculateTimezoneBonus(mentee.location_timezone, mentor.location_timezone),
+      capacity_penalty: calculateCapacityPenalty(mentor.capacity_remaining),
+      ...advancedFeatures,
+    };
+  }
+
+  if (version === 'v2') {
     return {
       capability_match: calculateCapabilityMatch(mentee, mentor),
       domain_match: calculateDomainMatch(mentee, mentor),
@@ -133,7 +198,7 @@ export function calculateFeatures(mentee: MenteeData, mentor: MentorData): Match
     };
   }
 
-  // Legacy fallback for old cohorts
+  // V1 Legacy fallback for old cohorts
   return {
     capability_match: calculateTopicsOverlap(mentee.topics_to_learn, mentor.topics_to_mentor),
     domain_match: 0,
@@ -278,6 +343,32 @@ function calculateRoleSeniorityFit(mentee: MenteeData, mentor: MentorData): numb
   }
 }
 
+/**
+ * V3 seniority fit using Compensation Grade (L1–L7).
+ * L1 = highest (SVP/VP), L7 = lowest (entry). Score = 7 for L1, 1 for L7.
+ * Falls back to SENIORITY_SCORES if compensation_grade not available.
+ */
+function calculateRoleSeniorityFitV3(mentee: MenteeData, mentor: MentorData): number {
+  const menteeSeniority = mentee.compensation_grade
+    ? parseCompensationGrade(mentee.compensation_grade)
+    : (mentee.seniority_band ? (SENIORITY_SCORES[mentee.seniority_band] ?? LEGACY_SENIORITY_SCORES[mentee.seniority_band] ?? 2) : 2);
+
+  const mentorSeniority = mentor.compensation_grade
+    ? parseCompensationGrade(mentor.compensation_grade)
+    : (mentor.seniority_band ? (SENIORITY_SCORES[mentor.seniority_band] ?? LEGACY_SENIORITY_SCORES[mentor.seniority_band] ?? 3) : 3);
+
+  if (mentorSeniority > menteeSeniority) {
+    const gap = mentorSeniority - menteeSeniority;
+    if (gap <= 2) return 1.0;
+    if (gap <= 4) return 0.8;
+    return 0.6;
+  } else if (mentorSeniority === menteeSeniority) {
+    return 0.5;
+  } else {
+    return 0.2;
+  }
+}
+
 // Semantic similarity between goals and bio (keyword-based fallback)
 function calculateSemanticSimilarity(mentee: MenteeData, mentor: MentorData): number {
   // Build text from new fields first, fall back to legacy
@@ -396,34 +487,87 @@ function calculateDepartmentDiversity(mentee: MenteeData, mentor: MentorData): n
 }
 
 // Calculate final match score with new capability-based weights
-export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): MatchScore {
+/**
+ * Calculate match score with optional LLM pair score.
+ * For V3 data, LLM content score replaces capability_match and domain_match.
+ */
+export function calculateMatchScore(
+  mentee: MenteeData,
+  mentor: MentorData,
+  llmScore?: LLMPairScore,
+): MatchScore {
   const features = calculateFeatures(mentee, mentor);
+  const version = detectDataVersion(mentee, mentor);
 
-  // Scoring formula: weights sum to 100 at max (ignoring capacity penalty)
-  // capability(45) + semantic(30) + domain(5) + seniority(10) + timezone(5) + compatibility(5) = 100
-  const totalScore = Math.max(0, Math.min(100,
-    45 * features.capability_match +
-    30 * features.semantic_similarity +
-    5 * features.domain_match +
-    10 * features.role_seniority_fit +
-    5 * features.tz_overlap_bonus +
-    5 * features.compatibility_score -
-    10 * features.capacity_penalty
-  ));
+  // Inject LLM scores if available (V3 path)
+  if (llmScore) {
+    features.llm_content_score = llmScore.overall_score / 10; // normalize 0-10 → 0-1
+    features.llm_reasoning = llmScore.reasoning;
+  }
+
+  let totalScore: number;
+
+  if (version === 'v3' && features.llm_content_score != null) {
+    // V3 weights: llm(45) + semantic(20) + seniority(12) + compatibility(10) + department(8) + tz(5) = 100
+    totalScore = Math.max(0, Math.min(100,
+      45 * features.llm_content_score +
+      20 * features.semantic_similarity +
+      12 * features.role_seniority_fit +
+      10 * features.compatibility_score +
+      8 * features.department_diversity +
+      5 * features.tz_overlap_bonus -
+      10 * features.capacity_penalty
+    ));
+  } else if (version === 'v3') {
+    // V3 without LLM scores (fallback): semantic takes more weight
+    totalScore = Math.max(0, Math.min(100,
+      40 * features.semantic_similarity +
+      20 * features.role_seniority_fit +
+      15 * features.compatibility_score +
+      15 * features.department_diversity +
+      10 * features.tz_overlap_bonus -
+      10 * features.capacity_penalty
+    ));
+  } else {
+    // V2/V1 weights: capability(45) + semantic(30) + domain(5) + seniority(10) + tz(5) + compat(5) = 100
+    totalScore = Math.max(0, Math.min(100,
+      45 * features.capability_match +
+      30 * features.semantic_similarity +
+      5 * features.domain_match +
+      10 * features.role_seniority_fit +
+      5 * features.tz_overlap_bonus +
+      5 * features.compatibility_score -
+      10 * features.capacity_penalty
+    ));
+  }
 
   // Compute timezone distance once for reasons and risks
   const tzDistance = calculateTimezoneDistance(mentee.location_timezone, mentor.location_timezone);
 
   // Generate reasons for the match
   const reasons: string[] = [];
-  if (features.capability_match >= 1.0) {
-    reasons.push(`Exact primary capability match: both share "${mentee.primary_capability || mentee.topics_to_learn?.[0] || 'shared area'}" as their primary focus`);
-  } else if (features.capability_match >= 0.8) {
-    reasons.push(`Mentee wants "${mentee.primary_capability}" \u2014 mentor offers it as a secondary capability`);
-  } else if (features.capability_match >= 0.55) {
-    reasons.push(`Related capability cluster: mentee wants "${mentee.primary_capability}", mentor's primary is "${mentor.primary_capability}" (same theme family)`);
-  } else if (features.capability_match >= 0.4) {
-    reasons.push(`Related capability cluster via secondary: mentee wants "${mentee.primary_capability}", mentor has related secondary expertise`);
+
+  // V3 LLM-based reasons
+  if (features.llm_content_score != null && features.llm_content_score > 0) {
+    const llmPct = Math.round(features.llm_content_score * 100);
+    if (features.llm_content_score >= 0.7) {
+      reasons.push(`Strong LLM content match (${llmPct}%): ${features.llm_reasoning || 'Good alignment between mentee needs and mentor offerings'}`);
+    } else if (features.llm_content_score >= 0.5) {
+      reasons.push(`Moderate LLM content match (${llmPct}%): ${features.llm_reasoning || 'Some alignment found'}`);
+    }
+  }
+
+  // V2/V1 capability-based reasons
+  if (version !== 'v3') {
+    if (features.capability_match >= 1.0) {
+      reasons.push(`Exact primary capability match: both share "${mentee.primary_capability || mentee.topics_to_learn?.[0] || 'shared area'}" as their primary focus`);
+    } else if (features.capability_match >= 0.8) {
+      reasons.push(`Mentee wants "${mentee.primary_capability}" \u2014 mentor offers it as a secondary capability`);
+    } else if (features.capability_match >= 0.55) {
+      reasons.push(`Related capability cluster: mentee wants "${mentee.primary_capability}", mentor's primary is "${mentor.primary_capability}" (same theme family)`);
+    } else if (features.capability_match >= 0.4) {
+      reasons.push(`Related capability cluster via secondary: mentee wants "${mentee.primary_capability}", mentor has related secondary expertise`);
+    }
   }
 
   // Secondary capability bonus
@@ -619,7 +763,8 @@ export function calculateMatchScore(mentee: MenteeData, mentor: MentorData): Mat
         : [],
       capacity_remaining: mentor.capacity_remaining
     },
-    icebreaker
+    icebreaker,
+    ai_explanation: features.llm_reasoning,
   };
 }
 
@@ -773,30 +918,157 @@ export function performTop3Matching(
 }
 
 // ============================================================================
+// LLM-ENHANCED MATCHING (V3)
+// ============================================================================
+
+/**
+ * Find top matches with pre-computed LLM scores.
+ * For V3 data, the LLM scores are injected into the match calculation.
+ */
+export function findTopMatchesWithLLM(
+  mentee: MenteeData,
+  mentors: MentorData[],
+  llmScores: Map<string, LLMPairScore>,
+  maxResults: number = 3,
+): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
+  const validMatches = mentors
+    .filter(mentor => applyHardFilters(mentee, mentor))
+    .map(mentor => {
+      const llmKey = `${mentee.id}::${mentor.id}`;
+      const llmScore = llmScores.get(llmKey);
+      return {
+        mentor,
+        score: calculateMatchScore(mentee, mentor, llmScore),
+      };
+    })
+    .sort(compareMentorMatches)
+    .slice(0, maxResults);
+
+  return validMatches.map(match => ({
+    mentor_id: match.mentor.id,
+    mentor_name: match.mentor.name || match.mentor.id,
+    score: match.score,
+  }));
+}
+
+/**
+ * Batch matching with LLM scores for V3 data.
+ * Same greedy assignment as performBatchMatching but uses LLM pair scores.
+ */
+export function performBatchMatchingWithLLM(
+  mentees: MenteeData[],
+  mentors: MentorData[],
+  llmScores: Map<string, LLMPairScore>,
+): MatchingOutput {
+  const results: MatchingResult[] = [];
+  const stats: MatchingStats = {
+    mentees_total: mentees.length,
+    mentors_total: mentors.length,
+    pairs_evaluated: 0,
+    after_filters: 0,
+  };
+
+  const mentorCapacity = new Map<string, number>();
+  mentors.forEach(mentor => {
+    mentorCapacity.set(mentor.id, mentor.capacity_remaining);
+  });
+
+  mentees.forEach(mentee => {
+    const availableMentors = mentors.filter(mentor =>
+      (mentorCapacity.get(mentor.id) || 0) > 0
+    );
+
+    stats.pairs_evaluated += availableMentors.length;
+
+    const recommendations = findTopMatchesWithLLM(mentee, availableMentors, llmScores, 3);
+    stats.after_filters += recommendations.length;
+
+    let proposedAssignment: { mentor_id: string | null; mentor_name?: string | null } = {
+      mentor_id: null,
+      mentor_name: null,
+    };
+
+    if (recommendations.length > 0) {
+      const bestMatch = recommendations[0];
+      proposedAssignment = {
+        mentor_id: bestMatch.mentor_id,
+        mentor_name: bestMatch.mentor_name,
+      };
+
+      const currentCapacity = mentorCapacity.get(bestMatch.mentor_id) || 0;
+      mentorCapacity.set(bestMatch.mentor_id, currentCapacity - 1);
+    }
+
+    results.push({
+      mentee_id: mentee.id,
+      mentee_name: mentee.name || mentee.id,
+      recommendations,
+      proposed_assignment: proposedAssignment,
+    });
+  });
+
+  return {
+    mode: 'batch',
+    stats,
+    results,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ============================================================================
 // ENHANCED MATCHING WITH CONFIGURABLE MODELS
 // ============================================================================
 
 /**
- * Calculate match score using a configurable matching model
+ * Calculate match score using a configurable matching model.
+ * Supports V3 LLM scores when llmScore is provided and weights.llm_content > 0.
  */
 export function calculateMatchScoreWithModel(
   mentee: MenteeData,
   mentor: MentorData,
-  model: MatchingModel
+  model: MatchingModel,
+  llmScore?: LLMPairScore,
 ): EnhancedMatchScore {
   const features = calculateFeatures(mentee, mentor);
   const weights = model.weights;
 
+  // Inject LLM scores if available
+  if (llmScore) {
+    features.llm_content_score = llmScore.overall_score / 10; // normalize 0-10 → 0-1
+    features.llm_reasoning = llmScore.reasoning;
+  }
+
   // Calculate individual weighted scores
-  const scoreBreakdown: ScoreBreakdown[] = [
-    {
+  const scoreBreakdown: ScoreBreakdown[] = [];
+
+  // LLM Content Match (V3 — only if weight > 0)
+  const llmWeight = weights.llm_content ?? 0;
+  if (llmWeight > 0) {
+    const llmRaw = features.llm_content_score ?? 0;
+    scoreBreakdown.push({
+      criterion: 'llm_content',
+      criterion_name: 'AI Content Match',
+      raw_score: llmRaw,
+      max_possible: 1,
+      weight: llmWeight,
+      weighted_score: llmRaw * llmWeight,
+    });
+  }
+
+  // Capability Match (V2/V1 — only if weight > 0)
+  if (weights.capability > 0) {
+    scoreBreakdown.push({
       criterion: 'capability',
       criterion_name: 'Capability Match',
       raw_score: features.capability_match,
       max_possible: 1,
       weight: weights.capability,
       weighted_score: features.capability_match * weights.capability,
-    },
+    });
+  }
+
+  // Always-included core weights
+  scoreBreakdown.push(
     {
       criterion: 'semantic',
       criterion_name: 'Semantic Similarity',
@@ -804,14 +1076,6 @@ export function calculateMatchScoreWithModel(
       max_possible: 1,
       weight: weights.semantic,
       weighted_score: features.semantic_similarity * weights.semantic,
-    },
-    {
-      criterion: 'domain',
-      criterion_name: 'Domain Match',
-      raw_score: features.domain_match,
-      max_possible: 1,
-      weight: weights.domain,
-      weighted_score: features.domain_match * weights.domain,
     },
     {
       criterion: 'seniority',
@@ -829,7 +1093,19 @@ export function calculateMatchScoreWithModel(
       weight: weights.timezone,
       weighted_score: features.tz_overlap_bonus * weights.timezone,
     },
-  ];
+  );
+
+  // Domain Match (only if weight > 0)
+  if (weights.domain > 0) {
+    scoreBreakdown.push({
+      criterion: 'domain',
+      criterion_name: 'Domain Match',
+      raw_score: features.domain_match,
+      max_possible: 1,
+      weight: weights.domain,
+      weighted_score: features.domain_match * weights.domain,
+    });
+  }
 
   // Advanced weights (only included in breakdown if weight > 0)
   const compatibilityWeight = weights.compatibility ?? 0;
@@ -882,12 +1158,11 @@ export function calculateMatchScoreWithModel(
     weighted_score: -capacityPenalty,
   });
 
-  // Check for constraint violations (placeholder for rule evaluation)
+  // Check for constraint violations
   const constraintViolations: ConstraintViolation[] = [];
   let needsApproval = false;
   let approvalReason: string | undefined;
 
-  // Example violation checks
   if (mentor.capacity_remaining <= 0) {
     constraintViolations.push({
       rule_id: 'capacity_zero',
@@ -899,7 +1174,8 @@ export function calculateMatchScoreWithModel(
     approvalReason = 'Mentor at capacity';
   }
 
-  if (features.capability_match === 0) {
+  // Only flag no-capability for V2/V1 (V3 uses LLM content instead)
+  if (weights.capability > 0 && features.capability_match === 0) {
     constraintViolations.push({
       rule_id: 'no_capability',
       rule_name: 'No Capability Match',
@@ -911,7 +1187,7 @@ export function calculateMatchScoreWithModel(
   return {
     total_score: totalScore,
     score_breakdown: scoreBreakdown,
-    alternative_mentors: [], // Will be populated by findAlternatives
+    alternative_mentors: [],
     constraint_violations: constraintViolations,
     needs_approval: needsApproval,
     approval_reason: approvalReason,
@@ -1234,15 +1510,165 @@ function findTopMatchesWithEmbeddings(
 }
 
 /**
+ * Convert EnhancedMatchScore to MatchScore for compatibility with existing result types.
+ */
+function enhancedToMatchScore(
+  mentee: MenteeData,
+  mentor: MentorData,
+  enhanced: EnhancedMatchScore,
+  features: MatchingFeatures,
+): MatchScore {
+  // Build reasons and risks from the model's actual scoring, not the old hardcoded logic
+  const reasons: string[] = [];
+  const risks: string[] = [];
+
+  // LLM content match
+  if (features.llm_content_score != null && features.llm_content_score > 0) {
+    const llmPct = Math.round(features.llm_content_score * 100);
+    if (features.llm_content_score >= 0.7) {
+      reasons.push(`Strong AI-assessed compatibility (${llmPct}%)`);
+    } else if (features.llm_content_score >= 0.5) {
+      reasons.push(`Moderate AI-assessed compatibility (${llmPct}%)`);
+    } else {
+      risks.push(`Low AI-assessed compatibility (${llmPct}%)`);
+    }
+    if (features.llm_reasoning) {
+      reasons.push(features.llm_reasoning);
+    }
+  }
+
+  // Semantic similarity
+  if (features.semantic_similarity >= 0.7) {
+    reasons.push(`Strong goals alignment (${Math.round(features.semantic_similarity * 100)}%)`);
+  } else if (features.semantic_similarity >= 0.4) {
+    reasons.push(`Moderate goals alignment`);
+  } else if (features.semantic_similarity < 0.2) {
+    risks.push(`Low goals alignment`);
+  }
+
+  // Capability match (V2)
+  if (features.capability_match > 0) {
+    if (features.capability_match >= 0.8) {
+      reasons.push(`Excellent capability match`);
+    } else if (features.capability_match >= 0.5) {
+      reasons.push(`Good capability overlap`);
+    }
+  }
+
+  // Seniority
+  if (features.role_seniority_fit >= 0.8) {
+    reasons.push(`Good seniority gap for mentoring`);
+  } else if (features.role_seniority_fit < 0.3) {
+    risks.push(`Limited seniority difference`);
+  }
+
+  // Department diversity
+  if (features.department_diversity > 0) {
+    reasons.push(`Cross-department perspective`);
+  }
+
+  // Compatibility
+  if (features.compatibility_score >= 0.7) {
+    reasons.push(`Compatible working styles`);
+  }
+
+  // Timezone
+  if (features.tz_overlap_bonus >= 0.8) {
+    reasons.push(`Same timezone`);
+  } else if (features.tz_overlap_bonus < 0.3) {
+    risks.push(`Large timezone difference`);
+  }
+
+  // Capacity
+  if (mentor.capacity_remaining <= 0) {
+    risks.push(`Mentor at capacity`);
+  } else if (mentor.capacity_remaining === 1) {
+    risks.push(`Mentor has only 1 slot left`);
+  }
+
+  return {
+    total_score: enhanced.total_score,
+    features,
+    reasons,
+    risks,
+    logistics: {
+      timezone_mentee: mentee.timezone || mentee.country,
+      timezone_mentor: mentor.timezone || mentor.country,
+      languages_shared: [],
+      capacity_remaining: mentor.capacity_remaining,
+    },
+    is_embedding_based: true,
+  };
+}
+
+/**
+ * Calculate match score using a model with embedding-enhanced semantic similarity.
+ */
+function calculateMatchScoreWithModelAndEmbeddings(
+  mentee: MenteeData,
+  mentor: MentorData,
+  model: MatchingModel,
+  embeddingCache: EmbeddingCache,
+  llmScore?: LLMPairScore,
+): MatchScore {
+  const features = calculateFeaturesWithEmbeddings(mentee, mentor, embeddingCache);
+
+  // Inject LLM scores if available
+  if (llmScore) {
+    features.llm_content_score = llmScore.overall_score / 10;
+    features.llm_reasoning = llmScore.reasoning;
+  }
+
+  const enhanced = calculateMatchScoreWithModel(mentee, mentor, model, llmScore);
+  return enhancedToMatchScore(mentee, mentor, enhanced, features);
+}
+
+/**
+ * Find top matches using a model with embedding-enhanced scoring.
+ */
+function findTopMatchesWithModelAndEmbeddings(
+  mentee: MenteeData,
+  mentors: MentorData[],
+  model: MatchingModel,
+  embeddingCache: EmbeddingCache,
+  llmScores?: Map<string, LLMPairScore>,
+  maxResults: number = 3,
+): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
+  const validMatches = mentors
+    .filter(mentor => applyHardFilters(mentee, mentor, model.filters))
+    .map(mentor => {
+      const llmKey = `${mentee.id}::${mentor.id}`;
+      const llmScore = llmScores?.get(llmKey);
+      return {
+        mentor,
+        score: calculateMatchScoreWithModelAndEmbeddings(mentee, mentor, model, embeddingCache, llmScore),
+      };
+    })
+    .sort(compareMentorMatches)
+    .slice(0, maxResults);
+
+  return validMatches.map(match => ({
+    mentor_id: match.mentor.id,
+    mentor_name: match.mentor.name || match.mentor.id,
+    score: match.score,
+  }));
+}
+
+/**
  * Async batch matching using OpenAI embeddings for semantic similarity.
+ * When a model is provided, uses its configurable weights instead of hardcoded defaults.
  * Falls back to the original synchronous matching if embedding generation fails.
  */
 export async function performBatchMatchingAsync(
   mentees: MenteeData[],
   mentors: MentorData[],
   cohortId: string,
+  model?: MatchingModel,
+  onProgress?: (progress: MatchingProgress) => void,
 ): Promise<{ output: MatchingOutput; usedEmbeddings: boolean }> {
   let embeddingCache: EmbeddingCache | null = null;
+
+  onProgress?.({ step: 'embeddings', stepLabel: 'Computing AI embeddings...', stepProgress: 0 });
 
   try {
     embeddingCache = await getOrComputeEmbeddings(cohortId, mentees, mentors);
@@ -1251,8 +1677,37 @@ export async function performBatchMatchingAsync(
   }
 
   if (!embeddingCache) {
+    onProgress?.({ step: 'done', stepLabel: 'Done', stepProgress: 100 });
     return { output: performBatchMatching(mentees, mentors), usedEmbeddings: false };
   }
+
+  onProgress?.({ step: 'embeddings', stepLabel: 'Embeddings ready', stepProgress: 100 });
+
+  // Run LLM pairwise scoring when the model uses llm_content weight
+  let llmScores: Map<string, LLMPairScore> | undefined;
+  if (model && (model.weights.llm_content ?? 0) > 0) {
+    try {
+      const pairs: [MenteeData, MentorData][] = [];
+      for (const mentee of mentees) {
+        for (const mentor of mentors) {
+          if (applyHardFilters(mentee, mentor, model.filters)) {
+            pairs.push([mentee, mentor]);
+          }
+        }
+      }
+      if (pairs.length > 0) {
+        onProgress?.({ step: 'llm_scoring', stepLabel: `Scoring ${pairs.length} pairs with AI...`, stepProgress: 0, llmDetail: { completed: 0, total: pairs.length } });
+        llmScores = await scorePairsWithLLM(pairs, (llmProgress: LLMScoringProgress) => {
+          const pct = llmProgress.total > 0 ? Math.round((llmProgress.completed / llmProgress.total) * 100) : 0;
+          onProgress?.({ step: 'llm_scoring', stepLabel: `AI scoring pairs (${llmProgress.completed}/${llmProgress.total})...`, stepProgress: pct, llmDetail: { completed: llmProgress.completed, total: llmProgress.total } });
+        });
+      }
+    } catch (error) {
+      console.warn('LLM scoring failed, proceeding without LLM scores:', error);
+    }
+  }
+
+  onProgress?.({ step: 'scoring', stepLabel: 'Computing final scores...', stepProgress: 0 });
 
   const results: MatchingResult[] = [];
   const stats: MatchingStats = {
@@ -1274,7 +1729,10 @@ export async function performBatchMatchingAsync(
 
     stats.pairs_evaluated += availableMentors.length;
 
-    const recommendations = findTopMatchesWithEmbeddings(mentee, availableMentors, embeddingCache!, 3);
+    // Use model-aware scoring when a model is provided, otherwise use default embedding scoring
+    const recommendations = model
+      ? findTopMatchesWithModelAndEmbeddings(mentee, availableMentors, model, embeddingCache!, llmScores, 3)
+      : findTopMatchesWithEmbeddings(mentee, availableMentors, embeddingCache!, 3);
     stats.after_filters += recommendations.length;
 
     let proposedAssignment: { mentor_id: string | null; mentor_name?: string | null } = {
@@ -1300,6 +1758,8 @@ export async function performBatchMatchingAsync(
     });
   });
 
+  onProgress?.({ step: 'done', stepLabel: 'Matching complete', stepProgress: 100 });
+
   return {
     output: { mode: "batch", stats, results },
     usedEmbeddings: true,
@@ -1308,14 +1768,19 @@ export async function performBatchMatchingAsync(
 
 /**
  * Async top-3 matching using OpenAI embeddings for semantic similarity.
+ * When a model is provided, uses its configurable weights instead of hardcoded defaults.
  * Falls back to the original synchronous matching if embedding generation fails.
  */
 export async function performTop3MatchingAsync(
   mentees: MenteeData[],
   mentors: MentorData[],
   cohortId: string,
+  model?: MatchingModel,
+  onProgress?: (progress: MatchingProgress) => void,
 ): Promise<{ output: MatchingOutput; usedEmbeddings: boolean }> {
   let embeddingCache: EmbeddingCache | null = null;
+
+  onProgress?.({ step: 'embeddings', stepLabel: 'Computing AI embeddings...', stepProgress: 0 });
 
   try {
     embeddingCache = await getOrComputeEmbeddings(cohortId, mentees, mentors);
@@ -1324,8 +1789,37 @@ export async function performTop3MatchingAsync(
   }
 
   if (!embeddingCache) {
+    onProgress?.({ step: 'done', stepLabel: 'Done', stepProgress: 100 });
     return { output: performTop3Matching(mentees, mentors), usedEmbeddings: false };
   }
+
+  onProgress?.({ step: 'embeddings', stepLabel: 'Embeddings ready', stepProgress: 100 });
+
+  // Run LLM pairwise scoring when the model uses llm_content weight
+  let llmScores: Map<string, LLMPairScore> | undefined;
+  if (model && (model.weights.llm_content ?? 0) > 0) {
+    try {
+      const pairs: [MenteeData, MentorData][] = [];
+      for (const mentee of mentees) {
+        for (const mentor of mentors) {
+          if (applyHardFilters(mentee, mentor, model.filters)) {
+            pairs.push([mentee, mentor]);
+          }
+        }
+      }
+      if (pairs.length > 0) {
+        onProgress?.({ step: 'llm_scoring', stepLabel: `Scoring ${pairs.length} pairs with AI...`, stepProgress: 0, llmDetail: { completed: 0, total: pairs.length } });
+        llmScores = await scorePairsWithLLM(pairs, (llmProgress: LLMScoringProgress) => {
+          const pct = llmProgress.total > 0 ? Math.round((llmProgress.completed / llmProgress.total) * 100) : 0;
+          onProgress?.({ step: 'llm_scoring', stepLabel: `AI scoring pairs (${llmProgress.completed}/${llmProgress.total})...`, stepProgress: pct, llmDetail: { completed: llmProgress.completed, total: llmProgress.total } });
+        });
+      }
+    } catch (error) {
+      console.warn('LLM scoring failed, proceeding without LLM scores:', error);
+    }
+  }
+
+  onProgress?.({ step: 'scoring', stepLabel: 'Computing final scores...', stepProgress: 0 });
 
   const results: MatchingResult[] = [];
   const stats: MatchingStats = {
@@ -1336,7 +1830,9 @@ export async function performTop3MatchingAsync(
   };
 
   mentees.forEach(mentee => {
-    const recommendations = findTopMatchesWithEmbeddings(mentee, mentors, embeddingCache!, 3);
+    const recommendations = model
+      ? findTopMatchesWithModelAndEmbeddings(mentee, mentors, model, embeddingCache!, llmScores, 3)
+      : findTopMatchesWithEmbeddings(mentee, mentors, embeddingCache!, 3);
     stats.after_filters += recommendations.length;
 
     results.push({
@@ -1345,6 +1841,8 @@ export async function performTop3MatchingAsync(
       recommendations,
     });
   });
+
+  onProgress?.({ step: 'done', stepLabel: 'Matching complete', stepProgress: 100 });
 
   return {
     output: { mode: "top3_per_mentee", stats, results },

@@ -23,11 +23,25 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 
 /**
  * Build a text string for embedding a mentee's profile.
- * New survey: mentoring_goal + bio are the primary semantic fields.
- * Falls back to legacy fields for old cohorts.
+ * V3: capabilities_wanted + role_specific_area + mentoring_goal + specific_challenge + bio
+ * V2: mentoring_goal + bio + primary/secondary capability
+ * V1: goals_text + motivation + topics
  */
 export function buildMenteeEmbeddingText(mentee: MenteeData): string {
-  // Prefer new survey fields
+  // V3 fields (free-text capabilities)
+  if (mentee.capabilities_wanted || mentee.specific_challenge) {
+    const parts = [
+      mentee.capabilities_wanted ? `Capabilities to develop: ${mentee.capabilities_wanted}` : '',
+      mentee.role_specific_area ? `Role-specific area: ${mentee.role_specific_area}` : '',
+      mentee.mentoring_goal || '',
+      mentee.specific_challenge ? `Challenge: ${mentee.specific_challenge}` : '',
+      mentee.bio || '',
+      mentee.business_title ? `Role: ${mentee.business_title}` : '',
+    ].filter(Boolean);
+    return parts.join('. ');
+  }
+
+  // V2 fields (capability framework)
   if (mentee.mentoring_goal || mentee.bio) {
     const parts = [
       mentee.mentoring_goal || '',
@@ -38,7 +52,7 @@ export function buildMenteeEmbeddingText(mentee: MenteeData): string {
     return parts.join('. ');
   }
 
-  // Legacy fallback
+  // V1 Legacy fallback
   const parts = [
     mentee.goals_text || '',
     mentee.main_reason || '',
@@ -53,11 +67,26 @@ export function buildMenteeEmbeddingText(mentee: MenteeData): string {
 
 /**
  * Build a text string for embedding a mentor's profile.
- * New survey: mentor_motivation + hard_earned_lesson + bio are the primary semantic fields.
- * Falls back to legacy fields for old cohorts.
+ * V3: capabilities_offered + role_specific_offering + meaningful_impact + bio + natural_strengths
+ * V2: mentor_motivation + hard_earned_lesson + bio + capabilities
+ * V1: bio_text + motivation + topics
  */
 export function buildMentorEmbeddingText(mentor: MentorData): string {
-  // Prefer new survey fields
+  // V3 fields (free-text capabilities)
+  if (mentor.capabilities_offered || mentor.meaningful_impact) {
+    const parts = [
+      mentor.capabilities_offered ? `Capabilities for mentoring: ${mentor.capabilities_offered}` : '',
+      mentor.role_specific_offering ? `Role-specific offering: ${mentor.role_specific_offering}` : '',
+      mentor.meaningful_impact ? `Impact story: ${mentor.meaningful_impact}` : '',
+      mentor.mentor_motivation || '',
+      mentor.bio || '',
+      mentor.business_title ? `Role: ${mentor.business_title}` : '',
+      mentor.natural_strengths?.length ? `Strengths: ${mentor.natural_strengths.join(', ')}` : '',
+    ].filter(Boolean);
+    return parts.join('. ');
+  }
+
+  // V2 fields (capability framework)
   if (mentor.mentor_motivation || mentor.hard_earned_lesson || mentor.bio) {
     const parts = [
       mentor.mentor_motivation || '',
@@ -69,7 +98,7 @@ export function buildMentorEmbeddingText(mentor: MentorData): string {
     return parts.join('. ');
   }
 
-  // Legacy fallback
+  // V1 Legacy fallback
   const parts = [
     mentor.bio_text || '',
     mentor.motivation || '',

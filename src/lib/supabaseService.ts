@@ -57,7 +57,7 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     job_grade: (dbMentee as any).job_grade || undefined,
     languages: dbMentee.languages,
     industry: dbMentee.industry,
-    // Capability-based survey fields
+    // Capability-based survey fields (V2)
     bio: dbMentee.bio || undefined,
     primary_capability: dbMentee.primary_capability || undefined,
     primary_capability_detail: dbMentee.primary_capability_detail || undefined,
@@ -67,6 +67,19 @@ function dbMenteeToMentee(dbMentee: MenteeRow): MenteeData {
     secondary_proficiency: dbMentee.secondary_proficiency ?? undefined,
     mentoring_goal: dbMentee.mentoring_goal || undefined,
     practice_scenarios: dbMentee.practice_scenarios || undefined,
+    // V3 simplified survey fields
+    capabilities_wanted: (dbMentee as any).capabilities_wanted || undefined,
+    role_specific_area: (dbMentee as any).role_specific_area || undefined,
+    specific_challenge: (dbMentee as any).specific_challenge || undefined,
+    open_to_first_time_mentor: (dbMentee as any).open_to_first_time_mentor || undefined,
+    preferred_style: dbMentee.preferred_style || undefined,
+    // Workday enrichment
+    business_title: (dbMentee as any).business_title || undefined,
+    compensation_grade: (dbMentee as any).compensation_grade || undefined,
+    country: (dbMentee as any).country || undefined,
+    org_level_04: (dbMentee as any).org_level_04 || undefined,
+    org_level_05: (dbMentee as any).org_level_05 || undefined,
+    seniority_band: (dbMentee as any).seniority_band || undefined,
   }
 }
 
@@ -99,7 +112,7 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     job_grade: (dbMentor as any).job_grade || undefined,
     languages: dbMentor.languages,
     industry: dbMentor.industry,
-    // Capability-based survey fields
+    // Capability-based survey fields (V2)
     bio: dbMentor.bio || undefined,
     mentor_motivation: dbMentor.mentor_motivation || undefined,
     mentoring_experience: dbMentor.mentoring_experience || undefined,
@@ -114,6 +127,20 @@ function dbMentorToMentor(dbMentor: MentorRow): MentorData {
     natural_strengths: dbMentor.natural_strengths || undefined,
     excluded_scenarios: dbMentor.excluded_scenarios || undefined,
     match_exclusions: dbMentor.match_exclusions || undefined,
+    // V3 simplified survey fields
+    capabilities_offered: (dbMentor as any).capabilities_offered || undefined,
+    role_specific_offering: (dbMentor as any).role_specific_offering || undefined,
+    meaningful_impact: (dbMentor as any).meaningful_impact || undefined,
+    mentor_support_wanted: (dbMentor as any).mentor_support_wanted || undefined,
+    mentor_session_style: (dbMentor as any).mentor_session_style || undefined,
+    topics_prefer_not: (dbMentor as any).topics_prefer_not || undefined,
+    // Workday enrichment
+    business_title: (dbMentor as any).business_title || undefined,
+    compensation_grade: (dbMentor as any).compensation_grade || undefined,
+    country: (dbMentor as any).country || undefined,
+    org_level_04: (dbMentor as any).org_level_04 || undefined,
+    org_level_05: (dbMentor as any).org_level_05 || undefined,
+    seniority_band: (dbMentor as any).seniority_band || undefined,
   }
 }
 
@@ -521,6 +548,18 @@ export async function addImportDataToCohort(
         ...(mentee.secondary_proficiency != null ? { secondary_proficiency: mentee.secondary_proficiency } : {}),
         ...(mentee.mentoring_goal ? { mentoring_goal: sanitizeText(mentee.mentoring_goal) } : {}),
         ...(mentee.practice_scenarios && mentee.practice_scenarios.length > 0 ? { practice_scenarios: mentee.practice_scenarios } : {}),
+        // V3 simplified survey fields
+        ...(mentee.capabilities_wanted ? { capabilities_wanted: sanitizeText(mentee.capabilities_wanted) } : {}),
+        ...(mentee.role_specific_area ? { role_specific_area: sanitizeText(mentee.role_specific_area) } : {}),
+        ...(mentee.specific_challenge ? { specific_challenge: sanitizeText(mentee.specific_challenge) } : {}),
+        ...(mentee.open_to_first_time_mentor ? { open_to_first_time_mentor: sanitizeText(mentee.open_to_first_time_mentor) } : {}),
+        // Workday enrichment
+        ...(mentee.business_title ? { business_title: sanitizeText(mentee.business_title) } : {}),
+        ...(mentee.compensation_grade ? { compensation_grade: sanitizeText(mentee.compensation_grade) } : {}),
+        ...(mentee.country ? { country: sanitizeText(mentee.country) } : {}),
+        ...(mentee.org_level_04 ? { org_level_04: sanitizeText(mentee.org_level_04) } : {}),
+        ...(mentee.org_level_05 ? { org_level_05: sanitizeText(mentee.org_level_05) } : {}),
+        ...(mentee.seniority_band ? { seniority_band: sanitizeText(mentee.seniority_band) } : {}),
       }
     })
 
@@ -695,6 +734,20 @@ export async function addImportDataToCohort(
         ...(mentor.natural_strengths && mentor.natural_strengths.length > 0 ? { natural_strengths: mentor.natural_strengths } : {}),
         ...(mentor.excluded_scenarios && mentor.excluded_scenarios.length > 0 ? { excluded_scenarios: mentor.excluded_scenarios } : {}),
         ...(mentor.match_exclusions ? { match_exclusions: sanitizeText(mentor.match_exclusions) } : {}),
+        // V3 simplified survey fields
+        ...(mentor.capabilities_offered ? { capabilities_offered: sanitizeText(mentor.capabilities_offered) } : {}),
+        ...(mentor.role_specific_offering ? { role_specific_offering: sanitizeText(mentor.role_specific_offering) } : {}),
+        ...(mentor.meaningful_impact ? { meaningful_impact: sanitizeText(mentor.meaningful_impact) } : {}),
+        ...(mentor.mentor_support_wanted && mentor.mentor_support_wanted.length > 0 ? { mentor_support_wanted: mentor.mentor_support_wanted } : {}),
+        ...(mentor.mentor_session_style ? { mentor_session_style: sanitizeText(mentor.mentor_session_style) } : {}),
+        ...(mentor.topics_prefer_not ? { topics_prefer_not: sanitizeText(mentor.topics_prefer_not) } : {}),
+        // Workday enrichment
+        ...(mentor.business_title ? { business_title: sanitizeText(mentor.business_title) } : {}),
+        ...(mentor.compensation_grade ? { compensation_grade: sanitizeText(mentor.compensation_grade) } : {}),
+        ...(mentor.country ? { country: sanitizeText(mentor.country) } : {}),
+        ...(mentor.org_level_04 ? { org_level_04: sanitizeText(mentor.org_level_04) } : {}),
+        ...(mentor.org_level_05 ? { org_level_05: sanitizeText(mentor.org_level_05) } : {}),
+        ...(mentor.seniority_band ? { seniority_band: sanitizeText(mentor.seniority_band) } : {}),
       }
     })
 

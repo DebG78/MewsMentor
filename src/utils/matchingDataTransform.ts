@@ -125,40 +125,49 @@ export function getScoreComponents(score: MatchScore): ScoreComponent[] {
 
   return [
     {
-      key: 'capability',
-      label: 'Capability Match',
-      description: 'How well the mentor\'s capabilities match what the mentee wants to develop',
-      value: Math.round(features.capability_match * 45),
+      key: 'llm_content',
+      label: 'AI Content Match',
+      description: 'OpenAI LLM pairwise compatibility scoring of free-text responses',
+      value: Math.round((features.llm_content_score ?? 0) * 45),
       maxValue: 45,
-      percentage: features.capability_match * 100,
-      color: 'bg-blue-500'
+      percentage: (features.llm_content_score ?? 0) * 100,
+      color: 'bg-indigo-500'
     },
     {
       key: 'semantic',
-      label: score.is_embedding_based ? 'Goals Alignment (AI)' : 'Goals Alignment',
-      description: 'How closely the mentee\'s goals align with the mentor\'s motivation and experience',
-      value: Math.round(features.semantic_similarity * 30),
-      maxValue: 30,
+      label: 'Goals Alignment (AI)',
+      description: 'Semantic similarity of goals and experience via AI embeddings',
+      value: Math.round(features.semantic_similarity * 20),
+      maxValue: 20,
       percentage: features.semantic_similarity * 100,
       color: 'bg-purple-500'
-    },
-    {
-      key: 'domain',
-      label: 'Domain Detail',
-      description: 'Overlap in specific domain expertise details',
-      value: Math.round(features.domain_match * 5),
-      maxValue: 5,
-      percentage: features.domain_match * 100,
-      color: 'bg-green-500'
     },
     {
       key: 'seniority',
       label: 'Seniority Fit',
       description: 'Whether the mentor has enough seniority gap to guide the mentee',
-      value: Math.round(features.role_seniority_fit * 10),
-      maxValue: 10,
+      value: Math.round(features.role_seniority_fit * 12),
+      maxValue: 12,
       percentage: features.role_seniority_fit * 100,
       color: 'bg-yellow-500'
+    },
+    {
+      key: 'compatibility',
+      label: 'Compatibility',
+      description: 'Style, energy, and working preference alignment',
+      value: Math.round(features.compatibility_score * 10),
+      maxValue: 10,
+      percentage: features.compatibility_score * 100,
+      color: 'bg-pink-500'
+    },
+    {
+      key: 'department',
+      label: 'Dept Diversity',
+      description: 'Bonus for cross-department matches',
+      value: Math.round(features.department_diversity * 8),
+      maxValue: 8,
+      percentage: features.department_diversity * 100,
+      color: 'bg-green-500'
     },
     {
       key: 'timezone',

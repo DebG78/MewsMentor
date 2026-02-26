@@ -37,10 +37,7 @@ import {
   Scale,
   Filter,
   Trash2,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import type { MatchingModel, MatchingWeights, MatchingFilters } from '@/types/matching';
 import {
   getMatchingModels,
@@ -62,7 +59,6 @@ export default function MatchingModelManager() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MatchingModel | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Form state for creating new model
   const [newModelName, setNewModelName] = useState('');
@@ -363,7 +359,7 @@ export default function MatchingModelManager() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEditModel(model)}
-                          title="Edit weights and filters"
+                          title={model.is_default ? "View weights (read-only)" : "Edit weights and filters"}
                         >
                           <Scale className="w-4 h-4" />
                         </Button>
@@ -454,10 +450,12 @@ export default function MatchingModelManager() {
         <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              Edit Model Settings: {selectedModel?.name} v{selectedModel?.version}
+              {selectedModel?.is_default ? 'View' : 'Edit'} Model Settings: {selectedModel?.name} v{selectedModel?.version}
             </DialogTitle>
             <DialogDescription>
-              Configure scoring weights and matching filters
+              {selectedModel?.is_default
+                ? 'Default model weights are read-only. Clone this model to create a customizable copy.'
+                : 'Configure scoring weights and matching filters'}
             </DialogDescription>
           </DialogHeader>
 
@@ -474,20 +472,26 @@ export default function MatchingModelManager() {
             </TabsList>
 
             <TabsContent value="weights" className="space-y-3 mt-3 overflow-y-auto pr-1">
-              {editWeights && (
+              {editWeights && (() => {
+                const isReadOnly = !!selectedModel?.is_default;
+                return (
                 <>
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span>Capability Match</span>
-                      <span className="font-medium">{editWeights.capability}%</span>
+                      <span>AI Content Match (LLM)</span>
+                      <span className="font-medium">{editWeights.llm_content ?? 0}%</span>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      OpenAI LLM pairwise scoring for V3 survey data (free-text responses)
+                    </p>
                     <Slider
-                      value={[editWeights.capability]}
+                      value={[editWeights.llm_content ?? 0]}
                       onValueChange={([v]) =>
-                        setEditWeights({ ...editWeights, capability: v })
+                        setEditWeights({ ...editWeights, llm_content: v })
                       }
                       max={100}
                       step={5}
+                      disabled={isReadOnly}
                     />
                   </div>
                   <div className="space-y-1">
@@ -502,20 +506,7 @@ export default function MatchingModelManager() {
                       }
                       max={100}
                       step={5}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span>Domain Detail Match</span>
-                      <span className="font-medium">{editWeights.domain}%</span>
-                    </div>
-                    <Slider
-                      value={[editWeights.domain]}
-                      onValueChange={([v]) =>
-                        setEditWeights({ ...editWeights, domain: v })
-                      }
-                      max={100}
-                      step={5}
+                      disabled={isReadOnly}
                     />
                   </div>
                   <div className="space-y-1">
@@ -530,6 +521,7 @@ export default function MatchingModelManager() {
                       }
                       max={100}
                       step={5}
+                      disabled={isReadOnly}
                     />
                   </div>
                   <div className="space-y-1">
@@ -544,6 +536,7 @@ export default function MatchingModelManager() {
                       }
                       max={100}
                       step={5}
+                      disabled={isReadOnly}
                     />
                   </div>
                   <div className="space-y-1">
@@ -558,89 +551,58 @@ export default function MatchingModelManager() {
                       }
                       max={100}
                       step={5}
+                      disabled={isReadOnly}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span>Compatibility</span>
+                      <span className="font-medium">{editWeights.compatibility ?? 0}%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Style, energy, feedback, and meeting frequency alignment
+                    </p>
+                    <Slider
+                      value={[editWeights.compatibility ?? 0]}
+                      onValueChange={([v]) =>
+                        setEditWeights({ ...editWeights, compatibility: v })
+                      }
+                      max={30}
+                      step={5}
+                      disabled={isReadOnly}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span>Department Diversity</span>
+                      <span className="font-medium">{editWeights.department_diversity ?? 0}%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Bonus for cross-department matches (different teams)
+                    </p>
+                    <Slider
+                      value={[editWeights.department_diversity ?? 0]}
+                      onValueChange={([v]) =>
+                        setEditWeights({ ...editWeights, department_diversity: v })
+                      }
+                      max={30}
+                      step={5}
+                      disabled={isReadOnly}
                     />
                   </div>
                   <div className="pt-2 text-sm text-muted-foreground">
                     Total:{' '}
-                    {editWeights.capability +
+                    {(editWeights.llm_content ?? 0) +
                       editWeights.semantic +
-                      editWeights.domain +
                       editWeights.seniority +
                       editWeights.timezone +
                       (editWeights.compatibility ?? 0) +
-                      (editWeights.proficiency_gap ?? 0) +
                       (editWeights.department_diversity ?? 0)}
                     % (excluding penalty)
                   </div>
-
-                  <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="pt-3 border-t">
-                    <CollapsibleTrigger className="flex items-center justify-between w-full text-sm font-medium hover:underline">
-                      <span>Advanced Weights</span>
-                      {advancedOpen ? (
-                        <ChevronUp className="w-4 h-4" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4" />
-                      )}
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="space-y-3 pt-2">
-                      <p className="text-xs text-muted-foreground">
-                        Optional fine-tuning factors. Set to 0% to disable.
-                      </p>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>Compatibility</span>
-                          <span className="font-medium">{editWeights.compatibility ?? 0}%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Style, energy, feedback, and meeting frequency alignment
-                        </p>
-                        <Slider
-                          value={[editWeights.compatibility ?? 0]}
-                          onValueChange={([v]) =>
-                            setEditWeights({ ...editWeights, compatibility: v })
-                          }
-                          max={30}
-                          step={5}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>Proficiency Gap</span>
-                          <span className="font-medium">{editWeights.proficiency_gap ?? 0}%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Rewards mentors with higher skill proficiency than mentee
-                        </p>
-                        <Slider
-                          value={[editWeights.proficiency_gap ?? 0]}
-                          onValueChange={([v]) =>
-                            setEditWeights({ ...editWeights, proficiency_gap: v })
-                          }
-                          max={30}
-                          step={5}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>Department Diversity</span>
-                          <span className="font-medium">{editWeights.department_diversity ?? 0}%</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Bonus for cross-department matches (different teams)
-                        </p>
-                        <Slider
-                          value={[editWeights.department_diversity ?? 0]}
-                          onValueChange={([v]) =>
-                            setEditWeights({ ...editWeights, department_diversity: v })
-                          }
-                          max={30}
-                          step={5}
-                        />
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
                 </>
-              )}
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="filters" className="space-y-4 mt-3 overflow-y-auto pr-1">
@@ -661,6 +623,7 @@ export default function MatchingModelManager() {
                       min={1}
                       max={12}
                       step={1}
+                      disabled={!!selectedModel?.is_default}
                     />
                   </div>
                   <div className="flex items-center justify-between py-2">
@@ -680,6 +643,7 @@ export default function MatchingModelManager() {
                           require_available_capacity: checked,
                         })
                       }
+                      disabled={!!selectedModel?.is_default}
                     />
                   </div>
                 </>
@@ -688,10 +652,16 @@ export default function MatchingModelManager() {
           </Tabs>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveWeights}>Save Changes</Button>
+            {selectedModel?.is_default ? (
+              <Button onClick={() => setIsEditDialogOpen(false)}>Close</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveWeights}>Save Changes</Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

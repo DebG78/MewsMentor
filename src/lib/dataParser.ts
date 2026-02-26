@@ -7,6 +7,7 @@ import {
   EXPERIENCE_MAPPING,
   Cohort,
   type JourneyPhase,
+  parseCompensationGrade,
 } from "@/types/mentoring";
 import type { CreateVIPScoreInput, PersonType } from '@/types/vip';
 import type { CreateMetricSnapshotInput } from '@/types/metrics';
@@ -14,9 +15,17 @@ import type { CreateSessionInput, SessionStatus } from '@/lib/sessionService';
 import { resolvePairByName, type ResolvedPair } from '@/lib/personPairResolver';
 import {
   isNewSurveyFormat,
+  detectSurveyVersion,
   extractSharedFields,
   extractMenteeFields,
   extractMentorFields,
+  extractV3SharedFields,
+  extractV3MenteeFields,
+  extractV3MentorFields,
+  countryToTimezoneString,
+  parseMultiSelect,
+  parseCapacityText,
+  parseMentoringExperience,
 } from '@/lib/surveyFieldMapping';
 import * as XLSX from 'xlsx';
 
@@ -778,6 +787,161 @@ export function parseNewFormatMentorRow(row: Record<string, string>, rowIndex: n
   };
 }
 
+// ============================================================================
+// V3 SIMPLIFIED SURVEY PARSERS (Q2 2026+ with Workday enrichment)
+// ============================================================================
+
+/**
+ * Parse a mentee from the V3 simplified survey format.
+ * Workday columns provide role, seniority, timezone; survey provides free-text capabilities.
+ * Also populates legacy fields for backward compatibility.
+ */
+export function parseV3MenteeRow(row: Record<string, string>, rowIndex: number): MenteeData | null {
+  const shared = extractV3SharedFields(row);
+  const mentee = extractV3MenteeFields(row);
+
+  // For "both" respondents, mentee fields might be minimal but should still parse
+  if (!mentee && shared.role_selection !== 'mentee' && shared.role_selection !== 'both') {
+    return null;
+  }
+
+  // Generate a stable ID from name or email
+  const nameForId = shared.name || shared.email || `row-${rowIndex}`;
+  const id = nameForId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+
+  // Derive timezone from country
+  const timezoneStr = countryToTimezoneString(shared.country);
+
+  // Derive seniority from compensation grade
+  const seniorityScore = parseCompensationGrade(shared.compensation_grade);
+  // Map numeric score back to a band label for display
+  const gradeBands: Record<number, string> = { 1: 'L7', 2: 'L6', 3: 'L5', 4: 'L4', 5: 'L3', 6: 'L2', 7: 'L1' };
+  const seniorityBand = gradeBands[seniorityScore] || 'L5';
+
+  // Build legacy topics_to_learn from free-text capabilities
+  const topicsToLearn: string[] = [];
+  if (mentee?.capabilities_wanted) topicsToLearn.push(mentee.capabilities_wanted);
+  if (mentee?.role_specific_area) topicsToLearn.push(mentee.role_specific_area);
+
+  return {
+    id,
+    name: shared.name,
+    role: shared.business_title || '', // Workday Business Title → role
+    experience_years: '', // Not in V3 survey
+    location_timezone: timezoneStr,
+    seniority_band: seniorityBand,
+
+    // Legacy fields (populated for backward compat)
+    topics_to_learn: topicsToLearn,
+    meeting_frequency: '',
+    languages: ['English'],
+    goals_text: mentee?.mentoring_goal || '',
+    department: shared.org_level_04, // Workday Org Level 04 → department
+
+    // Preferences
+    preferred_style: mentee?.preferred_style,
+    feedback_preference: mentee?.feedback_preference,
+    mentor_experience_importance: mentee?.open_to_first_time_mentor,
+    desired_qualities: mentee?.mentor_help_wanted?.join('; '),
+
+    // V2 fields (mapped where possible)
+    bio: shared.bio,
+    mentoring_goal: mentee?.mentoring_goal,
+    mentor_help_wanted: mentee?.mentor_help_wanted || [],
+
+    // V3 fields
+    capabilities_wanted: mentee?.capabilities_wanted,
+    role_specific_area: mentee?.role_specific_area,
+    specific_challenge: mentee?.specific_challenge,
+    open_to_first_time_mentor: mentee?.open_to_first_time_mentor,
+
+    // Workday enrichment
+    business_title: shared.business_title,
+    compensation_grade: shared.compensation_grade,
+    country: shared.country,
+    org_level_04: shared.org_level_04,
+    org_level_05: shared.org_level_05,
+  };
+}
+
+/**
+ * Parse a mentor from the V3 simplified survey format.
+ * Workday columns provide role, seniority, timezone; survey provides free-text capabilities.
+ * Also populates legacy fields for backward compatibility.
+ */
+export function parseV3MentorRow(row: Record<string, string>, rowIndex: number): MentorData | null {
+  const shared = extractV3SharedFields(row);
+  const mentor = extractV3MentorFields(row);
+
+  if (!mentor && shared.role_selection !== 'mentor' && shared.role_selection !== 'both') {
+    return null;
+  }
+
+  // Generate a stable ID from name or email
+  const nameForId = shared.name || shared.email || `row-${rowIndex}`;
+  const id = nameForId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+
+  // Derive timezone from country
+  const timezoneStr = countryToTimezoneString(shared.country);
+
+  // Derive seniority from compensation grade
+  const seniorityScore = parseCompensationGrade(shared.compensation_grade);
+  const gradeBands: Record<number, string> = { 1: 'L7', 2: 'L6', 3: 'L5', 4: 'L4', 5: 'L3', 6: 'L2', 7: 'L1' };
+  const seniorityBand = gradeBands[seniorityScore] || 'L5';
+
+  // Build legacy topics_to_mentor from free-text capabilities
+  const topicsToMentor: string[] = [];
+  if (mentor?.capabilities_offered) topicsToMentor.push(mentor.capabilities_offered);
+
+  return {
+    id,
+    name: shared.name,
+    role: shared.business_title || '', // Workday Business Title → role
+    experience_years: '', // Not in V3 survey
+    location_timezone: timezoneStr,
+    seniority_band: seniorityBand,
+    industry: '', // Not in V3 survey
+    department: shared.org_level_04, // Workday Org Level 04 → department
+
+    // Legacy fields (populated for backward compat)
+    topics_to_mentor: topicsToMentor,
+    has_mentored_before: mentor?.has_mentored_before ?? false,
+    mentoring_style: '',
+    meeting_style: mentor?.mentor_session_style || '',
+    mentor_energy: '',
+    feedback_style: '',
+    preferred_mentee_levels: [],
+    topics_not_to_mentor: mentor?.topics_prefer_not ? [mentor.topics_prefer_not] : undefined,
+    meeting_frequency: '',
+    motivation: mentor?.mentor_motivation || '',
+    expectations: '',
+    capacity_remaining: mentor?.capacity_remaining ?? 1,
+    languages: ['English'],
+
+    // V2 fields (mapped where possible)
+    bio: shared.bio,
+    mentor_motivation: mentor?.mentor_motivation,
+    mentoring_experience: mentor?.mentoring_experience,
+    natural_strengths: mentor?.natural_strengths || [],
+    match_exclusions: mentor?.match_exclusions,
+
+    // V3 fields
+    capabilities_offered: mentor?.capabilities_offered,
+    role_specific_offering: mentor?.role_specific_offering,
+    meaningful_impact: mentor?.meaningful_impact,
+    mentor_support_wanted: mentor?.mentor_support_wanted || [],
+    mentor_session_style: mentor?.mentor_session_style,
+    topics_prefer_not: mentor?.topics_prefer_not,
+
+    // Workday enrichment
+    business_title: shared.business_title,
+    compensation_grade: shared.compensation_grade,
+    country: shared.country,
+    org_level_04: shared.org_level_04,
+    org_level_05: shared.org_level_05,
+  };
+}
+
 // Parse Excel file to array of row objects
 async function parseExcelFile(file: File): Promise<Record<string, string>[]> {
   const arrayBuffer = await file.arrayBuffer();
@@ -835,12 +999,36 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
       return { mentees, mentors, errors, warnings };
     }
 
-    // Auto-detect survey format: new (Q2 2026+ capability-based) vs legacy (topic-based)
-    const useNewFormat = isNewSurveyFormat(rows[0]);
-    console.log(`Survey format detected: ${useNewFormat ? 'NEW (capability-based)' : 'LEGACY (topic-based)'}`);
+    // Auto-detect survey format: v3_simplified, v2_capability, or v1_legacy
+    const surveyVersion = detectSurveyVersion(rows[0]);
+    console.log(`Survey format detected: ${surveyVersion}`);
 
-    if (useNewFormat) {
-      // New survey format: one file with all respondents, role from "participate as" column
+    if (surveyVersion === 'v3_simplified') {
+      // V3 simplified survey: single file with Workday enrichment, free-text capabilities
+      rows.forEach((row, index) => {
+        const shared = extractV3SharedFields(row);
+        const role = shared.role_selection; // 'mentee', 'mentor', or 'both'
+
+        if (role === 'mentee' || role === 'both') {
+          const mentee = parseV3MenteeRow(row, index);
+          if (mentee) {
+            mentees.push(mentee);
+          } else {
+            warnings.push(`Row ${index + 2}: Could not parse mentee data`);
+          }
+        }
+
+        if (role === 'mentor' || role === 'both') {
+          const mentor = parseV3MentorRow(row, index);
+          if (mentor) {
+            mentors.push(mentor);
+          } else {
+            warnings.push(`Row ${index + 2}: Could not parse mentor data`);
+          }
+        }
+      });
+    } else if (surveyVersion === 'v2_capability') {
+      // V2 capability-based survey: one file with role selection, capability framework
       rows.forEach((row, index) => {
         const shared = extractSharedFields(row);
         const role = shared.role_selection; // 'mentee', 'mentor', or 'both'
@@ -864,7 +1052,7 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
         }
       });
     } else {
-      // Legacy format: separate files per role, header-based detection
+      // V1 Legacy format: separate files per role, header-based detection
       rows.forEach((row, index) => {
         const rowType = identifyRowType(row);
 

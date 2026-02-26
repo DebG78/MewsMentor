@@ -47,7 +47,7 @@ export interface MenteeData {
   languages?: string[];
   seniority_band?: string; // Direct from survey (S1, S2, M1, M2, D1, D2, VP, SVP, LT)
 
-  // === New survey revamp fields (capability-based model) ===
+  // === V2 survey fields (capability-based model, kept for old cohorts) ===
   bio?: string;
   primary_capability?: string;
   primary_capability_detail?: string;
@@ -57,7 +57,21 @@ export interface MenteeData {
   secondary_proficiency?: number; // 1-4
   mentoring_goal?: string;
   practice_scenarios?: string[];
-  mentor_help_wanted?: string[]; // Q17: kind of mentor help wanted (new survey)
+  mentor_help_wanted?: string[]; // kind of mentor help wanted
+
+  // === V3 simplified survey fields (Q2 2026 final) ===
+  capabilities_wanted?: string;       // Q7: free-text capabilities to develop
+  role_specific_area?: string;        // Q8: job-specific/role-related mentoring area
+  specific_challenge?: string;        // Q10: specific situation or challenge
+  open_to_first_time_mentor?: string; // Q12: open to first-time mentor?
+  preferred_style?: string;           // Q13: session style preference
+
+  // Workday enrichment fields
+  business_title?: string;            // Workday: Business Title
+  compensation_grade?: string;        // Workday: e.g. "L1 SVP/VP"
+  country?: string;                   // Workday: Location Address - Country
+  org_level_04?: string;              // Workday: department (e.g. "People Team")
+  org_level_05?: string;              // Workday: sub-department (e.g. "Talent Development")
 }
 
 export interface MentorData {
@@ -107,7 +121,7 @@ export interface MentorData {
   role_band?: string;
   seniority_band?: string; // Direct from survey (S1, S2, M1, M2, D1, D2, VP, SVP, LT)
 
-  // === New survey revamp fields (capability-based model) ===
+  // === V2 survey fields (capability-based model, kept for old cohorts) ===
   bio?: string;
   mentor_motivation?: string;
   mentoring_experience?: string; // Richer than boolean has_mentored_before
@@ -122,6 +136,22 @@ export interface MentorData {
   natural_strengths?: string[];
   excluded_scenarios?: string[];
   match_exclusions?: string;
+
+  // === V3 simplified survey fields (Q2 2026 final) ===
+  capabilities_offered?: string;      // Q19: free-text capabilities confident mentoring on
+  role_specific_offering?: string;    // Q20: job/field-specific mentee benefit
+  meaningful_impact?: string;         // Q21: meaningful impact story
+  mentor_support_wanted?: string[];   // Q18: support to feel confident (multi-select)
+  mentor_session_style?: string;      // Q23: session style
+  topics_prefer_not?: string;         // Q24: topics/areas prefer NOT to be matched on
+  // match_exclusions already exists above (Q25)
+
+  // Workday enrichment fields
+  business_title?: string;            // Workday: Business Title
+  compensation_grade?: string;        // Workday: e.g. "L1 SVP/VP"
+  country?: string;                   // Workday: Location Address - Country
+  org_level_04?: string;              // Workday: department (e.g. "People Team")
+  org_level_05?: string;              // Workday: sub-department (e.g. "Talent Development")
 }
 
 // Matching algorithm types
@@ -133,16 +163,19 @@ export interface MatchingFilters {
 }
 
 export interface MatchingFeatures {
-  capability_match: number; // 0-1, tiered capability scoring (45% weight)
-  semantic_similarity: number; // 0-1, text similarity of goals vs bio (30% weight)
-  domain_match: number; // 0-1, domain detail text similarity (5% weight)
-  role_seniority_fit: number; // 0-1, seniority appropriateness (10% weight)
-  tz_overlap_bonus: number; // 0-1, timezone proximity bonus (5% weight)
+  capability_match: number; // 0-1, tiered capability scoring (V2: 45% weight)
+  semantic_similarity: number; // 0-1, text similarity of goals vs bio (V2: 30%, V3: 20%)
+  domain_match: number; // 0-1, domain detail text similarity (V2: 5%)
+  role_seniority_fit: number; // 0-1, seniority appropriateness (V2: 10%, V3: 12%)
+  tz_overlap_bonus: number; // 0-1, timezone proximity bonus (5%)
   capacity_penalty: number; // 0-1, penalty for low capacity (-10% weight)
   // Advanced features (opt-in via weights)
-  compatibility_score: number; // 0-1, style/energy/feedback/frequency alignment
-  proficiency_gap: number; // 0-1, mentor proficiency above mentee
-  department_diversity: number; // 0 or 1, cross-department bonus
+  compatibility_score: number; // 0-1, style/energy/feedback/frequency alignment (V3: 10%)
+  proficiency_gap: number; // 0-1, mentor proficiency above mentee (V2 only)
+  department_diversity: number; // 0 or 1, cross-department bonus (V3: 8%)
+  // V3 LLM-based scoring
+  llm_content_score?: number; // 0-1, LLM pairwise compatibility (V3: 45% weight)
+  llm_reasoning?: string; // Brief LLM reasoning for the score
   // Legacy fields kept for backward compat
   topics_overlap?: number;
   industry_overlap?: number;
@@ -316,6 +349,33 @@ export const SENIORITY_SCORES: Record<string, number> = {
   "SVP": 8,
   "LT": 9,
 };
+
+// Compensation Grade → seniority mapping (V3 survey, Workday enrichment)
+// Format: "L1 SVP/VP", "L2 Director", "L3 Sr. Manager", etc.
+// Lower L-number = higher seniority
+export const COMPENSATION_GRADE_SCORES: Record<string, number> = {
+  "L7": 1,  // Entry level
+  "L6": 2,  // Junior IC
+  "L5": 3,  // Mid IC
+  "L4": 4,  // Senior IC / Lead
+  "L3": 5,  // Sr. Manager
+  "L2": 6,  // Director
+  "L1": 7,  // SVP/VP
+};
+
+/**
+ * Parse a Workday Compensation Grade string to a numeric seniority score.
+ * e.g. "L1 SVP/VP" → 7, "L4 Senior" → 4
+ */
+export function parseCompensationGrade(grade: string | undefined): number {
+  if (!grade) return 3; // default mid-level
+  const match = grade.match(/L(\d)/i);
+  if (match) {
+    const key = `L${match[1]}`;
+    return COMPENSATION_GRADE_SCORES[key] ?? 3;
+  }
+  return 3;
+}
 
 // Journey phases for session-based next-steps messaging
 export type JourneyPhase = 'getting_started' | 'building' | 'midpoint' | 'wrapping_up';

@@ -1,6 +1,7 @@
 // Matching Model Types for Configurable Matching Criteria
 
 export interface MatchingWeights {
+  llm_content: number;
   capability: number;
   semantic: number;
   domain: number;
@@ -171,8 +172,9 @@ export interface EnhancedMatchScore {
   approval_reason?: string;
 }
 
-// Default weights constant
+// Default weights for V2/V1 data (keyword/capability-based matching)
 export const DEFAULT_MATCHING_WEIGHTS: MatchingWeights = {
+  llm_content: 0,
   capability: 45,
   semantic: 30,
   domain: 5,
@@ -183,6 +185,20 @@ export const DEFAULT_MATCHING_WEIGHTS: MatchingWeights = {
   compatibility: 0,
   proficiency_gap: 0,
   department_diversity: 0,
+};
+
+// Default weights for V3 data (LLM pairwise scoring + free-text capabilities)
+export const V3_DEFAULT_MATCHING_WEIGHTS: MatchingWeights = {
+  llm_content: 45,
+  capability: 0,
+  semantic: 20,
+  domain: 0,
+  seniority: 12,
+  timezone: 5,
+  capacity_penalty: 10,
+  compatibility: 10,
+  proficiency_gap: 0,
+  department_diversity: 8,
 };
 
 // Default filters constant

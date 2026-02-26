@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { MatchingOutput, MatchingResult, ImportResult, MatchingHistoryEntry, Cohort, MenteeData, MentorData, MatchScore } from "@/types/mentoring";
-import { performBatchMatching, performTop3Matching, performBatchMatchingAsync, performTop3MatchingAsync } from "@/lib/matchingEngine";
+import { performBatchMatching, performTop3Matching, performBatchMatchingAsync, performTop3MatchingAsync, type MatchingProgress } from "@/lib/matchingEngine";
 import { getActiveMatchingModels, getDefaultMatchingModel } from "@/lib/matchingModelService";
 import { getOrGenerateExplanation, generateAllExplanations } from "@/lib/explanationService";
 import type { MatchingModel } from "@/types/matching";
@@ -55,6 +55,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
 
   // AI embedding and explanation state
   const [embeddingStatus, setEmbeddingStatus] = useState<'idle' | 'loading' | 'success' | 'fallback'>('idle');
+  const [matchingProgress, setMatchingProgress] = useState<MatchingProgress | null>(null);
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
   const [isGeneratingAllExplanations, setIsGeneratingAllExplanations] = useState(false);
@@ -112,7 +113,15 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
     setIsMatching(true);
     setSelectedMode(mode);
     setEmbeddingStatus('loading');
+    setMatchingProgress(null);
     setExplanations({});
+
+    const handleProgress = (progress: MatchingProgress) => {
+      setMatchingProgress(progress);
+      if (progress.step === 'embeddings' && progress.stepProgress === 100) {
+        setEmbeddingStatus('loading'); // keep loading until fully done
+      }
+    };
 
     try {
       const mentees = importedData?.mentees || [];
@@ -125,8 +134,8 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
       if (cohortId) {
         // Use AI-enhanced async matching with embeddings
         const asyncResult = mode === "batch"
-          ? await performBatchMatchingAsync(mentees, mentors, cohortId)
-          : await performTop3MatchingAsync(mentees, mentors, cohortId);
+          ? await performBatchMatchingAsync(mentees, mentors, cohortId, selectedModel || undefined, handleProgress)
+          : await performTop3MatchingAsync(mentees, mentors, cohortId, selectedModel || undefined, handleProgress);
 
         result = asyncResult.output;
         usedEmbeddings = asyncResult.usedEmbeddings;
@@ -379,16 +388,59 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
         </div>
 
         {isMatching && (
-          <div className="space-y-2 pt-2">
-            <div className="flex items-center gap-3">
-              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-              <span className="text-sm font-medium">
-                {embeddingStatus === 'loading'
-                  ? 'Computing AI embeddings...'
-                  : 'Running matching algorithm...'}
-              </span>
+          <div className="space-y-3 pt-2">
+            {/* Step indicators */}
+            <div className="space-y-2">
+              {[
+                { key: 'embeddings', label: 'AI Embeddings' },
+                ...(selectedModel && (selectedModel.weights.llm_content ?? 0) > 0
+                  ? [{ key: 'llm_scoring', label: 'LLM Pairwise Scoring' }]
+                  : []),
+                { key: 'scoring', label: 'Final Scoring' },
+              ].map((step) => {
+                const isActive = matchingProgress?.step === step.key;
+                const isDone = matchingProgress
+                  ? (['embeddings', 'llm_scoring', 'scoring', 'done'].indexOf(matchingProgress.step) >
+                     ['embeddings', 'llm_scoring', 'scoring', 'done'].indexOf(step.key))
+                  : false;
+
+                return (
+                  <div key={step.key} className="flex items-center gap-3">
+                    {isDone ? (
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    ) : isActive ? (
+                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-muted flex-shrink-0" />
+                    )}
+                    <span className={`text-sm ${isActive ? 'font-medium' : isDone ? 'text-muted-foreground' : 'text-muted-foreground/50'}`}>
+                      {isActive && matchingProgress ? matchingProgress.stepLabel : step.label}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <Progress value={embeddingStatus === 'loading' ? 30 : 75} className="w-full" />
+
+            {/* Progress bar for active step */}
+            {matchingProgress && matchingProgress.step !== 'done' && (
+              <Progress
+                value={
+                  matchingProgress.step === 'llm_scoring'
+                    ? matchingProgress.stepProgress
+                    : matchingProgress.step === 'embeddings'
+                      ? (matchingProgress.stepProgress > 0 ? 100 : 30)
+                      : 90
+                }
+                className="w-full"
+              />
+            )}
+
+            {/* LLM pair count detail */}
+            {matchingProgress?.llmDetail && matchingProgress.step === 'llm_scoring' && (
+              <p className="text-xs text-muted-foreground">
+                {matchingProgress.llmDetail.completed} of {matchingProgress.llmDetail.total} pairs scored
+              </p>
+            )}
           </div>
         )}
       </div>

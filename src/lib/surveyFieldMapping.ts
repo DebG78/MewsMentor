@@ -54,15 +54,47 @@ export function findHeaderByKeywords(
 // ============================================================================
 
 /**
+ * Survey format version for branching logic.
+ * - v3_simplified: Q2 2026+ (25 questions, Workday enrichment, free-text capabilities)
+ * - v2_capability: Q1 2026  (capability-based model with proficiency, practice scenarios)
+ * - v1_legacy: pre-2026     (topic-based with separate mentor/mentee files)
+ */
+export type SurveyVersion = 'v3_simplified' | 'v2_capability' | 'v1_legacy';
+
+/**
+ * Detect survey format version from a row's column headers.
+ * V3 is detected by presence of Workday enrichment columns (Business Title, Compensation Grade).
+ * V2 is detected by "participate as" column without Workday columns.
+ * V1 is the fallback for legacy topic-based surveys.
+ */
+export function detectSurveyVersion(row: Record<string, string>): SurveyVersion {
+  const keys = Object.keys(row).map(k => k.toLowerCase());
+
+  // V3: has Workday enrichment columns (Business Title or Compensation Grade)
+  const hasWorkday = keys.some(k =>
+    k.includes('business title') ||
+    k.includes('compensation grade') ||
+    k.includes('compensation_grade')
+  );
+  const hasRoleSelection = keys.some(k =>
+    k.includes('participate as') ||
+    k.includes('want to participate')
+  );
+
+  if (hasWorkday && hasRoleSelection) return 'v3_simplified';
+  if (hasRoleSelection) return 'v2_capability';
+  return 'v1_legacy';
+}
+
+/**
  * Detect if a row set is from the new (Q2 2026+) survey format.
  * The new format has a "participate as" column (Col 14) that explicitly
  * declares role selection.
+ * @deprecated Use detectSurveyVersion() for 3-way detection
  */
 export function isNewSurveyFormat(row: Record<string, string>): boolean {
-  return Object.keys(row).some(key =>
-    key.toLowerCase().includes('participate as') ||
-    key.toLowerCase().includes('want to participate')
-  );
+  const version = detectSurveyVersion(row);
+  return version === 'v2_capability' || version === 'v3_simplified';
 }
 
 // ============================================================================
@@ -384,5 +416,241 @@ export function extractMentorFields(row: Record<string, string>): NewSurveyMento
     topics_not_to_mentor: parseMultiSelect(f(MENTOR_PATTERNS.topics_not_to_mentor)),
     excluded_scenarios: parseMultiSelect(f(MENTOR_PATTERNS.excluded_scenarios)),
     match_exclusions: f(MENTOR_PATTERNS.match_exclusions),
+  };
+}
+
+// ============================================================================
+// V3 SIMPLIFIED SURVEY (Q2 2026+ with Workday enrichment)
+// ============================================================================
+
+/**
+ * Country → UTC offset mapping for timezone matching.
+ * Used when timezone is derived from Workday "Location Address - Country".
+ */
+export const COUNTRY_TIMEZONE_MAP: Record<string, number> = {
+  // Europe
+  'united kingdom': 0, 'uk': 0, 'ireland': 0, 'portugal': 0, 'iceland': 0,
+  'france': 1, 'germany': 1, 'spain': 1, 'italy': 1, 'netherlands': 1,
+  'belgium': 1, 'austria': 1, 'switzerland': 1, 'czech republic': 1, 'czechia': 1,
+  'poland': 1, 'sweden': 1, 'norway': 1, 'denmark': 1, 'hungary': 1,
+  'slovakia': 1, 'croatia': 1, 'slovenia': 1, 'serbia': 1, 'luxembourg': 1,
+  'greece': 2, 'romania': 2, 'bulgaria': 2, 'finland': 2, 'estonia': 2,
+  'latvia': 2, 'lithuania': 2, 'ukraine': 2, 'turkey': 3,
+  // Middle East
+  'israel': 2, 'united arab emirates': 4, 'uae': 4, 'qatar': 3,
+  'saudi arabia': 3, 'oman': 4, 'bahrain': 3, 'kuwait': 3,
+  // Africa
+  'south africa': 2, 'nigeria': 1, 'kenya': 3, 'egypt': 2, 'morocco': 1,
+  'ghana': 0, 'ethiopia': 3, 'tanzania': 3,
+  // Asia
+  'india': 5.5, 'japan': 9, 'south korea': 9, 'china': 8, 'hong kong': 8,
+  'singapore': 8, 'malaysia': 8, 'thailand': 7, 'vietnam': 7,
+  'indonesia': 7, 'philippines': 8, 'taiwan': 8, 'pakistan': 5,
+  'bangladesh': 6, 'sri lanka': 5.5,
+  // Oceania
+  'australia': 10, 'new zealand': 12,
+  // Americas
+  'united states': -5, 'usa': -5, 'us': -5, 'canada': -5,
+  'mexico': -6, 'brazil': -3, 'argentina': -3, 'colombia': -5,
+  'chile': -4, 'peru': -5, 'costa rica': -6,
+};
+
+/**
+ * Convert a country name to a UTC offset (hours).
+ * Returns 1 (CET) as default if country not found (company HQ in Prague).
+ */
+export function countryToTimezoneOffset(country: string | undefined): number {
+  if (!country) return 1;
+  const lower = country.trim().toLowerCase();
+  return COUNTRY_TIMEZONE_MAP[lower] ?? 1;
+}
+
+/**
+ * Convert a country name to a human-readable timezone string.
+ * e.g. "Czech Republic" → "UTC+1 (CET)"
+ */
+export function countryToTimezoneString(country: string | undefined): string {
+  if (!country) return 'UTC+1';
+  const offset = countryToTimezoneOffset(country);
+  const sign = offset >= 0 ? '+' : '';
+  const offsetStr = Number.isInteger(offset) ? `${offset}` : `${offset}`;
+  return `UTC${sign}${offsetStr}`;
+}
+
+// ============================================================================
+// V3 keyword patterns (matched against actual CSV column headers from XLSX export)
+// ============================================================================
+
+/** V3 shared fields (both mentees and mentors) */
+export const V3_SHARED_PATTERNS = {
+  email: [['email']],
+  name: [['name']],
+  business_title: [['business title']],
+  compensation_grade: [['compensation grade']],
+  country: [['location address', 'country'], ['country']],
+  org_level_04: [['org level 04'], ['organization level 04']],
+  org_level_05: [['org level 05'], ['organization level 05']],
+  slack_user_id: [['slack user id'], ['slack']],
+  bio: [['tell us about your role'], ['few lines', 'role'], ['context about your role']],
+  role_selection: [['participate as'], ['want to participate']],
+} as const;
+
+/** V3 mentee-specific patterns (Q7–Q14) */
+export const V3_MENTEE_PATTERNS = {
+  capabilities_wanted: [['capabilities', 'develop'], ['skills', 'develop'], ['capability', 'build']],
+  role_specific_area: [['job-specific'], ['role-specific'], ['role-related', 'mentoring']],
+  mentoring_goal: [['mentoring goal'], ['using the format'], ['what would you like to achieve']],
+  specific_challenge: [['specific situation'], ['specific challenge'], ['situation or challenge']],
+  mentor_help_wanted: [['kind of mentor help'], ['mentor help'], ['support from your mentor']],
+  open_to_first_time_mentor: [['open to', 'first-time'], ['first-time mentor'], ['first time mentor']],
+  preferred_style: [['session style', 'mentee'], ['session style preference'], ['session style']],
+  feedback_preference: [['feedback style', 'mentee'], ['feedback style preference'], ['feedback style']],
+} as const;
+
+/** V3 mentor-specific patterns (Q15–Q25) */
+export const V3_MENTOR_PATTERNS = {
+  mentor_motivation: [['want to mentor'], ['hope to get out'], ['motivation']],
+  capacity: [['how many mentees'], ['mentees would you']],
+  mentoring_experience: [['first time mentoring'], ['first time as a mentor'], ['first time mentor']],
+  mentor_support_wanted: [['support', 'feel confident'], ['what support']],
+  capabilities_offered: [['capabilities', 'confident', 'mentor'], ['confident mentoring'], ['feel confident']],
+  role_specific_offering: [['benefit from', 'job'], ['job', 'field', 'mentee'], ['role-specific', 'offering']],
+  meaningful_impact: [['meaningful impact'], ['impact', 'story']],
+  natural_strengths: [['naturally bring'], ['natural strengths'], ['pick up to']],
+  mentor_session_style: [['session style', 'mentor'], ['preferred session style']],
+  topics_prefer_not: [['prefer not', 'matched'], ['prefer not to', 'mentor'], ['topics', 'prefer not']],
+  match_exclusions: [['make a match not work'], ['anything else', 'match']],
+} as const;
+
+// ============================================================================
+// V3 extraction interfaces
+// ============================================================================
+
+export interface V3SharedFields {
+  email?: string;
+  name?: string;
+  business_title?: string;
+  compensation_grade?: string;
+  country?: string;
+  org_level_04?: string;
+  org_level_05?: string;
+  slack_user_id?: string;
+  bio?: string;
+  role_selection: 'mentee' | 'mentor' | 'both';
+}
+
+export interface V3MenteeFields {
+  capabilities_wanted?: string;
+  role_specific_area?: string;
+  mentoring_goal?: string;
+  specific_challenge?: string;
+  mentor_help_wanted: string[];
+  open_to_first_time_mentor?: string;
+  preferred_style?: string;
+  feedback_preference?: string;
+}
+
+export interface V3MentorFields {
+  mentor_motivation?: string;
+  capacity_remaining: number;
+  mentoring_experience?: string;
+  has_mentored_before: boolean;
+  mentor_support_wanted: string[];
+  capabilities_offered?: string;
+  role_specific_offering?: string;
+  meaningful_impact?: string;
+  natural_strengths: string[];
+  mentor_session_style?: string;
+  topics_prefer_not?: string;
+  match_exclusions?: string;
+}
+
+// ============================================================================
+// V3 extraction functions
+// ============================================================================
+
+/**
+ * Extract shared bio fields from a V3 survey row (with Workday enrichment).
+ */
+export function extractV3SharedFields(row: Record<string, string>): V3SharedFields {
+  const f = (patterns: readonly (readonly string[])[]) => findColumnByKeywords(row, patterns);
+
+  // Determine role selection
+  const roleRaw = f(V3_SHARED_PATTERNS.role_selection) || '';
+  const roleLower = roleRaw.toLowerCase();
+  let role_selection: 'mentee' | 'mentor' | 'both' = 'mentee';
+  if (roleLower.includes('both') || (roleLower.includes('mentee') && roleLower.includes('mentor'))) {
+    role_selection = 'both';
+  } else if (roleLower.includes('mentor')) {
+    role_selection = 'mentor';
+  }
+
+  return {
+    email: f(V3_SHARED_PATTERNS.email),
+    name: f(V3_SHARED_PATTERNS.name),
+    business_title: f(V3_SHARED_PATTERNS.business_title),
+    compensation_grade: f(V3_SHARED_PATTERNS.compensation_grade),
+    country: f(V3_SHARED_PATTERNS.country),
+    org_level_04: f(V3_SHARED_PATTERNS.org_level_04),
+    org_level_05: f(V3_SHARED_PATTERNS.org_level_05),
+    slack_user_id: f(V3_SHARED_PATTERNS.slack_user_id),
+    bio: f(V3_SHARED_PATTERNS.bio),
+    role_selection,
+  };
+}
+
+/**
+ * Extract mentee-specific fields from a V3 survey row.
+ * Returns null if no mentee data is populated.
+ */
+export function extractV3MenteeFields(row: Record<string, string>): V3MenteeFields | null {
+  const f = (patterns: readonly (readonly string[])[]) => findColumnByKeywords(row, patterns);
+
+  const capabilitiesWanted = f(V3_MENTEE_PATTERNS.capabilities_wanted);
+  const goal = f(V3_MENTEE_PATTERNS.mentoring_goal);
+
+  // If no capabilities and no goal, likely not a mentee response
+  if (!capabilitiesWanted && !goal) return null;
+
+  return {
+    capabilities_wanted: capabilitiesWanted,
+    role_specific_area: f(V3_MENTEE_PATTERNS.role_specific_area),
+    mentoring_goal: goal,
+    specific_challenge: f(V3_MENTEE_PATTERNS.specific_challenge),
+    mentor_help_wanted: parseMultiSelect(f(V3_MENTEE_PATTERNS.mentor_help_wanted)),
+    open_to_first_time_mentor: f(V3_MENTEE_PATTERNS.open_to_first_time_mentor),
+    preferred_style: f(V3_MENTEE_PATTERNS.preferred_style),
+    feedback_preference: f(V3_MENTEE_PATTERNS.feedback_preference),
+  };
+}
+
+/**
+ * Extract mentor-specific fields from a V3 survey row.
+ * Returns null if no mentor data is populated.
+ */
+export function extractV3MentorFields(row: Record<string, string>): V3MentorFields | null {
+  const f = (patterns: readonly (readonly string[])[]) => findColumnByKeywords(row, patterns);
+
+  const capabilitiesOffered = f(V3_MENTOR_PATTERNS.capabilities_offered);
+  const motivation = f(V3_MENTOR_PATTERNS.mentor_motivation);
+
+  // If no capabilities and no motivation, likely not a mentor response
+  if (!capabilitiesOffered && !motivation) return null;
+
+  const experienceText = f(V3_MENTOR_PATTERNS.mentoring_experience);
+
+  return {
+    mentor_motivation: motivation,
+    capacity_remaining: parseCapacityText(f(V3_MENTOR_PATTERNS.capacity)),
+    mentoring_experience: experienceText,
+    has_mentored_before: parseMentoringExperience(experienceText),
+    mentor_support_wanted: parseMultiSelect(f(V3_MENTOR_PATTERNS.mentor_support_wanted)),
+    capabilities_offered: capabilitiesOffered,
+    role_specific_offering: f(V3_MENTOR_PATTERNS.role_specific_offering),
+    meaningful_impact: f(V3_MENTOR_PATTERNS.meaningful_impact),
+    natural_strengths: parseMultiSelect(f(V3_MENTOR_PATTERNS.natural_strengths)),
+    mentor_session_style: f(V3_MENTOR_PATTERNS.mentor_session_style),
+    topics_prefer_not: f(V3_MENTOR_PATTERNS.topics_prefer_not),
+    match_exclusions: f(V3_MENTOR_PATTERNS.match_exclusions),
   };
 }

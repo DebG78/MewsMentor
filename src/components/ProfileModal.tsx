@@ -113,16 +113,32 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
                   {isMentee ? 'Mentee' : 'Mentor'}
                 </Badge>
               </div>
-              <p className="text-muted-foreground mt-0.5">{profile.role}</p>
+              <p className="text-muted-foreground mt-0.5">{profile.business_title || profile.role}</p>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" />
-                  {profile.location_timezone}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Briefcase className="w-3.5 h-3.5" />
-                  {profile.experience_years} yrs
-                </span>
+                {profile.country && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
+                    {profile.country}
+                  </span>
+                )}
+                {!profile.country && profile.location_timezone && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
+                    {profile.location_timezone}
+                  </span>
+                )}
+                {profile.compensation_grade && (
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5" />
+                    {profile.compensation_grade}
+                  </span>
+                )}
+                {!profile.compensation_grade && profile.experience_years && (
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3.5 h-3.5" />
+                    {profile.experience_years} yrs
+                  </span>
+                )}
                 {profile.meeting_frequency && (
                   <span className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
@@ -173,8 +189,56 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
             </div>
           )}
 
-          {/* Topics */}
-          {topics.length > 0 && (
+          {/* V3: Workday info (org level, department) */}
+          {(profile.org_level_04 || profile.org_level_05) && (
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              {profile.org_level_04 && (
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>{profile.org_level_04}</span>
+                </div>
+              )}
+              {profile.org_level_05 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">→</span>
+                  <span>{profile.org_level_05}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bio (V3/V2) */}
+          {profile.bio && (
+            <Section icon={<MessageCircle className="w-4 h-4" />} title="About">
+              <p className="text-sm leading-relaxed">{profile.bio}</p>
+            </Section>
+          )}
+
+          {/* V3 Mentee: Capabilities & Goals */}
+          {isMentee && (profile.capabilities_wanted || profile.role_specific_area || profile.specific_challenge) && (
+            <Section icon={<Target className="w-4 h-4" />} title="Development goals">
+              <div className="space-y-2 text-sm">
+                {profile.capabilities_wanted && <p><span className="text-muted-foreground">Capabilities to develop:</span> {profile.capabilities_wanted}</p>}
+                {profile.role_specific_area && <p><span className="text-muted-foreground">Role-specific area:</span> {profile.role_specific_area}</p>}
+                {profile.mentoring_goal && <p><span className="text-muted-foreground">Goal:</span> {profile.mentoring_goal}</p>}
+                {profile.specific_challenge && <p><span className="text-muted-foreground">Challenge:</span> {profile.specific_challenge}</p>}
+              </div>
+            </Section>
+          )}
+
+          {/* V3 Mentor: Capabilities & Offering */}
+          {!isMentee && (profile.capabilities_offered || profile.role_specific_offering || profile.meaningful_impact) && (
+            <Section icon={<Target className="w-4 h-4" />} title="Mentoring offering">
+              <div className="space-y-2 text-sm">
+                {profile.capabilities_offered && <p><span className="text-muted-foreground">Capabilities:</span> {profile.capabilities_offered}</p>}
+                {profile.role_specific_offering && <p><span className="text-muted-foreground">Role-specific:</span> {profile.role_specific_offering}</p>}
+                {profile.meaningful_impact && <p><span className="text-muted-foreground">Impact story:</span> {profile.meaningful_impact}</p>}
+              </div>
+            </Section>
+          )}
+
+          {/* Topics (V1/V2 — hidden if V3 fields are present) */}
+          {topics.length > 0 && !profile.capabilities_wanted && !profile.capabilities_offered && (
             <Section icon={<Target className="w-4 h-4" />} title={isMentee ? 'Wants to learn' : 'Can mentor in'}>
               <div className="flex flex-wrap gap-1.5">
                 {topics.map((topic: string, idx: number) => (
@@ -184,8 +248,8 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
             </Section>
           )}
 
-          {/* Mentee: Motivation & Goals */}
-          {isMentee && (profile.motivation || profile.main_reason || profile.expectations) && (
+          {/* Mentee: Motivation & Goals (V1/V2 — hidden if V3 fields are present) */}
+          {isMentee && !profile.capabilities_wanted && (profile.motivation || profile.main_reason || profile.expectations) && (
             <Section icon={<MessageCircle className="w-4 h-4" />} title="Motivation & goals">
               <div className="space-y-2 text-sm">
                 {profile.motivation && <p><span className="text-muted-foreground">Why:</span> {profile.motivation}</p>}
@@ -253,8 +317,8 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
             </Section>
           )}
 
-          {/* Bio text if available */}
-          {profile.bio_text && (
+          {/* Bio text if available (legacy — only show if bio not already shown) */}
+          {profile.bio_text && !profile.bio && (
             <Section icon={<MessageCircle className="w-4 h-4" />} title="Bio">
               <p className="text-sm leading-relaxed">{profile.bio_text}</p>
             </Section>

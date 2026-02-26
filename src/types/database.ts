@@ -106,6 +106,18 @@ export interface Database {
           secondary_proficiency: number | null
           mentoring_goal: string | null
           practice_scenarios: string[] | null
+          // V3 simplified survey fields (Q2 2026)
+          capabilities_wanted: string | null
+          role_specific_area: string | null
+          specific_challenge: string | null
+          open_to_first_time_mentor: string | null
+          // Workday enrichment fields
+          business_title: string | null
+          compensation_grade: string | null
+          country: string | null
+          org_level_04: string | null
+          org_level_05: string | null
+          seniority_band: string | null
           created_at: string
           updated_at: string
         }
@@ -146,6 +158,18 @@ export interface Database {
           secondary_proficiency?: number | null
           mentoring_goal?: string | null
           practice_scenarios?: string[] | null
+          // V3 simplified survey fields (Q2 2026)
+          capabilities_wanted?: string | null
+          role_specific_area?: string | null
+          specific_challenge?: string | null
+          open_to_first_time_mentor?: string | null
+          // Workday enrichment fields
+          business_title?: string | null
+          compensation_grade?: string | null
+          country?: string | null
+          org_level_04?: string | null
+          org_level_05?: string | null
+          seniority_band?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -185,6 +209,18 @@ export interface Database {
           secondary_proficiency?: number | null
           mentoring_goal?: string | null
           practice_scenarios?: string[] | null
+          // V3 simplified survey fields (Q2 2026)
+          capabilities_wanted?: string | null
+          role_specific_area?: string | null
+          specific_challenge?: string | null
+          open_to_first_time_mentor?: string | null
+          // Workday enrichment fields
+          business_title?: string | null
+          compensation_grade?: string | null
+          country?: string | null
+          org_level_04?: string | null
+          org_level_05?: string | null
+          seniority_band?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -233,6 +269,20 @@ export interface Database {
           natural_strengths: string[] | null
           excluded_scenarios: string[] | null
           match_exclusions: string | null
+          // V3 simplified survey fields (Q2 2026)
+          capabilities_offered: string | null
+          role_specific_offering: string | null
+          meaningful_impact: string | null
+          mentor_support_wanted: string[] | null
+          mentor_session_style: string | null
+          topics_prefer_not: string | null
+          // Workday enrichment fields
+          business_title: string | null
+          compensation_grade: string | null
+          country: string | null
+          org_level_04: string | null
+          org_level_05: string | null
+          seniority_band: string | null
           created_at: string
           updated_at: string
         }
@@ -279,6 +329,20 @@ export interface Database {
           natural_strengths?: string[] | null
           excluded_scenarios?: string[] | null
           match_exclusions?: string | null
+          // V3 simplified survey fields (Q2 2026)
+          capabilities_offered?: string | null
+          role_specific_offering?: string | null
+          meaningful_impact?: string | null
+          mentor_support_wanted?: string[] | null
+          mentor_session_style?: string | null
+          topics_prefer_not?: string | null
+          // Workday enrichment fields
+          business_title?: string | null
+          compensation_grade?: string | null
+          country?: string | null
+          org_level_04?: string | null
+          org_level_05?: string | null
+          seniority_band?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -324,6 +388,20 @@ export interface Database {
           natural_strengths?: string[] | null
           excluded_scenarios?: string[] | null
           match_exclusions?: string | null
+          // V3 simplified survey fields (Q2 2026)
+          capabilities_offered?: string | null
+          role_specific_offering?: string | null
+          meaningful_impact?: string | null
+          mentor_support_wanted?: string[] | null
+          mentor_session_style?: string | null
+          topics_prefer_not?: string | null
+          // Workday enrichment fields
+          business_title?: string | null
+          compensation_grade?: string | null
+          country?: string | null
+          org_level_04?: string | null
+          org_level_05?: string | null
+          seniority_band?: string | null
           created_at?: string
           updated_at?: string
         }

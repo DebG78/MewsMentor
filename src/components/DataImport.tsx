@@ -108,34 +108,38 @@ export function DataImport({ onDataImported, importResult: controlledImportResul
         <TableRow>
           <TableHead>Name/ID</TableHead>
           <TableHead>Role</TableHead>
-          <TableHead>Experience</TableHead>
-          <TableHead>Location</TableHead>
-          <TableHead>Topics to Learn</TableHead>
-          <TableHead>Meeting Frequency</TableHead>
+          <TableHead>Country</TableHead>
+          <TableHead>Level</TableHead>
+          <TableHead>Capabilities / Topics</TableHead>
+          <TableHead>Goal</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {mentees.map((mentee) => (
           <TableRow key={mentee.id}>
             <TableCell className="font-medium">{mentee.name || mentee.id}</TableCell>
-            <TableCell>{mentee.role}</TableCell>
-            <TableCell>{mentee.experience_years}</TableCell>
-            <TableCell className="text-sm">{mentee.location_timezone}</TableCell>
+            <TableCell className="text-sm">{mentee.business_title || mentee.role}</TableCell>
+            <TableCell className="text-sm">{mentee.country || mentee.location_timezone}</TableCell>
+            <TableCell className="text-sm">{mentee.compensation_grade || mentee.seniority_band || mentee.experience_years}</TableCell>
             <TableCell>
-              <div className="flex flex-wrap gap-1">
-                {mentee.topics_to_learn.slice(0, 2).map((topic) => (
-                  <Badge key={topic} variant="secondary" className="text-xs">
-                    {topic.split(' ')[0]}...
-                  </Badge>
-                ))}
-                {mentee.topics_to_learn.length > 2 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{mentee.topics_to_learn.length - 2}
-                  </Badge>
-                )}
-              </div>
+              {mentee.capabilities_wanted ? (
+                <span className="text-xs text-muted-foreground line-clamp-2">{mentee.capabilities_wanted}</span>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {mentee.topics_to_learn.slice(0, 2).map((topic) => (
+                    <Badge key={topic} variant="secondary" className="text-xs">
+                      {topic.split(' ')[0]}...
+                    </Badge>
+                  ))}
+                  {mentee.topics_to_learn.length > 2 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{mentee.topics_to_learn.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
             </TableCell>
-            <TableCell className="text-sm">{mentee.meeting_frequency}</TableCell>
+            <TableCell className="text-xs text-muted-foreground line-clamp-2">{mentee.mentoring_goal || mentee.meeting_frequency}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -148,9 +152,9 @@ export function DataImport({ onDataImported, importResult: controlledImportResul
         <TableRow>
           <TableHead>Name/ID</TableHead>
           <TableHead>Role</TableHead>
-          <TableHead>Experience</TableHead>
-          <TableHead>Location</TableHead>
-          <TableHead>Topics to Mentor</TableHead>
+          <TableHead>Country</TableHead>
+          <TableHead>Level</TableHead>
+          <TableHead>Capabilities / Topics</TableHead>
           <TableHead>Capacity</TableHead>
         </TableRow>
       </TableHeader>
@@ -158,22 +162,26 @@ export function DataImport({ onDataImported, importResult: controlledImportResul
         {mentors.map((mentor) => (
           <TableRow key={mentor.id}>
             <TableCell className="font-medium">{mentor.name || mentor.id}</TableCell>
-            <TableCell>{mentor.role}</TableCell>
-            <TableCell>{mentor.experience_years}</TableCell>
-            <TableCell className="text-sm">{mentor.location_timezone}</TableCell>
+            <TableCell className="text-sm">{mentor.business_title || mentor.role}</TableCell>
+            <TableCell className="text-sm">{mentor.country || mentor.location_timezone}</TableCell>
+            <TableCell className="text-sm">{mentor.compensation_grade || mentor.seniority_band || mentor.experience_years}</TableCell>
             <TableCell>
-              <div className="flex flex-wrap gap-1">
-                {mentor.topics_to_mentor.slice(0, 2).map((topic) => (
-                  <Badge key={topic} variant="secondary" className="text-xs">
-                    {topic.split(' ')[0]}...
-                  </Badge>
-                ))}
-                {mentor.topics_to_mentor.length > 2 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{mentor.topics_to_mentor.length - 2}
-                  </Badge>
-                )}
-              </div>
+              {mentor.capabilities_offered ? (
+                <span className="text-xs text-muted-foreground line-clamp-2">{mentor.capabilities_offered}</span>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {mentor.topics_to_mentor.slice(0, 2).map((topic) => (
+                    <Badge key={topic} variant="secondary" className="text-xs">
+                      {topic.split(' ')[0]}...
+                    </Badge>
+                  ))}
+                  {mentor.topics_to_mentor.length > 2 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{mentor.topics_to_mentor.length - 2}
+                    </Badge>
+                  )}
+                </div>
+              )}
             </TableCell>
             <TableCell>
               <Badge variant={mentor.capacity_remaining > 1 ? "default" : "destructive"}>
