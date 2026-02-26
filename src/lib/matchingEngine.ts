@@ -1696,18 +1696,24 @@ export async function performBatchMatchingAsync(
         }
       }
       if (pairs.length > 0) {
+        console.log(`[Matching] Starting LLM scoring for ${pairs.length} pairs...`);
         onProgress?.({ step: 'llm_scoring', stepLabel: `Scoring ${pairs.length} pairs with AI...`, stepProgress: 0, llmDetail: { completed: 0, total: pairs.length } });
         llmScores = await scorePairsWithLLM(pairs, (llmProgress: LLMScoringProgress) => {
           const pct = llmProgress.total > 0 ? Math.round((llmProgress.completed / llmProgress.total) * 100) : 0;
           onProgress?.({ step: 'llm_scoring', stepLabel: `AI scoring pairs (${llmProgress.completed}/${llmProgress.total})...`, stepProgress: pct, llmDetail: { completed: llmProgress.completed, total: llmProgress.total } });
         });
+        console.log(`[Matching] LLM scoring complete: ${llmScores.size} scores received for ${pairs.length} pairs`);
+        if (llmScores.size === 0) {
+          console.error('[Matching] LLM scoring returned 0 scores — the score-pairs edge function may be failing. Check browser console for errors.');
+        }
       }
     } catch (error) {
-      console.warn('LLM scoring failed, proceeding without LLM scores:', error);
+      console.error('[Matching] LLM scoring failed, proceeding without LLM scores:', error);
     }
   }
 
-  onProgress?.({ step: 'scoring', stepLabel: 'Computing final scores...', stepProgress: 0 });
+  const llmScoreCount = llmScores?.size ?? 0;
+  onProgress?.({ step: 'scoring', stepLabel: `Computing final scores${llmScoreCount > 0 ? ` (${llmScoreCount} AI scores)` : ' (no AI scores)'}...`, stepProgress: 0 });
 
   const results: MatchingResult[] = [];
   const stats: MatchingStats = {
@@ -1808,18 +1814,24 @@ export async function performTop3MatchingAsync(
         }
       }
       if (pairs.length > 0) {
+        console.log(`[Matching] Starting LLM scoring for ${pairs.length} pairs...`);
         onProgress?.({ step: 'llm_scoring', stepLabel: `Scoring ${pairs.length} pairs with AI...`, stepProgress: 0, llmDetail: { completed: 0, total: pairs.length } });
         llmScores = await scorePairsWithLLM(pairs, (llmProgress: LLMScoringProgress) => {
           const pct = llmProgress.total > 0 ? Math.round((llmProgress.completed / llmProgress.total) * 100) : 0;
           onProgress?.({ step: 'llm_scoring', stepLabel: `AI scoring pairs (${llmProgress.completed}/${llmProgress.total})...`, stepProgress: pct, llmDetail: { completed: llmProgress.completed, total: llmProgress.total } });
         });
+        console.log(`[Matching] LLM scoring complete: ${llmScores.size} scores received for ${pairs.length} pairs`);
+        if (llmScores.size === 0) {
+          console.error('[Matching] LLM scoring returned 0 scores — the score-pairs edge function may be failing. Check browser console for errors.');
+        }
       }
     } catch (error) {
-      console.warn('LLM scoring failed, proceeding without LLM scores:', error);
+      console.error('[Matching] LLM scoring failed, proceeding without LLM scores:', error);
     }
   }
 
-  onProgress?.({ step: 'scoring', stepLabel: 'Computing final scores...', stepProgress: 0 });
+  const llmScoreCount = llmScores?.size ?? 0;
+  onProgress?.({ step: 'scoring', stepLabel: `Computing final scores${llmScoreCount > 0 ? ` (${llmScoreCount} AI scores)` : ' (no AI scores)'}...`, stepProgress: 0 });
 
   const results: MatchingResult[] = [];
   const stats: MatchingStats = {

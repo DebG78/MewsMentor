@@ -163,7 +163,9 @@ export async function scorePairsWithLLM(
     }));
 
     try {
+      console.log(`[LLM] Sending batch ${i}-${i + batch.length} (${pairInputs.length} pairs) to score-pairs edge function...`);
       const scores = await callScorePairsEdgeFunction(pairInputs);
+      console.log(`[LLM] Batch ${i}-${i + batch.length} returned ${scores.length} scores`);
 
       for (const score of scores) {
         const key = `${score.mentee_id}::${score.mentor_id}`;
@@ -173,7 +175,7 @@ export async function scorePairsWithLLM(
       completed += batch.length;
       onProgress?.({ total, completed, status: 'scoring' });
     } catch (err) {
-      console.error(`Batch ${i}-${i + batch.length} failed:`, err);
+      console.error(`[LLM] Batch ${i}-${i + batch.length} FAILED:`, err);
       completed += batch.length;
       onProgress?.({ total, completed, status: 'scoring' });
     }

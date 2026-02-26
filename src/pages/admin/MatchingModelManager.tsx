@@ -37,6 +37,8 @@ import {
   Scale,
   Filter,
   Trash2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { MatchingModel, MatchingWeights, MatchingFilters } from '@/types/matching';
 import {
@@ -59,6 +61,7 @@ export default function MatchingModelManager() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MatchingModel | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   // Form state for creating new model
   const [newModelName, setNewModelName] = useState('');
@@ -317,10 +320,29 @@ export default function MatchingModelManager() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Models</CardTitle>
-          <CardDescription>
-            Manage matching models and their versions
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Models</CardTitle>
+              <CardDescription>
+                Manage matching models and their versions
+              </CardDescription>
+            </div>
+            {models.some((m) => m.status === 'archived') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowArchived(!showArchived)}
+                className="text-muted-foreground"
+              >
+                {showArchived ? (
+                  <EyeOff className="w-4 h-4 mr-2" />
+                ) : (
+                  <Eye className="w-4 h-4 mr-2" />
+                )}
+                {showArchived ? 'Hide' : 'Show'} archived ({models.filter((m) => m.status === 'archived').length})
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {models.length === 0 ? (
@@ -342,7 +364,7 @@ export default function MatchingModelManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {models.map((model) => (
+                {models.filter((m) => showArchived || m.status !== 'archived').map((model) => (
                   <TableRow key={model.id}>
                     <TableCell className="font-medium">{model.name}</TableCell>
                     <TableCell>v{model.version}</TableCell>
