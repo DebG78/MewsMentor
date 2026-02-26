@@ -137,7 +137,9 @@ Deno.serve(async (req) => {
       const baseContext: TemplateContext = {
         COHORT_NAME: cohort.name,
         MENTEE_FIRST_NAME: mentee.first_name || mentee.full_name?.split(' ')[0] || '',
+        MENTEE_FULL_NAME: mentee.full_name || mentee.first_name || '',
         MENTOR_FIRST_NAME: mentor.first_name || mentor.full_name?.split(' ')[0] || '',
+        MENTOR_FULL_NAME: mentor.full_name || mentor.first_name || '',
       };
 
       // Send to both participants in the pair

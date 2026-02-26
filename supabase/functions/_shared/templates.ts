@@ -21,7 +21,9 @@ export interface TemplateContext {
   MENTORING_EXPERIENCE?: string;
   // Pair fields
   MENTEE_FIRST_NAME?: string;
+  MENTEE_FULL_NAME?: string;
   MENTOR_FIRST_NAME?: string;
+  MENTOR_FULL_NAME?: string;
   MENTEE_EMAIL?: string;
   MENTOR_EMAIL?: string;
   SHARED_CAPABILITY?: string;
