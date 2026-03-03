@@ -185,13 +185,17 @@ export interface SendStageMessagesResult {
 
 /**
  * Trigger welcome messages for a cohort via the edge function.
+ * Optionally pass template bodies so the edge function doesn't need to query the DB.
  */
-export async function sendWelcomeMessages(cohortId: string): Promise<SendWelcomeResult> {
-  console.log('[sendWelcomeMessages] invoking edge function with cohort_id:', cohortId);
+export async function sendWelcomeMessages(
+  cohortId: string,
+  templates?: Record<string, string>,
+): Promise<SendWelcomeResult> {
+  console.log('[sendWelcomeMessages] invoking edge function with cohort_id:', cohortId, 'templates passed:', !!templates);
 
   const { data: result, error: fnError } = await supabase.functions.invoke(
     'send-welcome-messages',
-    { body: { cohort_id: cohortId } }
+    { body: { cohort_id: cohortId, ...(templates ? { templates } : {}) } }
   );
 
   console.log('[sendWelcomeMessages] response:', { data: result, error: fnError });

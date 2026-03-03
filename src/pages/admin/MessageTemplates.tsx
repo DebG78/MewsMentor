@@ -74,11 +74,6 @@ function getTypeLabel(value: string): string {
   return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function getPhaseLabel(value: string | null): string {
-  if (!value) return '';
-  return JOURNEY_PHASES.find(p => p.value === value)?.label || value;
-}
-
 function getStageLabel(value: string | null): string {
   if (!value) return '';
   return STAGE_TYPES.find(s => s.value === value)?.label || value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -422,7 +417,7 @@ export default function MessageTemplates() {
                     </div>
                     <Select value={filterStage} onValueChange={setFilterStage}>
                       <SelectTrigger className="w-[140px] h-9">
-                        <SelectValue placeholder="Filter by stage" />
+                        <SelectValue placeholder="Runbook stage" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="_all">All stages</SelectItem>
@@ -467,8 +462,7 @@ export default function MessageTemplates() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Type</TableHead>
-                      <TableHead>Stage</TableHead>
-                      <TableHead>Journey Phase</TableHead>
+                      <TableHead>Runbook Stage</TableHead>
                       <TableHead>Scope</TableHead>
                       <TableHead>Active</TableHead>
                       <TableHead>Updated</TableHead>
@@ -484,13 +478,6 @@ export default function MessageTemplates() {
                         <TableCell>
                           {template.stage_type ? (
                             <Badge variant="secondary">{getStageLabel(template.stage_type)}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {template.journey_phase ? (
-                            <Badge variant="secondary">{getPhaseLabel(template.journey_phase)}</Badge>
                           ) : (
                             <span className="text-muted-foreground text-sm">-</span>
                           )}

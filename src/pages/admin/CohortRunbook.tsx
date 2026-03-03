@@ -539,9 +539,23 @@ export default function CohortRunbook() {
           description: `${totalSent} sent, ${totalFailed} failed`,
         });
       } else {
-        // No overrides — use the standard edge function
-        console.log('[sendWelcome] standard path: calling send-welcome-messages edge function');
-        const result = await sendWelcomeMessages(selectedCohort);
+        // No overrides — use the standard edge function, but pass template bodies as fallback
+        // Map templates to standard role keys so the edge function can find them
+        // regardless of the actual template_type name (e.g. "Mentee - Intro Message" → "welcome_mentee")
+        const launchTemplates: Record<string, string> = {};
+        const assigned = launchStage ? (stageAssignedTemplates[launchStage.id] || []) : [];
+        for (const tpl of assigned) {
+          const typeLower = tpl.template_type.toLowerCase();
+          if (typeLower.includes('mentee') && !launchTemplates.welcome_mentee) {
+            launchTemplates.welcome_mentee = tpl.body;
+          } else if (typeLower.includes('mentor') && !launchTemplates.welcome_mentor) {
+            launchTemplates.welcome_mentor = tpl.body;
+          } else if ((typeLower.includes('channel') || typeLower.includes('announcement')) && !launchTemplates.channel_announcement) {
+            launchTemplates.channel_announcement = tpl.body;
+          }
+        }
+        console.log('[sendWelcome] standard path: mapped template keys:', Object.keys(launchTemplates));
+        const result = await sendWelcomeMessages(selectedCohort, Object.keys(launchTemplates).length > 0 ? launchTemplates : undefined);
         console.log('[sendWelcome] edge function result:', result);
 
         if (result.sent === 0 && result.failed === 0) {

@@ -105,28 +105,59 @@ Deno.serve(async (req) => {
       return errorResponse(400, 'No matched pairs found in cohort. Run matching first.');
     }
 
-    // Load message templates (cohort-specific first, then global)
-    const { data: templates } = await supabaseAdmin
-      .from('message_templates')
-      .select('*')
-      .or(`cohort_id.eq.${cohortId},cohort_id.is.null`)
-      .eq('is_active', true)
-      .in('template_type', ['welcome_mentee', 'welcome_mentor', 'channel_announcement']);
+    // Templates can be passed in the request body (from frontend) or loaded from DB
+    const bodyTemplates = body.templates as Record<string, string> | undefined;
 
-    console.log('[send-welcome-messages] templates found:', templates?.length || 0, templates?.map(t => t.template_type));
+    let menteeTemplate: string | null = null;
+    let mentorTemplate: string | null = null;
+    let channelTemplate: string | null = null;
 
-    const getTemplate = (type: string): string | null => {
-      // Cohort-specific first
-      const cohortTemplate = templates?.find(t => t.template_type === type && t.cohort_id === cohortId);
-      if (cohortTemplate) return cohortTemplate.body;
-      // Global fallback
-      const globalTemplate = templates?.find(t => t.template_type === type && !t.cohort_id);
-      return globalTemplate?.body || null;
-    };
+    // Check for templates passed from frontend — support both standard keys
+    // (welcome_mentee) and custom template_type names (e.g. "Mentee - Intro Message")
+    if (bodyTemplates && Object.keys(bodyTemplates).length > 0) {
+      // First try standard keys
+      menteeTemplate = bodyTemplates.welcome_mentee || null;
+      mentorTemplate = bodyTemplates.welcome_mentor || null;
+      channelTemplate = bodyTemplates.channel_announcement || null;
 
-    const menteeTemplate = getTemplate('welcome_mentee');
-    const mentorTemplate = getTemplate('welcome_mentor');
-    const channelTemplate = getTemplate('channel_announcement');
+      // If standard keys didn't match, classify by name
+      if (!menteeTemplate || !mentorTemplate) {
+        for (const [key, value] of Object.entries(bodyTemplates)) {
+          const keyLower = key.toLowerCase();
+          if (!menteeTemplate && keyLower.includes('mentee')) {
+            menteeTemplate = value;
+          } else if (!mentorTemplate && keyLower.includes('mentor')) {
+            mentorTemplate = value;
+          } else if (!channelTemplate && (keyLower.includes('channel') || keyLower.includes('announcement'))) {
+            channelTemplate = value;
+          }
+        }
+      }
+
+      console.log('[send-welcome-messages] using templates from request body, keys:', Object.keys(bodyTemplates), 'matched: mentee=', !!menteeTemplate, 'mentor=', !!mentorTemplate, 'channel=', !!channelTemplate);
+    } else {
+      // Load from database
+      const { data: templates, error: tplError } = await supabaseAdmin
+        .from('message_templates')
+        .select('*')
+        .or(`cohort_id.eq.${cohortId},cohort_id.is.null`)
+        .eq('is_active', true)
+        .in('template_type', ['welcome_mentee', 'welcome_mentor', 'channel_announcement']);
+
+      console.log('[send-welcome-messages] DB templates found:', templates?.length || 0, templates?.map(t => t.template_type), 'error:', tplError);
+
+      const getTemplate = (type: string): string | null => {
+        const cohortTemplate = templates?.find(t => t.template_type === type && t.cohort_id === cohortId);
+        if (cohortTemplate) return cohortTemplate.body;
+        const globalTemplate = templates?.find(t => t.template_type === type && !t.cohort_id);
+        return globalTemplate?.body || null;
+      };
+
+      menteeTemplate = getTemplate('welcome_mentee');
+      mentorTemplate = getTemplate('welcome_mentor');
+      channelTemplate = getTemplate('channel_announcement');
+    }
+
     console.log('[send-welcome-messages] templates: mentee=', !!menteeTemplate, 'mentor=', !!mentorTemplate, 'channel=', !!channelTemplate);
 
     // Build lookup maps
