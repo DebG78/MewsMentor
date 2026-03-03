@@ -687,6 +687,7 @@ export function parseNewFormatMenteeRow(row: Record<string, string>, rowIndex: n
   return {
     id,
     name: shared.name,
+    slack_user_id: shared.slack_user_id,
     role: shared.role,
     experience_years: '', // Not asked in new survey
     location_timezone: shared.location_timezone,
@@ -747,6 +748,7 @@ export function parseNewFormatMentorRow(row: Record<string, string>, rowIndex: n
   return {
     id,
     name: shared.name,
+    slack_user_id: shared.slack_user_id,
     role: shared.role,
     experience_years: '', // Not asked in new survey
     location_timezone: shared.location_timezone,
@@ -826,6 +828,7 @@ export function parseV3MenteeRow(row: Record<string, string>, rowIndex: number):
   return {
     id,
     name: shared.name,
+    slack_user_id: shared.slack_user_id,
     role: shared.business_title || '', // Workday Business Title → role
     experience_years: '', // Not in V3 survey
     location_timezone: timezoneStr,
@@ -896,6 +899,7 @@ export function parseV3MentorRow(row: Record<string, string>, rowIndex: number):
   return {
     id,
     name: shared.name,
+    slack_user_id: shared.slack_user_id,
     role: shared.business_title || '', // Workday Business Title → role
     experience_years: '', // Not in V3 survey
     location_timezone: timezoneStr,

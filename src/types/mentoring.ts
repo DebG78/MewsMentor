@@ -3,6 +3,7 @@
 export interface MenteeData {
   id: string; // From "#" column
   name?: string; // From "Full Name" column
+  slack_user_id?: string; // Slack User ID for messaging
   pronouns?: string;
   role: string;
   experience_years: string; // "3–5", "6–10", "10+", etc. (legacy)
@@ -77,6 +78,7 @@ export interface MenteeData {
 export interface MentorData {
   id: string; // From "#" column
   name?: string; // From "Full Name" column
+  slack_user_id?: string; // Slack User ID for messaging
   pronouns?: string;
   role: string;
   experience_years: string; // legacy

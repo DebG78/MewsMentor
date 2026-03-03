@@ -79,6 +79,7 @@ import { cn } from '@/lib/utils';
 import {
   getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
   sendBulkMessages, getCohortParticipants, buildParticipantContext,
+  seedDefaultTemplatesForStage, STAGE_DEFAULT_TEMPLATE_TYPES,
   TEMPLATE_TYPES,
   type MessageTemplate, type MessageLogSummary, type Participant,
 } from '@/lib/messageService';
@@ -148,13 +149,12 @@ export default function CohortRunbook() {
   const [editingInlineTemplate, setEditingInlineTemplate] = useState<string | null>(null);
   // Template picker dialog
   const [addTemplateForStage, setAddTemplateForStage] = useState<string | null>(null);
+  // Seeding default templates
+  const [seedingStage, setSeedingStage] = useState<string | null>(null);
 
   // Default template types for auto-populating each stage
-  const STAGE_DEFAULT_TYPES: Record<string, { types: string[]; phase?: string }> = {
-    launch: { types: ['welcome_mentee', 'welcome_mentor', 'channel_announcement'] },
-    midpoint: { types: ['next_steps', 'next_steps_mentee', 'next_steps_mentor'], phase: 'midpoint' },
-    closure: { types: ['next_steps', 'next_steps_mentee', 'next_steps_mentor'], phase: 'wrapping_up' },
-  };
+  // Use shared stage-to-template-type mapping from messageService
+  const STAGE_DEFAULT_TYPES = STAGE_DEFAULT_TEMPLATE_TYPES;
 
   useEffect(() => {
     loadCohorts();
@@ -197,23 +197,13 @@ export default function CohortRunbook() {
       setProgress(progressData);
       setAllTemplates(templatesData);
 
-      // Auto-populate stage template assignments from stage_type tag (primary) + legacy defaults (fallback)
+      // Populate stage template assignments — only show explicitly tagged templates
       const assignments: Record<string, MessageTemplate[]> = {};
       for (const stage of stagesData) {
-        // Primary: templates tagged with this stage_type
+        // Only show templates that have been explicitly tagged with this stage_type
         const taggedTemplates = templatesData.filter(t => t.stage_type === stage.stage_type);
         if (taggedTemplates.length > 0) {
           assignments[stage.id] = taggedTemplates;
-        } else {
-          // Fallback: legacy hardcoded type matching
-          const defaults = STAGE_DEFAULT_TYPES[stage.stage_type];
-          if (defaults) {
-            assignments[stage.id] = templatesData.filter(t => {
-              if (!defaults.types.includes(t.template_type)) return false;
-              if (defaults.phase && t.template_type.startsWith('next_steps') && t.journey_phase !== defaults.phase) return false;
-              return true;
-            });
-          }
         }
       }
       setStageAssignedTemplates(assignments);
@@ -1025,22 +1015,57 @@ export default function CohortRunbook() {
                             )}
 
                             {assignedTemplates.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">
-                                No templates assigned.{' '}
-                                <button
-                                  className="text-primary underline"
-                                  onClick={() => setAddTemplateForStage(stage.id)}
-                                >
-                                  Add one
-                                </button>
-                                {' '}or{' '}
-                                <button
-                                  className="text-primary underline"
-                                  onClick={() => navigate('/admin/settings?tab=messages')}
-                                >
-                                  create a new template
-                                </button>
-                              </p>
+                              <div className="rounded-md border border-dashed p-4 text-center space-y-3">
+                                <p className="text-sm text-muted-foreground">
+                                  No message templates set up for this stage yet.
+                                </p>
+                                {defaults && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      onClick={async () => {
+                                        setSeedingStage(stage.id);
+                                        try {
+                                          const created = await seedDefaultTemplatesForStage(stage.stage_type);
+                                          toast({
+                                            title: 'Templates added',
+                                            description: created > 0
+                                              ? `${created} default template${created > 1 ? 's' : ''} added to this stage.`
+                                              : 'Default templates already existed — they have been assigned to this stage.',
+                                          });
+                                          await loadStages();
+                                        } catch (err: any) {
+                                          toast({ title: 'Error', description: err.message, variant: 'destructive' });
+                                        } finally {
+                                          setSeedingStage(null);
+                                        }
+                                      }}
+                                      disabled={seedingStage === stage.id}
+                                    >
+                                      {seedingStage === stage.id ? (
+                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                      ) : (
+                                        <Plus className="w-3 h-3 mr-1" />
+                                      )}
+                                      Add Default Templates
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground">
+                                      {isLaunch
+                                        ? 'Adds Welcome (Mentee), Welcome (Mentor), and Channel Announcement templates.'
+                                        : `Adds Next Steps templates for the ${defaults.phase === 'midpoint' ? 'Midpoint' : 'Wrapping Up'} phase.`}
+                                    </p>
+                                  </>
+                                )}
+                                <div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setAddTemplateForStage(stage.id)}
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" /> Pick Existing Template
+                                  </Button>
+                                </div>
+                              </div>
                             ) : (
                               <div className="space-y-2">
                                 {assignedTemplates.map(tpl => {
