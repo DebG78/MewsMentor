@@ -70,11 +70,13 @@ export type SurveyVersion = 'v3_simplified' | 'v2_capability' | 'v1_legacy';
 export function detectSurveyVersion(row: Record<string, string>): SurveyVersion {
   const keys = Object.keys(row).map(k => k.toLowerCase());
 
-  // V3: has Workday enrichment columns (Business Title or Compensation Grade)
+  // V3: has Workday enrichment columns (Business Title, Compensation Grade, or equivalent)
   const hasWorkday = keys.some(k =>
     k.includes('business title') ||
     k.includes('compensation grade') ||
-    k.includes('compensation_grade')
+    k.includes('compensation_grade') ||
+    k.includes('job title') ||
+    (k.includes('level') && k.includes('grade'))
   );
   const hasRoleSelection = keys.some(k =>
     k.includes('participate as') ||
@@ -485,10 +487,10 @@ export function countryToTimezoneString(country: string | undefined): string {
 export const V3_SHARED_PATTERNS = {
   email: [['email']],
   name: [['name']],
-  business_title: [['business title']],
-  compensation_grade: [['compensation grade']],
+  business_title: [['business title'], ['job title']],
+  compensation_grade: [['compensation grade'], ['level', 'grade']],
   country: [['location address', 'country'], ['country']],
-  org_level_04: [['org level 04'], ['organization level 04']],
+  org_level_04: [['org level 04'], ['organization level 04'], ['department']],
   org_level_05: [['org level 05'], ['organization level 05']],
   slack_user_id: [['slack user id'], ['slack']],
   bio: [['tell us about your role'], ['few lines', 'role'], ['context about your role']],

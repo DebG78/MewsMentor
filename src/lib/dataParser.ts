@@ -972,6 +972,82 @@ function isExcelFile(file: File): boolean {
          excelExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 }
 
+/**
+ * Remap generic MS Forms branching column names to descriptive names.
+ * MS Forms exports branching questions (mentee/mentor-specific) with generic
+ * column names like "Mentees", "Mentees2", "Mentors", "Mentors8", etc.
+ * This function detects those columns and renames them to match our keyword patterns.
+ */
+function remapGenericMSFormsColumns(rows: Record<string, string>[]): Record<string, string>[] {
+  if (rows.length === 0) return rows;
+
+  const headers = Object.keys(rows[0]);
+
+  // Detect generic mentee columns: exact match for "Mentees", "Mentees2", etc.
+  const genericMenteeHeaders = headers.filter(h => /^mentees?\d*$/i.test(h.trim()));
+  // Detect generic mentor columns: exact match for "Mentors", "Mentors2", etc.
+  const genericMentorHeaders = headers.filter(h => /^mentors?\d*$/i.test(h.trim()));
+
+  if (genericMenteeHeaders.length === 0 && genericMentorHeaders.length === 0) {
+    return rows; // No generic columns — no remapping needed
+  }
+
+  console.log(`[remapColumns] Found ${genericMenteeHeaders.length} generic mentee columns, ${genericMentorHeaders.length} generic mentor columns`);
+
+  // Descriptive labels for mentee branching questions (in form order).
+  // These contain keywords that match V3_MENTEE_PATTERNS and MENTEE_PATTERNS.
+  const menteeBranchLabels = [
+    'Mentee: job-specific or role-related mentoring area',
+    'Mentee: mentoring goal using the format',
+    'Mentee: specific situation or challenge',
+    'Mentee: kind of mentor help wanted',
+    'Mentee: open to a first-time mentor',
+    'Mentee: session style preference',
+    'Mentee: feedback style preference',
+  ];
+
+  // Descriptive labels for mentor branching questions (in form order).
+  // These contain keywords that match V3_MENTOR_PATTERNS and MENTOR_PATTERNS.
+  const mentorBranchLabels = [
+    'Mentor: why do you want to mentor',
+    'Mentor: is this your first time mentoring as a mentor',
+    'Mentor: what support would help you feel confident',
+    'Mentor: capabilities you feel confident mentoring others in',
+    'Mentor: could a mentee benefit from your job or field',
+    'Mentor: share a hard-earned lesson or meaningful impact story',
+    'Mentor: what do you naturally bring as strengths',
+    'Mentor: preferred session style (mentor)',
+    'Mentor: topics you prefer not to mentor or be matched on',
+    'Mentor: anything else that would make a match not work',
+  ];
+
+  // Build the rename map
+  const renameMap: Record<string, string> = {};
+
+  genericMenteeHeaders.forEach((h, i) => {
+    if (i < menteeBranchLabels.length) {
+      renameMap[h] = menteeBranchLabels[i];
+    }
+  });
+
+  genericMentorHeaders.forEach((h, i) => {
+    if (i < mentorBranchLabels.length) {
+      renameMap[h] = mentorBranchLabels[i];
+    }
+  });
+
+  console.log('[remapColumns] Remap:', renameMap);
+
+  // Apply the renaming to all rows
+  return rows.map(row => {
+    const newRow: Record<string, string> = {};
+    for (const [key, value] of Object.entries(row)) {
+      newRow[renameMap[key] || key] = value;
+    }
+    return newRow;
+  });
+}
+
 // Main data import function
 export async function importMentoringData(file: File): Promise<ImportResult> {
   const errors: string[] = [];
@@ -996,6 +1072,22 @@ export async function importMentoringData(file: File): Promise<ImportResult> {
 
     if (rows.length === 0) {
       errors.push("No data found in file");
+      return { mentees, mentors, errors, warnings };
+    }
+
+    // Remap generic MS Forms branching columns and filter empty overflow rows
+    rows = remapGenericMSFormsColumns(rows);
+    rows = rows.filter(row => {
+      // Skip rows where all identifying fields are empty (overflow rows from multi-value cells)
+      const hasIdentity = Object.keys(row).some(k => {
+        const lk = k.toLowerCase();
+        return (lk === 'name' || lk === 'email' || lk === 'id') && row[k]?.trim();
+      });
+      return hasIdentity;
+    });
+
+    if (rows.length === 0) {
+      errors.push("No data rows found (all rows appear to be empty or overflow rows)");
       return { mentees, mentors, errors, warnings };
     }
 
