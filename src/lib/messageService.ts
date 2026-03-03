@@ -171,6 +171,7 @@ export interface SendWelcomeResult {
   sent: number;
   failed: number;
   errors?: string[];
+  diagnostics?: string[];
 }
 
 export interface SendStageMessagesResult {

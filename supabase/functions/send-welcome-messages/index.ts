@@ -73,10 +73,16 @@ Deno.serve(async (req) => {
 
     const mentees = menteesRes.data || [];
     const mentors = mentorsRes.data || [];
+    console.log('[send-welcome-messages] loaded mentees:', mentees.length, 'mentors:', mentors.length);
 
     // Build match pairs from manual_matches or algorithm matches
     const manualMatches = (cohort.manual_matches as any)?.matches || [];
     const algoResults = (cohort.matches as any)?.results || [];
+    console.log('[send-welcome-messages] manualMatches:', manualMatches.length, 'algoResults:', algoResults.length);
+    if (manualMatches.length === 0 && algoResults.length === 0) {
+      console.log('[send-welcome-messages] raw manual_matches:', JSON.stringify(cohort.manual_matches));
+      console.log('[send-welcome-messages] raw matches:', JSON.stringify(cohort.matches));
+    }
 
     const pairs: Array<{ mentee_id: string; mentor_id: string }> = [];
 
@@ -93,6 +99,8 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log('[send-welcome-messages] pairs:', pairs.length, pairs.length > 0 ? JSON.stringify(pairs[0]) : '(none)');
+
     if (pairs.length === 0) {
       return errorResponse(400, 'No matched pairs found in cohort. Run matching first.');
     }
@@ -104,6 +112,8 @@ Deno.serve(async (req) => {
       .or(`cohort_id.eq.${cohortId},cohort_id.is.null`)
       .eq('is_active', true)
       .in('template_type', ['welcome_mentee', 'welcome_mentor', 'channel_announcement']);
+
+    console.log('[send-welcome-messages] templates found:', templates?.length || 0, templates?.map(t => t.template_type));
 
     const getTemplate = (type: string): string | null => {
       // Cohort-specific first
@@ -117,6 +127,7 @@ Deno.serve(async (req) => {
     const menteeTemplate = getTemplate('welcome_mentee');
     const mentorTemplate = getTemplate('welcome_mentor');
     const channelTemplate = getTemplate('channel_announcement');
+    console.log('[send-welcome-messages] templates: mentee=', !!menteeTemplate, 'mentor=', !!mentorTemplate, 'channel=', !!channelTemplate);
 
     // Build lookup maps
     const menteeMap = new Map(mentees.map(m => [m.mentee_id, m]));
@@ -124,13 +135,24 @@ Deno.serve(async (req) => {
 
     let sentCount = 0;
     let failedCount = 0;
+    let skippedNoLookup = 0;
+    let skippedNoSlack = 0;
     const errors: string[] = [];
 
     // Send welcome DMs for each pair
     for (const pair of pairs) {
       const mentee = menteeMap.get(pair.mentee_id);
       const mentor = mentorMap.get(pair.mentor_id);
-      if (!mentee || !mentor) continue;
+      if (!mentee || !mentor) {
+        skippedNoLookup++;
+        console.log('[send-welcome-messages] pair skipped: mentee_id=', pair.mentee_id, 'found=', !!mentee, 'mentor_id=', pair.mentor_id, 'found=', !!mentor);
+        console.log('[send-welcome-messages] menteeMap keys:', [...menteeMap.keys()]);
+        console.log('[send-welcome-messages] mentorMap keys:', [...mentorMap.keys()]);
+        continue;
+      }
+      if (!mentee.slack_user_id && !mentor.slack_user_id) {
+        skippedNoSlack++;
+      }
 
       // Find shared capability
       const menteeCapabilities = [mentee.primary_capability, mentee.secondary_capability].filter(Boolean).map((c: string) => c.toLowerCase());
@@ -298,6 +320,16 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log('[send-welcome-messages] done: pairs=', pairs.length, 'sent=', sentCount, 'failed=', failedCount, 'skippedNoLookup=', skippedNoLookup, 'skippedNoSlack=', skippedNoSlack);
+
+    // Build diagnostic hints when nothing was sent
+    const diagnostics: string[] = [];
+    if (sentCount === 0 && failedCount === 0) {
+      if (skippedNoLookup > 0) diagnostics.push(`${skippedNoLookup} pair(s) skipped: mentee/mentor ID not found in database`);
+      if (skippedNoSlack > 0) diagnostics.push(`${skippedNoSlack} pair(s) have no Slack user IDs`);
+      if (!menteeTemplate && !mentorTemplate) diagnostics.push('No welcome_mentee or welcome_mentor templates found');
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -306,6 +338,7 @@ Deno.serve(async (req) => {
         sent: sentCount,
         failed: failedCount,
         ...(errors.length > 0 ? { errors } : {}),
+        ...(diagnostics.length > 0 ? { diagnostics } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

@@ -513,11 +513,26 @@ export default function CohortRunbook() {
         const assigned = stageAssignedTemplates[launchStage.id] || [];
         let totalSent = 0, totalFailed = 0;
 
+        const withSlack = participants.filter(p => p.slack_user_id);
+        console.log('[sendWelcome] bulk path: participants=', participants.length, 'withSlackId=', withSlack.length, 'templates=', assigned.length);
+
+        if (assigned.length === 0) {
+          toast({ title: 'No templates assigned', description: 'Assign welcome templates to the launch stage first.', variant: 'destructive' });
+          return;
+        }
+        if (participants.length === 0) {
+          toast({ title: 'No participants found', description: 'The cohort has no mentees or mentors in the database.', variant: 'destructive' });
+          return;
+        }
+        if (withSlack.length === 0) {
+          toast({ title: 'No Slack IDs', description: 'None of the participants have a Slack user ID. Add Slack IDs to mentees/mentors before sending.', variant: 'destructive' });
+          return;
+        }
+
         for (const tpl of assigned) {
           const body = getEffectiveBody(tpl.id);
           if (!body) continue;
-          const recipients = participants
-            .filter(p => p.slack_user_id)
+          const recipients = withSlack
             .map(p => ({ slack_user_id: p.slack_user_id!, context: buildParticipantContext(p, cohortName) }));
           if (recipients.length === 0) continue;
           const result = await sendBulkMessages({
@@ -535,11 +550,31 @@ export default function CohortRunbook() {
         });
       } else {
         // No overrides — use the standard edge function
+        console.log('[sendWelcome] standard path: calling send-welcome-messages edge function');
         const result = await sendWelcomeMessages(selectedCohort);
-        toast({
-          title: 'Welcome messages sent',
-          description: `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`,
-        });
+        console.log('[sendWelcome] edge function result:', result);
+
+        if (result.sent === 0 && result.failed === 0) {
+          // Provide a helpful diagnostic message
+          const hints: string[] = result.diagnostics || [];
+          if (hints.length === 0) {
+            if (result.pairs === 0) hints.push('No matched pairs found — run matching first.');
+            else {
+              hints.push(`${result.pairs} pair(s) found but no messages sent.`);
+              hints.push('Check that mentees/mentors have Slack IDs and welcome templates exist.');
+            }
+          }
+          toast({
+            title: 'No messages sent',
+            description: hints.join(' '),
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Welcome messages sent',
+            description: `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`,
+          });
+        }
       }
       // Auto-check "Send match notifications" checklist item in the launch stage
       if (launchStage) {
@@ -552,6 +587,7 @@ export default function CohortRunbook() {
       }
       loadStages();
     } catch (err: any) {
+      console.error('[sendWelcome] error:', err);
       toast({
         title: 'Failed to send messages',
         description: err.message,
