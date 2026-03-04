@@ -296,6 +296,14 @@ export interface Participant {
   mentoring_goal: string | null;
   role: string | null;
   cohort_id: string;
+  // Mentor-specific fields
+  natural_strengths: string[] | null;
+  hard_earned_lesson: string | null;
+  mentor_motivation: string | null;
+  mentoring_experience: string | null;
+  // Style fields (mentee: preferred_style/feedback_preference, mentor: meeting_style/feedback_style)
+  session_style: string | null;
+  feedback_style: string | null;
 }
 
 function menteeToParticipant(m: any): Participant {
@@ -311,6 +319,12 @@ function menteeToParticipant(m: any): Participant {
     mentoring_goal: m.mentoring_goal || null,
     role: m.role || null,
     cohort_id: m.cohort_id,
+    natural_strengths: null,
+    hard_earned_lesson: null,
+    mentor_motivation: null,
+    mentoring_experience: null,
+    session_style: m.preferred_style || null,
+    feedback_style: m.feedback_preference || null,
   };
 }
 
@@ -324,9 +338,15 @@ function mentorToParticipant(m: any): Participant {
     primary_capability: m.primary_capability || null,
     secondary_capability: m.secondary_capability || null,
     bio: m.bio || null,
-    mentoring_goal: m.mentor_motivation || null,
+    mentoring_goal: null,
     role: m.role || null,
     cohort_id: m.cohort_id,
+    natural_strengths: m.natural_strengths || null,
+    hard_earned_lesson: m.hard_earned_lesson || null,
+    mentor_motivation: m.mentor_motivation || null,
+    mentoring_experience: m.mentoring_experience || null,
+    session_style: m.meeting_style || null,
+    feedback_style: m.feedback_style || null,
   };
 }
 
@@ -426,6 +446,15 @@ export function buildParticipantContext(
     SECONDARY_CAPABILITY: participant.secondary_capability || '',
     MENTORING_GOAL: participant.mentoring_goal || '',
     BIO: participant.bio || '',
+    SESSION_STYLE: participant.session_style || '',
+    FEEDBACK_STYLE: participant.feedback_style || '',
+    // Mentor-specific
+    NATURAL_STRENGTHS: Array.isArray(participant.natural_strengths)
+      ? participant.natural_strengths.join(', ')
+      : '',
+    HARD_EARNED_LESSON: participant.hard_earned_lesson || '',
+    MENTOR_MOTIVATION: participant.mentor_motivation || '',
+    MENTORING_EXPERIENCE: participant.mentoring_experience || '',
     COHORT_NAME: cohortName || '',
     ADMIN_EMAIL: 'mentoring@mews.com',
   };
