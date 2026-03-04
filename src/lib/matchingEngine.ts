@@ -904,17 +904,14 @@ export function performBatchMatching(
   // Track mentor capacity during assignment
   const mentorCapacity = new Map<string, number>();
   mentors.forEach(mentor => {
-    console.log(`[Matching] Mentor: id=${mentor.id}, name=${mentor.name}, capacity=${mentor.capacity_remaining}`);
     mentorCapacity.set(mentor.id, mentor.capacity_remaining);
   });
 
   mentees.forEach(mentee => {
-    console.log(`[Matching] Processing mentee: id=${mentee.id}, name=${mentee.name}`);
     // Get available mentors (those with capacity)
     const availableMentors = mentors.filter(mentor =>
       (mentorCapacity.get(mentor.id) || 0) > 0
     );
-    console.log(`[Matching] Available mentors (capacity > 0): ${availableMentors.length} of ${mentors.length}`);
 
     stats.pairs_evaluated += availableMentors.length;
 
@@ -1577,27 +1574,11 @@ function findTopMatchesWithEmbeddings(
   maxResults: number = 3,
 ): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
   const validMatches = mentors
-    .filter(mentor => {
-      const passes = applyHardFilters(mentee, mentor);
-      if (!passes) {
-        const diag = applyHardFiltersWithDiagnostics(mentee, mentor);
-        console.log(`[findTopMatchesWithEmbeddings] ${mentor.name} BLOCKED by:`, diag.blockedBy);
-      } else {
-        console.log(`[findTopMatchesWithEmbeddings] ${mentor.name} passed hard filters`);
-      }
-      return passes;
-    })
-    .map(mentor => {
-      try {
-        const score = calculateMatchScoreWithEmbeddings(mentee, mentor, embeddingCache);
-        console.log(`[findTopMatchesWithEmbeddings] ${mentor.name} score:`, score.total_score);
-        return { mentor, score };
-      } catch (err) {
-        console.error(`[findTopMatchesWithEmbeddings] ${mentor.name} SCORING ERROR:`, err);
-        return null;
-      }
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .filter(mentor => applyHardFilters(mentee, mentor))
+    .map(mentor => ({
+      mentor,
+      score: calculateMatchScoreWithEmbeddings(mentee, mentor, embeddingCache),
+    }))
     .sort(compareMentorMatches)
     .slice(0, maxResults);
 
@@ -1734,29 +1715,15 @@ function findTopMatchesWithModelAndEmbeddings(
   maxResults: number = 3,
 ): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
   const validMatches = mentors
-    .filter(mentor => {
-      const passes = applyHardFilters(mentee, mentor, model.filters);
-      if (!passes) {
-        const diag = applyHardFiltersWithDiagnostics(mentee, mentor, model.filters);
-        console.log(`[findTopMatchesWithModel] ${mentor.name} BLOCKED by:`, diag.blockedBy);
-      } else {
-        console.log(`[findTopMatchesWithModel] ${mentor.name} passed hard filters`);
-      }
-      return passes;
-    })
+    .filter(mentor => applyHardFilters(mentee, mentor, model.filters))
     .map(mentor => {
       const llmKey = `${mentee.id}::${mentor.id}`;
       const llmScore = llmScores?.get(llmKey);
-      try {
-        const score = calculateMatchScoreWithModelAndEmbeddings(mentee, mentor, model, embeddingCache, llmScore);
-        console.log(`[findTopMatchesWithModel] ${mentor.name} score:`, score.total_score);
-        return { mentor, score };
-      } catch (err) {
-        console.error(`[findTopMatchesWithModel] ${mentor.name} SCORING ERROR:`, err);
-        return null;
-      }
+      return {
+        mentor,
+        score: calculateMatchScoreWithModelAndEmbeddings(mentee, mentor, model, embeddingCache, llmScore),
+      };
     })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort(compareMentorMatches)
     .slice(0, maxResults);
 
@@ -1838,16 +1805,13 @@ export async function performBatchMatchingAsync(
 
   const mentorCapacity = new Map<string, number>();
   mentors.forEach(mentor => {
-    console.log(`[MatchingAsync] Mentor: id=${mentor.id}, name=${mentor.name}, capacity=${mentor.capacity_remaining}`);
     mentorCapacity.set(mentor.id, mentor.capacity_remaining);
   });
 
   mentees.forEach(mentee => {
-    console.log(`[MatchingAsync] Processing mentee: id=${mentee.id}, name=${mentee.name}`);
     const availableMentors = mentors.filter(mentor =>
       (mentorCapacity.get(mentor.id) || 0) > 0
     );
-    console.log(`[MatchingAsync] Available mentors (capacity > 0): ${availableMentors.length} of ${mentors.length}`);
 
     stats.pairs_evaluated += availableMentors.length;
 
@@ -1855,7 +1819,6 @@ export async function performBatchMatchingAsync(
     const recommendations = model
       ? findTopMatchesWithModelAndEmbeddings(mentee, availableMentors, model, embeddingCache!, llmScores, 3)
       : findTopMatchesWithEmbeddings(mentee, availableMentors, embeddingCache!, 3);
-    console.log(`[MatchingAsync] Recommendations for ${mentee.name}: ${recommendations.length}`, recommendations);
     stats.after_filters += recommendations.length;
 
     let proposedAssignment: { mentor_id: string | null; mentor_name?: string | null } = {
