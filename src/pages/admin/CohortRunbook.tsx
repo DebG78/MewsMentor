@@ -151,6 +151,33 @@ export default function CohortRunbook() {
   const [addTemplateForStage, setAddTemplateForStage] = useState<string | null>(null);
   // Seeding default templates
   const [seedingStage, setSeedingStage] = useState<string | null>(null);
+  // Selected template IDs per stage for selective sending
+  const [selectedTemplatesForSend, setSelectedTemplatesForSend] = useState<Record<string, Set<string>>>({});
+
+  const toggleTemplateSelection = (stageId: string, templateId: string) => {
+    setSelectedTemplatesForSend(prev => {
+      const current = new Set(prev[stageId] || []);
+      if (current.has(templateId)) {
+        current.delete(templateId);
+      } else {
+        current.add(templateId);
+      }
+      return { ...prev, [stageId]: current };
+    });
+  };
+
+  const toggleAllTemplatesForStage = (stageId: string, templates: MessageTemplate[]) => {
+    setSelectedTemplatesForSend(prev => {
+      const current = prev[stageId] || new Set<string>();
+      const allSelected = templates.every(t => current.has(t.id));
+      return {
+        ...prev,
+        [stageId]: allSelected ? new Set<string>() : new Set(templates.map(t => t.id)),
+      };
+    });
+  };
+
+  const getSelectedCount = (stageId: string) => (selectedTemplatesForSend[stageId] || new Set()).size;
 
   // Default template types for auto-populating each stage
   // Use shared stage-to-template-type mapping from messageService
@@ -207,6 +234,12 @@ export default function CohortRunbook() {
         }
       }
       setStageAssignedTemplates(assignments);
+      // Auto-select all assigned templates for each stage
+      const newSelections: Record<string, Set<string>> = {};
+      for (const [stageId, templates] of Object.entries(assignments)) {
+        newSelections[stageId] = new Set(templates.map(t => t.id));
+      }
+      setSelectedTemplatesForSend(newSelections);
       setStageMessageOverrides({});
       setEditingInlineTemplate(null);
 
@@ -496,11 +529,14 @@ export default function CohortRunbook() {
       const launchStage = stages.find(s => s.stage_type === 'launch');
       const hasOverrides = launchStage && hasAnyOverrides(launchStage.id);
 
+      // Filter to only selected templates
+      const selectedIds = launchStage ? (selectedTemplatesForSend[launchStage.id] || new Set<string>()) : new Set<string>();
+
       if (hasOverrides && launchStage) {
         // Use bulk send with overridden bodies
         const participants = await getCohortParticipants(selectedCohort);
         const cohortName = cohorts.find(c => c.id === selectedCohort)?.name || '';
-        const assigned = stageAssignedTemplates[launchStage.id] || [];
+        const assigned = (stageAssignedTemplates[launchStage.id] || []).filter(t => selectedIds.has(t.id));
         let totalSent = 0, totalFailed = 0;
 
         const withSlack = participants.filter(p => p.slack_user_id);
@@ -543,7 +579,7 @@ export default function CohortRunbook() {
         // Map templates to standard role keys so the edge function can find them
         // regardless of the actual template_type name (e.g. "Mentee - Intro Message" → "welcome_mentee")
         const launchTemplates: Record<string, string> = {};
-        const assigned = launchStage ? (stageAssignedTemplates[launchStage.id] || []) : [];
+        const assigned = launchStage ? (stageAssignedTemplates[launchStage.id] || []).filter(t => selectedIds.has(t.id)) : [];
         for (const tpl of assigned) {
           const typeLower = tpl.template_type.toLowerCase();
           if (typeLower.includes('mentee') && !launchTemplates.welcome_mentee) {
@@ -609,7 +645,8 @@ export default function CohortRunbook() {
     try {
       const participants = await getCohortParticipants(selectedCohort);
       const cohortName = cohorts.find(c => c.id === selectedCohort)?.name || '';
-      const assigned = stageAssignedTemplates[stageId] || [];
+      const selectedIds = selectedTemplatesForSend[stageId] || new Set<string>();
+      const assigned = (stageAssignedTemplates[stageId] || []).filter(t => selectedIds.has(t.id));
       let totalSent = 0, totalFailed = 0;
 
       for (const tpl of assigned) {
@@ -648,11 +685,16 @@ export default function CohortRunbook() {
     if (!selectedCohort || !sendStagePhase) return;
     setIsSendStageConfirmOpen(false);
 
-    // Check if the stage has overrides — if so, use bulk send
+    // Check if the stage has overrides or partial selection — if so, use bulk send for precise control
     const stageType = sendStagePhase === 'midpoint' ? 'midpoint' : 'closure';
     const stage = stages.find(s => s.stage_type === stageType);
-    if (stage && hasAnyOverrides(stage.id)) {
-      return handleSendStageWithBulk(stage.id, stageType);
+    if (stage) {
+      const allAssigned = stageAssignedTemplates[stage.id] || [];
+      const selectedIds = selectedTemplatesForSend[stage.id] || new Set<string>();
+      const isPartialSelection = selectedIds.size < allAssigned.length;
+      if (isPartialSelection || hasAnyOverrides(stage.id)) {
+        return handleSendStageWithBulk(stage.id, stageType);
+      }
     }
 
     setIsSendingStageMessages(true);
@@ -1082,6 +1124,17 @@ export default function CohortRunbook() {
                               </div>
                             ) : (
                               <div className="space-y-2">
+                                {assignedTemplates.length > 1 && (
+                                  <div className="flex items-center gap-2 pb-1">
+                                    <Checkbox
+                                      checked={assignedTemplates.every(t => (selectedTemplatesForSend[stage.id] || new Set()).has(t.id))}
+                                      onCheckedChange={() => toggleAllTemplatesForStage(stage.id, assignedTemplates)}
+                                    />
+                                    <span className="text-xs text-muted-foreground">
+                                      Select all ({getSelectedCount(stage.id)} of {assignedTemplates.length} selected)
+                                    </span>
+                                  </div>
+                                )}
                                 {assignedTemplates.map(tpl => {
                                   const isOverridden = stageMessageOverrides[tpl.id] !== undefined;
                                   const isEditing = editingInlineTemplate === tpl.id;
@@ -1090,6 +1143,11 @@ export default function CohortRunbook() {
                                   return (
                                     <div key={tpl.id} className="border rounded-md">
                                       <div className="flex items-start gap-3 p-2">
+                                        <Checkbox
+                                          checked={(selectedTemplatesForSend[stage.id] || new Set()).has(tpl.id)}
+                                          onCheckedChange={() => toggleTemplateSelection(stage.id, tpl.id)}
+                                          className="mt-1"
+                                        />
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-2">
                                             <span className="text-sm font-medium">{getTypeLabel(tpl.template_type)}</span>
@@ -1192,14 +1250,14 @@ export default function CohortRunbook() {
                                 size="sm"
                                 className="mt-3"
                                 onClick={() => setIsSendConfirmOpen(true)}
-                                disabled={isSendingMessages}
+                                disabled={isSendingMessages || getSelectedCount(stage.id) === 0}
                               >
                                 {isSendingMessages ? (
                                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                                 ) : (
                                   <Send className="w-3 h-3 mr-1" />
                                 )}
-                                Send Welcome Messages
+                                Send Welcome Messages ({getSelectedCount(stage.id)}/{assignedTemplates.length})
                               </Button>
                             )}
 
@@ -1215,14 +1273,14 @@ export default function CohortRunbook() {
                                   );
                                   setIsSendStageConfirmOpen(true);
                                 }}
-                                disabled={isSendingStageMessages}
+                                disabled={isSendingStageMessages || getSelectedCount(stage.id) === 0}
                               >
                                 {isSendingStageMessages ? (
                                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                                 ) : (
                                   <Send className="w-3 h-3 mr-1" />
                                 )}
-                                Send {stage.stage_type === 'midpoint' ? 'Midpoint' : 'Wrapping Up'} Messages
+                                Send {stage.stage_type === 'midpoint' ? 'Midpoint' : 'Wrapping Up'} Messages ({getSelectedCount(stage.id)}/{assignedTemplates.length})
                               </Button>
                             )}
 
@@ -1366,8 +1424,12 @@ export default function CohortRunbook() {
           <DialogHeader>
             <DialogTitle>Send Welcome Messages</DialogTitle>
             <DialogDescription>
-              This will send welcome DMs to all matched mentee-mentor pairs and post a channel
-              announcement via Slack. Make sure your Zapier webhook is configured.
+              {(() => {
+                const launchStage = stages.find(s => s.stage_type === 'launch');
+                const total = launchStage ? (stageAssignedTemplates[launchStage.id] || []).length : 0;
+                const selected = launchStage ? getSelectedCount(launchStage.id) : 0;
+                return `This will send ${selected} of ${total} welcome template(s) to all matched mentee-mentor pairs via Slack. Make sure your Zapier webhook is configured.`;
+              })()}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1386,9 +1448,13 @@ export default function CohortRunbook() {
           <DialogHeader>
             <DialogTitle>Send {sendStageLabel} Messages</DialogTitle>
             <DialogDescription>
-              This will send next-steps messages to all participants in matched pairs who
-              haven't already received a message for this phase. Participants who were auto-sent
-              a message when they logged a session will be skipped.
+              {(() => {
+                const stageType = sendStagePhase === 'midpoint' ? 'midpoint' : 'closure';
+                const stage = stages.find(s => s.stage_type === stageType);
+                const total = stage ? (stageAssignedTemplates[stage.id] || []).length : 0;
+                const selected = stage ? getSelectedCount(stage.id) : 0;
+                return `This will send ${selected} of ${total} template(s) to participants in matched pairs. Participants who were auto-sent a message when they logged a session will be skipped.`;
+              })()}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
