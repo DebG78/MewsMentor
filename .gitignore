@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# Secret/credential files — never commit these
+Details.txt
+Supabase details.txt
+
 # Logs
 logs
 *.log
