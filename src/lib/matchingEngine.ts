@@ -40,6 +40,19 @@ export interface MatchingProgress {
 import { getOrComputeEmbeddings, type EmbeddingCache } from "./embeddingService";
 import { areSameCluster } from "./capabilityClusters";
 
+/**
+ * Extract meaningful topic words from free text.
+ * Filters out short words (<=4 chars) which eliminates most function words
+ * (the, that, this, with, from, have, been, good, like, etc.)
+ * without needing an exhaustive stop words list.
+ * Returns unique words only.
+ */
+function extractTopicWords(text: string): string[] {
+  return [...new Set(
+    text.toLowerCase().split(/[\s,;.!?()]+/).filter(w => w.length > 4)
+  )];
+}
+
 // Hard filters implementation
 export function applyHardFilters(
   mentee: MenteeData,
@@ -91,16 +104,70 @@ export function applyHardFilters(
 
   // V3: topics_prefer_not (mentor's free-text exclusion) vs mentee's capabilities_wanted
   if (mentor.topics_prefer_not && mentee.capabilities_wanted) {
-    const excludeWords = mentor.topics_prefer_not.toLowerCase().split(/[\s,;]+/).filter(w => w.length > 3);
-    const wantedWords = mentee.capabilities_wanted.toLowerCase().split(/[\s,;]+/).filter(w => w.length > 3);
-    // Hard block if there's significant keyword overlap (3+ shared words)
-    const overlap = excludeWords.filter(w => wantedWords.includes(w));
-    if (overlap.length >= 3) {
+    const excludeWords = extractTopicWords(mentor.topics_prefer_not);
+    const wantedWords = new Set(extractTopicWords(mentee.capabilities_wanted));
+    // Only block if 50%+ of the mentor's exclusion words appear in mentee's wants
+    // AND at least 3 meaningful words overlap (to avoid false positives on short text)
+    const overlap = excludeWords.filter(w => wantedWords.has(w));
+    if (excludeWords.length > 0 && overlap.length >= 3 && (overlap.length / excludeWords.length) >= 0.5) {
       return false;
     }
   }
 
   return true;
+}
+
+/**
+ * Same checks as applyHardFilters but returns which filter(s) blocked the pair.
+ * Only used when a mentee has no match — to explain why.
+ */
+export function applyHardFiltersWithDiagnostics(
+  mentee: MenteeData,
+  mentor: MentorData,
+  filters: MatchingFilters = { max_timezone_difference: 6, require_available_capacity: true }
+): { pass: boolean; blockedBy: string[] } {
+  const blockedBy: string[] = [];
+
+  if (mentee.location_timezone && mentor.location_timezone) {
+    const dist = calculateTimezoneDistance(mentee.location_timezone, mentor.location_timezone);
+    if (dist > filters.max_timezone_difference) {
+      blockedBy.push(`Timezone difference too large (${dist}h, max ${filters.max_timezone_difference}h)`);
+    }
+  }
+
+  if (filters.require_available_capacity && mentor.capacity_remaining <= 0) {
+    blockedBy.push('Mentor has no available capacity');
+  }
+
+  if (mentee.practice_scenarios?.length && mentor.excluded_scenarios?.length) {
+    const menteeScenarios = new Set(mentee.practice_scenarios.map(s => s.toLowerCase()));
+    const hasExcludedOverlap = mentor.excluded_scenarios.some(s => menteeScenarios.has(s.toLowerCase()));
+    if (hasExcludedOverlap) {
+      blockedBy.push('Excluded scenario overlap');
+    }
+  }
+
+  const firstTimePref = mentee.open_to_first_time_mentor || mentee.mentor_experience_importance;
+  if (firstTimePref) {
+    const pref = firstTimePref.toLowerCase();
+    const requiresExperience = (pref.includes('no') && pref.includes('prior')) ||
+      (pref.includes('no') && !pref.includes('yes')) ||
+      pref.includes('prefer experienced');
+    if (requiresExperience && !mentor.has_mentored_before) {
+      blockedBy.push('Mentee requires experienced mentor');
+    }
+  }
+
+  if (mentor.topics_prefer_not && mentee.capabilities_wanted) {
+    const excludeWords = extractTopicWords(mentor.topics_prefer_not);
+    const wantedWords = new Set(extractTopicWords(mentee.capabilities_wanted));
+    const overlap = excludeWords.filter(w => wantedWords.has(w));
+    if (excludeWords.length > 0 && overlap.length >= 3 && (overlap.length / excludeWords.length) >= 0.5) {
+      blockedBy.push(`Topic exclusion overlap (shared words: ${overlap.join(', ')})`);
+    }
+  }
+
+  return { pass: blockedBy.length === 0, blockedBy };
 }
 
 // Calculate timezone distance in hours
@@ -837,14 +904,17 @@ export function performBatchMatching(
   // Track mentor capacity during assignment
   const mentorCapacity = new Map<string, number>();
   mentors.forEach(mentor => {
+    console.log(`[Matching] Mentor: id=${mentor.id}, name=${mentor.name}, capacity=${mentor.capacity_remaining}`);
     mentorCapacity.set(mentor.id, mentor.capacity_remaining);
   });
 
   mentees.forEach(mentee => {
+    console.log(`[Matching] Processing mentee: id=${mentee.id}, name=${mentee.name}`);
     // Get available mentors (those with capacity)
     const availableMentors = mentors.filter(mentor =>
       (mentorCapacity.get(mentor.id) || 0) > 0
     );
+    console.log(`[Matching] Available mentors (capacity > 0): ${availableMentors.length} of ${mentors.length}`);
 
     stats.pairs_evaluated += availableMentors.length;
 
@@ -859,6 +929,8 @@ export function performBatchMatching(
       mentor_name: null
     };
 
+    let filterBlockReasons: string[] | undefined;
+
     if (recommendations.length > 0) {
       const bestMatch = recommendations[0];
       proposedAssignment = {
@@ -869,13 +941,24 @@ export function performBatchMatching(
       // Decrease mentor capacity
       const currentCapacity = mentorCapacity.get(bestMatch.mentor_id) || 0;
       mentorCapacity.set(bestMatch.mentor_id, currentCapacity - 1);
+    } else {
+      // Collect diagnostics: why was every mentor filtered out?
+      const allReasons = new Set<string>();
+      mentors.forEach(mentor => {
+        const { blockedBy } = applyHardFiltersWithDiagnostics(mentee, mentor);
+        blockedBy.forEach(r => allReasons.add(r));
+      });
+      if (allReasons.size > 0) {
+        filterBlockReasons = Array.from(allReasons);
+      }
     }
 
     results.push({
       mentee_id: mentee.id,
       mentee_name: mentee.name || mentee.id,
       recommendations,
-      proposed_assignment: proposedAssignment
+      proposed_assignment: proposedAssignment,
+      ...(filterBlockReasons ? { filter_block_reasons: filterBlockReasons } : {}),
     });
   });
 
@@ -1494,11 +1577,27 @@ function findTopMatchesWithEmbeddings(
   maxResults: number = 3,
 ): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
   const validMatches = mentors
-    .filter(mentor => applyHardFilters(mentee, mentor))
-    .map(mentor => ({
-      mentor,
-      score: calculateMatchScoreWithEmbeddings(mentee, mentor, embeddingCache),
-    }))
+    .filter(mentor => {
+      const passes = applyHardFilters(mentee, mentor);
+      if (!passes) {
+        const diag = applyHardFiltersWithDiagnostics(mentee, mentor);
+        console.log(`[findTopMatchesWithEmbeddings] ${mentor.name} BLOCKED by:`, diag.blockedBy);
+      } else {
+        console.log(`[findTopMatchesWithEmbeddings] ${mentor.name} passed hard filters`);
+      }
+      return passes;
+    })
+    .map(mentor => {
+      try {
+        const score = calculateMatchScoreWithEmbeddings(mentee, mentor, embeddingCache);
+        console.log(`[findTopMatchesWithEmbeddings] ${mentor.name} score:`, score.total_score);
+        return { mentor, score };
+      } catch (err) {
+        console.error(`[findTopMatchesWithEmbeddings] ${mentor.name} SCORING ERROR:`, err);
+        return null;
+      }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort(compareMentorMatches)
     .slice(0, maxResults);
 
@@ -1635,15 +1734,29 @@ function findTopMatchesWithModelAndEmbeddings(
   maxResults: number = 3,
 ): { mentor_id: string; mentor_name?: string; score: MatchScore }[] {
   const validMatches = mentors
-    .filter(mentor => applyHardFilters(mentee, mentor, model.filters))
+    .filter(mentor => {
+      const passes = applyHardFilters(mentee, mentor, model.filters);
+      if (!passes) {
+        const diag = applyHardFiltersWithDiagnostics(mentee, mentor, model.filters);
+        console.log(`[findTopMatchesWithModel] ${mentor.name} BLOCKED by:`, diag.blockedBy);
+      } else {
+        console.log(`[findTopMatchesWithModel] ${mentor.name} passed hard filters`);
+      }
+      return passes;
+    })
     .map(mentor => {
       const llmKey = `${mentee.id}::${mentor.id}`;
       const llmScore = llmScores?.get(llmKey);
-      return {
-        mentor,
-        score: calculateMatchScoreWithModelAndEmbeddings(mentee, mentor, model, embeddingCache, llmScore),
-      };
+      try {
+        const score = calculateMatchScoreWithModelAndEmbeddings(mentee, mentor, model, embeddingCache, llmScore);
+        console.log(`[findTopMatchesWithModel] ${mentor.name} score:`, score.total_score);
+        return { mentor, score };
+      } catch (err) {
+        console.error(`[findTopMatchesWithModel] ${mentor.name} SCORING ERROR:`, err);
+        return null;
+      }
     })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort(compareMentorMatches)
     .slice(0, maxResults);
 
@@ -1725,13 +1838,16 @@ export async function performBatchMatchingAsync(
 
   const mentorCapacity = new Map<string, number>();
   mentors.forEach(mentor => {
+    console.log(`[MatchingAsync] Mentor: id=${mentor.id}, name=${mentor.name}, capacity=${mentor.capacity_remaining}`);
     mentorCapacity.set(mentor.id, mentor.capacity_remaining);
   });
 
   mentees.forEach(mentee => {
+    console.log(`[MatchingAsync] Processing mentee: id=${mentee.id}, name=${mentee.name}`);
     const availableMentors = mentors.filter(mentor =>
       (mentorCapacity.get(mentor.id) || 0) > 0
     );
+    console.log(`[MatchingAsync] Available mentors (capacity > 0): ${availableMentors.length} of ${mentors.length}`);
 
     stats.pairs_evaluated += availableMentors.length;
 
@@ -1739,12 +1855,15 @@ export async function performBatchMatchingAsync(
     const recommendations = model
       ? findTopMatchesWithModelAndEmbeddings(mentee, availableMentors, model, embeddingCache!, llmScores, 3)
       : findTopMatchesWithEmbeddings(mentee, availableMentors, embeddingCache!, 3);
+    console.log(`[MatchingAsync] Recommendations for ${mentee.name}: ${recommendations.length}`, recommendations);
     stats.after_filters += recommendations.length;
 
     let proposedAssignment: { mentor_id: string | null; mentor_name?: string | null } = {
       mentor_id: null,
       mentor_name: null,
     };
+
+    let filterBlockReasons: string[] | undefined;
 
     if (recommendations.length > 0) {
       const bestMatch = recommendations[0];
@@ -1754,6 +1873,17 @@ export async function performBatchMatchingAsync(
       };
       const currentCapacity = mentorCapacity.get(bestMatch.mentor_id) || 0;
       mentorCapacity.set(bestMatch.mentor_id, currentCapacity - 1);
+    } else {
+      // Collect diagnostics: why was every mentor filtered out?
+      const allReasons = new Set<string>();
+      const filterConfig = model?.filters;
+      mentors.forEach(mentor => {
+        const { blockedBy } = applyHardFiltersWithDiagnostics(mentee, mentor, filterConfig);
+        blockedBy.forEach(r => allReasons.add(r));
+      });
+      if (allReasons.size > 0) {
+        filterBlockReasons = Array.from(allReasons);
+      }
     }
 
     results.push({
@@ -1761,6 +1891,7 @@ export async function performBatchMatchingAsync(
       mentee_name: mentee.name || mentee.id,
       recommendations,
       proposed_assignment: proposedAssignment,
+      ...(filterBlockReasons ? { filter_block_reasons: filterBlockReasons } : {}),
     });
   });
 

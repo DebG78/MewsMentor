@@ -502,6 +502,15 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
             </Alert>
           )}
 
+          {matchingOutput.stats.after_filters === 0 && matchingOutput.stats.mentees_total > 0 && (
+            <Alert className="mb-4 border-amber-200 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-700">
+                All pairs were blocked by hard filters (timezone, capacity, exclusions). Check the filter reasons below for details.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Action Buttons */}
           <div className="flex gap-2 mb-6">
             <Button onClick={() => setMatchingOutput(null)} variant="outline">
@@ -566,7 +575,18 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
                               {toDisplayName(result.proposed_assignment.mentor_name)}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">No match</span>
+                            <div>
+                              <span className="text-muted-foreground">No match</span>
+                              {result.filter_block_reasons && result.filter_block_reasons.length > 0 && (
+                                <div className="mt-1 space-y-0.5">
+                                  {result.filter_block_reasons.map((reason, idx) => (
+                                    <div key={idx} className="text-xs text-amber-600">
+                                      {reason}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell>

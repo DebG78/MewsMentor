@@ -213,6 +213,7 @@ export interface MatchingResult {
     mentor_name?: string | null;
     comment?: string;
   };
+  filter_block_reasons?: string[];
 }
 
 export interface MatchingStats {
