@@ -41,6 +41,7 @@ import {
   Activity,
   Flag,
   BarChart,
+  Bell,
   CheckCircle2,
   Circle,
   Clock,
@@ -74,7 +75,8 @@ import {
   deleteAllCohortStages,
   completeAllStages,
 } from '@/lib/runbookService';
-import { getAllCohorts } from '@/lib/supabaseService';
+import { getAllCohorts, updateCohort } from '@/lib/supabaseService';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
   getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
@@ -109,7 +111,7 @@ export default function CohortRunbook() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
+  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string; start_date?: string; session_reminders_enabled?: boolean }>>([]);
   const [selectedCohort, setSelectedCohort] = useState<string>(cohortId || '');
   const [stages, setStages] = useState<CohortStage[]>([]);
   const [progress, setProgress] = useState({ total: 0, completed: 0, percentComplete: 0 });
@@ -134,6 +136,9 @@ export default function CohortRunbook() {
   const [isSendConfirmOpen, setIsSendConfirmOpen] = useState(false);
   const [previewBody, setPreviewBody] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Session reminder toggle state
+  const [isTogglingReminders, setIsTogglingReminders] = useState(false);
 
   // Stage message sending state
   const [isSendingStageMessages, setIsSendingStageMessages] = useState(false);
@@ -197,7 +202,7 @@ export default function CohortRunbook() {
   const loadCohorts = async () => {
     try {
       const data = await getAllCohorts();
-      setCohorts(data.map(c => ({ id: c.id, name: c.name })));
+      setCohorts(data.map(c => ({ id: c.id, name: c.name, start_date: c.start_date, session_reminders_enabled: c.session_reminders_enabled })));
       if (!selectedCohort && data.length > 0) {
         setSelectedCohort(data[0].id);
       }
@@ -713,6 +718,31 @@ export default function CohortRunbook() {
       });
     } finally {
       setIsSendingStageMessages(false);
+    }
+  };
+
+  const handleToggleSessionReminders = async (enabled: boolean) => {
+    if (!selectedCohort) return;
+    setIsTogglingReminders(true);
+    try {
+      await updateCohort(selectedCohort, { session_reminders_enabled: enabled });
+      setCohorts(prev => prev.map(c =>
+        c.id === selectedCohort ? { ...c, session_reminders_enabled: enabled } : c
+      ));
+      toast({
+        title: enabled ? 'Monthly reminders enabled' : 'Monthly reminders disabled',
+        description: enabled
+          ? 'Session-logging reminders will be sent automatically each month based on the cohort start date.'
+          : 'Monthly session-logging reminders have been turned off for this cohort.',
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Failed to update reminder setting',
+        description: err.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsTogglingReminders(false);
     }
   };
 
@@ -1283,6 +1313,42 @@ export default function CohortRunbook() {
                                 Send {stage.stage_type === 'midpoint' ? 'Midpoint' : 'Wrapping Up'} Messages ({getSelectedCount(stage.id)}/{assignedTemplates.length})
                               </Button>
                             )}
+
+                            {/* Monthly session reminders toggle — midpoint stage only */}
+                            {stage.stage_type === 'midpoint' && (() => {
+                              const currentCohort = cohorts.find(c => c.id === selectedCohort);
+                              const remindersEnabled = currentCohort?.session_reminders_enabled !== false;
+                              const startDate = currentCohort?.start_date;
+                              const monthsElapsed = startDate
+                                ? Math.floor((Date.now() - new Date(startDate).getTime()) / (30.44 * 24 * 60 * 60 * 1000))
+                                : 0;
+
+                              return (
+                                <div className="mt-4 border rounded-md p-3 space-y-2 bg-muted/30">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Bell className="w-4 h-4 text-muted-foreground" />
+                                      <Label className="text-xs font-medium">Monthly Session Reminders</Label>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isTogglingReminders && <Loader2 className="w-3 h-3 animate-spin" />}
+                                      <Switch
+                                        checked={remindersEnabled}
+                                        onCheckedChange={handleToggleSessionReminders}
+                                        disabled={isTogglingReminders}
+                                      />
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {remindersEnabled
+                                      ? startDate
+                                        ? `Reminders are sent automatically each month from the cohort start date (${new Date(startDate).toLocaleDateString()}). ${monthsElapsed >= 1 ? `Month ${monthsElapsed} is current.` : 'First reminder will be sent after 1 month.'}`
+                                        : 'Enabled, but no start date is set on this cohort. Set a start date in Cohort Details for reminders to begin.'
+                                      : 'Reminders are off. Toggle on to automatically remind all matched participants to log their sessions each month.'}
+                                  </p>
+                                </div>
+                              );
+                            })()}
 
                             {/* Delivery summary */}
                             {summary && summary.total > 0 && (

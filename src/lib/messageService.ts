@@ -264,6 +264,7 @@ export const TEMPLATE_TYPES = [
   { value: 'next_steps', label: 'Next Steps (generic)' },
   { value: 'next_steps_mentee', label: 'Next Steps - Mentee' },
   { value: 'next_steps_mentor', label: 'Next Steps - Mentor' },
+  { value: 'session_reminder', label: 'Session Reminder (Monthly)' },
   { value: '_custom', label: 'Custom...' },
 ] as const;
 
@@ -296,6 +297,47 @@ export const AVAILABLE_PLACEHOLDERS = [
   // Cohort
   '{COHORT_NAME}', '{RESOURCE_LINK}', '{SURVEY_LINK}', '{ADMIN_EMAIL}',
 ] as const;
+
+// ============================================================================
+// SEND SESSION REMINDERS (calls edge function)
+// ============================================================================
+
+export interface SendSessionRemindersResult {
+  success: boolean;
+  cohorts_processed: number;
+  results: Array<{
+    cohort_id: string;
+    cohort_name: string;
+    month_number: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+  }>;
+}
+
+/**
+ * Trigger monthly session-logging reminders.
+ * If cohortId is provided, only that cohort is processed.
+ * Otherwise, all active cohorts are processed (for cron use).
+ */
+export async function sendSessionReminders(
+  cohortId?: string,
+): Promise<SendSessionRemindersResult> {
+  const { data: result, error: fnError } = await supabase.functions.invoke(
+    'send-session-reminders',
+    { body: cohortId ? { cohort_id: cohortId } : {} }
+  );
+
+  if (fnError) {
+    const detail = (fnError as any)?.context?.message
+      || (fnError as any)?.context?.error
+      || fnError.message
+      || 'Failed to send session reminders';
+    throw new Error(detail);
+  }
+
+  return result as SendSessionRemindersResult;
+}
 
 // ============================================================================
 // PARTICIPANT HELPERS (for bulk messaging)
@@ -616,6 +658,19 @@ You'll receive a final survey soon — we'd love to hear about your experience.
 Thank you for being part of this program. Whether you were a mentor or mentee, you've contributed to someone else's growth, and that matters.
 
 Reach out to {ADMIN_EMAIL} if there's anything you need. 🙏`,
+  },
+  {
+    template_type: 'session_reminder',
+    journey_phase: null,
+    body: `Hi {FIRST_NAME}! 👋
+
+This is your monthly reminder to log any mentoring sessions you've had as part of {COHORT_NAME}.
+
+Logging your sessions helps us understand how the program is going and where we can better support you. Even a quick entry makes a difference!
+
+If you haven't had a session this month, that's okay — consider reaching out to your mentor/mentee to schedule one.
+
+Questions or need help? Contact {ADMIN_EMAIL}.`,
   },
 ];
 

@@ -200,7 +200,16 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
 
   const handleStatusChange = async (cohortId: string, newStatus: Cohort['status']) => {
     try {
-      const updatedCohort = await updateCohort(cohortId, { status: newStatus });
+      // When activating a cohort, auto-enable session reminders and set start_date if not already set
+      const activationExtras: Partial<Cohort> = {};
+      if (newStatus === 'active') {
+        activationExtras.session_reminders_enabled = true;
+        const currentCohort = cohorts.find(c => c.id === cohortId);
+        if (!currentCohort?.start_date) {
+          activationExtras.start_date = new Date().toISOString();
+        }
+      }
+      const updatedCohort = await updateCohort(cohortId, { status: newStatus, ...activationExtras });
       if (updatedCohort) {
         refreshCohorts();
         if (selectedCohort?.id === cohortId) {

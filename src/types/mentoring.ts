@@ -278,6 +278,7 @@ export interface Cohort {
   success_rate_target?: number;
   mentor_survey_id?: string;  // Survey template ID for mentor signup
   mentee_survey_id?: string;  // Survey template ID for mentee signup
+  session_reminders_enabled?: boolean;  // Monthly session-logging reminders (default true)
 }
 
 export interface CohortStats {
