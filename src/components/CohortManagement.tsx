@@ -211,7 +211,7 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
         if (newStatus === 'completed') {
           toast({
             title: "Cohort completed successfully",
-            description: "Cohort marked as completed. All mentees and mentors have been moved to the unassigned area and are available for new cohorts.",
+            description: "Cohort has been marked as completed. All participant data is preserved.",
           });
         } else {
           toast({
@@ -401,7 +401,7 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
                   Pause
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => {
-                  if (window.confirm('Are you sure you want to mark this cohort as completed? All mentees and mentors will be moved to the unassigned area.')) {
+                  if (window.confirm('Mark as completed? The cohort will be closed and all participant data will be preserved.')) {
                     handleStatusChange(cohort.id, 'completed');
                   }
                 }}>

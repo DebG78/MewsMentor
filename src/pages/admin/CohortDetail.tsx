@@ -281,7 +281,7 @@ export default function CohortDetail() {
         if (newStatus === 'completed') {
           toast({
             title: "Cohort completed",
-            description: "All mentees and mentors have been moved to the unassigned area.",
+            description: "Cohort has been marked as completed. All participant data is preserved.",
           });
         } else {
           toast({
@@ -824,7 +824,7 @@ export default function CohortDetail() {
                 Pause
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => {
-                if (window.confirm('Mark as completed? All participants will be moved to unassigned.')) {
+                if (window.confirm('Mark as completed? The cohort will be closed and all participant data will be preserved.')) {
                   handleStatusChange('completed');
                 }
               }}>

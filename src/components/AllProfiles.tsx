@@ -95,68 +95,73 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
         setCohortNameMap(nameMap);
       }
 
-      // Build a stable grouping key: prefer slack_user_id, then full_name, then raw ID
-      const groupKeyFor = (row: any, idField: string) =>
-        (row.slack_user_id || row.full_name || row[idField] || '').trim().toLowerCase();
-
       // Only keep rows that belong to an existing cohort or the holding area
       const validCohortIds = new Set(cohortsResult.data?.map((c: any) => c.id) || []);
       const isValidRow = (row: any) =>
         !row.cohort_id || row.cohort_id === 'unassigned' || validCohortIds.has(row.cohort_id);
 
-      if (menteesResult.data) {
-        const menteeMap = new Map<string, GroupedProfile>();
-        menteesResult.data.filter(isValidRow).forEach((mentee: any) => {
-          const menteeId = mentee.mentee_id;
-          const groupKey = groupKeyFor(mentee, 'mentee_id');
-          if (menteeMap.has(groupKey)) {
-            const existing = menteeMap.get(groupKey)!;
-            if (mentee.cohort_id && mentee.cohort_id !== "unassigned" && !existing.cohort_ids.includes(mentee.cohort_id)) {
-              existing.cohort_ids.push(mentee.cohort_id);
+      // Multi-key dedup: collect all identifiers for a row, find existing group by ANY match
+      const normalize = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+
+      function groupRows(rows: any[], idField: string, topicField: string) {
+        const groups: GroupedProfile[] = [];
+        // Maps from each normalized identifier → index in groups[]
+        const keyIndex = new Map<string, number>();
+
+        for (const row of rows.filter(isValidRow)) {
+          const rawId = row[idField];
+          // All possible identifiers for this row
+          const keys = [
+            normalize(row.slack_user_id),
+            normalize(row.full_name),
+            normalize(rawId),
+          ].filter(Boolean);
+
+          // Find existing group that shares ANY key with this row
+          let existingIdx: number | undefined;
+          for (const k of keys) {
+            if (keyIndex.has(k)) {
+              existingIdx = keyIndex.get(k);
+              break;
             }
-            // Prefer the row that's in an active cohort over the unassigned one
-            if (mentee.cohort_id && mentee.cohort_id !== "unassigned" && (!existing.cohort_id || existing.cohort_id === "unassigned")) {
-              const cohortIds = existing.cohort_ids;
-              Object.assign(existing, mentee, { person_id: menteeId, cohort_ids: cohortIds, topics: mentee.topics_to_learn || [] });
-            }
-          } else {
-            menteeMap.set(groupKey, {
-              ...mentee,
-              person_id: menteeId,
-              cohort_ids: mentee.cohort_id && mentee.cohort_id !== "unassigned" ? [mentee.cohort_id] : [],
-              topics: mentee.topics_to_learn || [],
-            });
           }
-        });
-        setGroupedMentees(Array.from(menteeMap.values()));
+
+          if (existingIdx !== undefined) {
+            const existing = groups[existingIdx];
+            // Merge cohort_id
+            if (row.cohort_id && row.cohort_id !== "unassigned" && !existing.cohort_ids.includes(row.cohort_id)) {
+              existing.cohort_ids.push(row.cohort_id);
+            }
+            // Prefer a row in an active cohort over the unassigned one
+            if (row.cohort_id && row.cohort_id !== "unassigned" && (!existing.cohort_id || existing.cohort_id === "unassigned")) {
+              const cohortIds = existing.cohort_ids;
+              Object.assign(existing, row, { person_id: rawId, cohort_ids: cohortIds, topics: row[topicField] || [], capacity_remaining: row.capacity_remaining });
+            }
+            // Register all keys from this row pointing to the same group
+            for (const k of keys) keyIndex.set(k, existingIdx);
+          } else {
+            const idx = groups.length;
+            groups.push({
+              ...row,
+              person_id: rawId,
+              cohort_ids: row.cohort_id && row.cohort_id !== "unassigned" ? [row.cohort_id] : [],
+              topics: row[topicField] || [],
+              capacity_remaining: row.capacity_remaining,
+            });
+            for (const k of keys) keyIndex.set(k, idx);
+          }
+        }
+
+        console.debug(`[AllProfiles] ${idField}: ${rows.length} rows → ${groups.length} grouped profiles`);
+        return groups;
+      }
+
+      if (menteesResult.data) {
+        setGroupedMentees(groupRows(menteesResult.data, 'mentee_id', 'topics_to_learn'));
       }
 
       if (mentorsResult.data) {
-        const mentorMap = new Map<string, GroupedProfile>();
-        mentorsResult.data.filter(isValidRow).forEach((mentor: any) => {
-          const mentorId = mentor.mentor_id;
-          const groupKey = groupKeyFor(mentor, 'mentor_id');
-          if (mentorMap.has(groupKey)) {
-            const existing = mentorMap.get(groupKey)!;
-            if (mentor.cohort_id && mentor.cohort_id !== "unassigned" && !existing.cohort_ids.includes(mentor.cohort_id)) {
-              existing.cohort_ids.push(mentor.cohort_id);
-            }
-            // Prefer the row that's in an active cohort over the unassigned one
-            if (mentor.cohort_id && mentor.cohort_id !== "unassigned" && (!existing.cohort_id || existing.cohort_id === "unassigned")) {
-              const cohortIds = existing.cohort_ids;
-              Object.assign(existing, mentor, { person_id: mentorId, cohort_ids: cohortIds, topics: mentor.topics_to_mentor || [], capacity_remaining: mentor.capacity_remaining });
-            }
-          } else {
-            mentorMap.set(groupKey, {
-              ...mentor,
-              person_id: mentorId,
-              cohort_ids: mentor.cohort_id && mentor.cohort_id !== "unassigned" ? [mentor.cohort_id] : [],
-              topics: mentor.topics_to_mentor || [],
-              capacity_remaining: mentor.capacity_remaining,
-            });
-          }
-        });
-        setGroupedMentors(Array.from(mentorMap.values()));
+        setGroupedMentors(groupRows(mentorsResult.data, 'mentor_id', 'topics_to_mentor'));
       }
     } catch (error) {
       console.error("Error loading profiles:", error);
@@ -178,14 +183,22 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
     if (!searchTerm) return [];
     const term = searchTerm.toLowerCase();
 
-    let results = allProfiles.filter((profile) =>
-      Object.values(profile).some((val) => {
-        if (typeof val === "string") return val.toLowerCase().includes(term);
-        if (Array.isArray(val))
-          return val.some((v) => typeof v === "string" && v.toLowerCase().includes(term));
-        return false;
-      })
-    );
+    let results = allProfiles.filter((profile) => {
+      // Only search meaningful fields, not every DB column
+      const searchable = [
+        profile.full_name,
+        profile.person_id,
+        profile.role,
+        profile.business_title,
+        profile.country,
+        profile.location_timezone,
+        profile.industry,
+        profile.pronouns,
+        ...(profile.topics || []),
+        ...(profile.languages || []),
+      ].filter(Boolean);
+      return searchable.some((v) => String(v).toLowerCase().includes(term));
+    });
 
     if (roleFilter === "mentee") results = results.filter((p) => p._type === "mentee");
     if (roleFilter === "mentor") results = results.filter((p) => p._type === "mentor");
@@ -351,10 +364,17 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {profile.cohort_ids.length > 0 && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {cohortNameMap[profile.cohort_ids[0]] || "Assigned"}
-                        {profile.cohort_ids.length > 1 && ` +${profile.cohort_ids.length - 1}`}
+                    {profile.cohort_ids.length > 0 ? (
+                      <div className="flex items-center gap-1.5">
+                        {profile.cohort_ids.map((cId: string) => (
+                          <Badge key={cId} variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
+                            {cohortNameMap[cId] || cId}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="text-xs border-amber-200 text-amber-700 bg-amber-50">
+                        Holding Area
                       </Badge>
                     )}
                     {selectedCohort && profile.cohort_ids.length === 0 && (

@@ -71,7 +71,8 @@ export function MatchesTab({ personId, personType }: MatchesTabProps) {
           <CardHeader className="py-3 px-4">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <GitMerge className="w-4 h-4" />
-              {cohortMatches[0].cohort_name}
+              <span className="text-muted-foreground">Cohort:</span>
+              {cohortMatches[0].cohort_name || cohortId}
               <Badge variant="outline" className="text-xs ml-auto">
                 {cohortMatches.length} match{cohortMatches.length > 1 ? "es" : ""}
               </Badge>

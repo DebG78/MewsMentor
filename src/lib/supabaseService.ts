@@ -374,14 +374,6 @@ export async function updateCohort(id: string, updates: Partial<Cohort>): Promis
     updated_at: new Date().toISOString()
   }
 
-  // If marking cohort as completed, move all mentees and mentors to unassigned
-  if (updates.status === 'completed') {
-    await Promise.all([
-      supabase.from('mentees').update({ cohort_id: 'unassigned' }).eq('cohort_id', id),
-      supabase.from('mentors').update({ cohort_id: 'unassigned' }).eq('cohort_id', id)
-    ])
-  }
-
   const { data, error } = await supabase
     .from('cohorts')
     .update(updateData)

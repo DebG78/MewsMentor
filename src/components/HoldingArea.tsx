@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -28,6 +29,8 @@ import {
   Eye,
   Trash2,
   Clock,
+  Search,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { toDisplayName } from '@/lib/displayName';
@@ -47,6 +50,7 @@ export function HoldingArea() {
   const [isLoading, setIsLoading] = useState(true);
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'mentee' | 'mentor' } | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -147,6 +151,22 @@ export function HoldingArea() {
     return `${topics.slice(0, 2).join(', ')} +${topics.length - 2} more`;
   };
 
+  const term = searchTerm.toLowerCase();
+  const filteredMentees = term
+    ? unassignedMentees.filter((m) =>
+        [m.full_name, m.mentee_id, m.role, m.location_timezone, ...(m.topics_to_learn || [])]
+          .filter(Boolean)
+          .some((v) => v!.toLowerCase().includes(term))
+      )
+    : unassignedMentees;
+  const filteredMentors = term
+    ? unassignedMentors.filter((m) =>
+        [m.full_name, m.mentor_id, m.role, m.location_timezone, ...(m.topics_to_mentor || [])]
+          .filter(Boolean)
+          .some((v) => v!.toLowerCase().includes(term))
+      )
+    : unassignedMentors;
+
   if (isLoading) {
     return (
       <Card>
@@ -176,21 +196,42 @@ export function HoldingArea() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="mentees" className="w-full">
-            <TabsList>
-              <TabsTrigger value="mentees">
-                Mentees ({unassignedMentees.length})
-              </TabsTrigger>
-              <TabsTrigger value="mentors">
-                Mentors ({unassignedMentors.length})
-              </TabsTrigger>
-            </TabsList>
+            <div className="flex items-center gap-3 mb-4">
+              <TabsList>
+                <TabsTrigger value="mentees">
+                  Mentees ({unassignedMentees.length})
+                </TabsTrigger>
+                <TabsTrigger value="mentors">
+                  Mentors ({unassignedMentors.length})
+                </TabsTrigger>
+              </TabsList>
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, role, topic..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-9 text-sm pl-8"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
 
             <TabsContent value="mentees" className="space-y-4">
-              {unassignedMentees.length === 0 ? (
+              {filteredMentees.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <h4 className="text-lg font-semibold mb-2">No Unassigned Mentees</h4>
-                  <p>All mentees have been assigned to cohorts.</p>
+                  <h4 className="text-lg font-semibold mb-2">
+                    {searchTerm ? "No matching mentees" : "No Unassigned Mentees"}
+                  </h4>
+                  <p>{searchTerm ? "Try a different search term." : "All mentees have been assigned to cohorts."}</p>
                 </div>
               ) : (
                 <Table>
@@ -206,7 +247,7 @@ export function HoldingArea() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {unassignedMentees.map((mentee) => (
+                    {filteredMentees.map((mentee) => (
                       <TableRow key={mentee.id}>
                         <TableCell>
                           <div className="font-medium">{toDisplayName(mentee.full_name || mentee.mentee_id)}</div>
@@ -273,11 +314,13 @@ export function HoldingArea() {
             </TabsContent>
 
             <TabsContent value="mentors" className="space-y-4">
-              {unassignedMentors.length === 0 ? (
+              {filteredMentors.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Target className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <h4 className="text-lg font-semibold mb-2">No Unassigned Mentors</h4>
-                  <p>All mentors have been assigned to cohorts.</p>
+                  <h4 className="text-lg font-semibold mb-2">
+                    {searchTerm ? "No matching mentors" : "No Unassigned Mentors"}
+                  </h4>
+                  <p>{searchTerm ? "Try a different search term." : "All mentors have been assigned to cohorts."}</p>
                 </div>
               ) : (
                 <Table>
@@ -294,7 +337,7 @@ export function HoldingArea() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {unassignedMentors.map((mentor) => (
+                    {filteredMentors.map((mentor) => (
                       <TableRow key={mentor.id}>
                         <TableCell>
                           <div className="font-medium">{toDisplayName(mentor.full_name || mentor.mentor_id)}</div>
