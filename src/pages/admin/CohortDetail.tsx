@@ -85,6 +85,7 @@ import {
   buildParticipantContext, type MessageTemplate, type Participant,
 } from "@/lib/messageService";
 import { exportSlackIds } from "@/lib/exportService";
+import { completeAllStages } from "@/lib/runbookService";
 import { Cohort, ImportResult, MatchingResult, MatchingOutput } from "@/types/mentoring";
 import { useToast } from "@/hooks/use-toast";
 import { MatchingResults } from "@/components/MatchingResults";
@@ -279,9 +280,15 @@ export default function CohortDetail() {
         setCohort(updatedCohort);
 
         if (newStatus === 'completed') {
+          // Close off all runbook stages
+          try {
+            await completeAllStages(cohort.id);
+          } catch (e) {
+            console.error('Failed to complete runbook stages:', e);
+          }
           toast({
             title: "Cohort completed",
-            description: "Cohort has been marked as completed. All participant data is preserved.",
+            description: "Cohort and its runbook have been marked as completed. All participant data is preserved.",
           });
         } else {
           toast({
@@ -824,7 +831,7 @@ export default function CohortDetail() {
                 Pause
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => {
-                if (window.confirm('Mark as completed? The cohort will be closed and all participant data will be preserved.')) {
+                if (window.confirm('Mark as completed? The cohort and its runbook will be closed (all stages marked complete). All participant data will be preserved.')) {
                   handleStatusChange('completed');
                 }
               }}>
