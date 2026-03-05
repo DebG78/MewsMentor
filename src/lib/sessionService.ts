@@ -84,6 +84,27 @@ export interface SessionVolumePoint {
 // SESSION CRUD
 // ============================================================================
 
+/**
+ * Get all sessions for a specific person across all cohorts.
+ */
+export async function getSessionsForPerson(
+  personId: string,
+  personType: 'mentee' | 'mentor'
+): Promise<SessionRow[]> {
+  const column = personType === 'mentee' ? 'mentee_id' : 'mentor_id';
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*')
+    .eq(column, personId)
+    .order('scheduled_datetime', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching sessions for person:', error);
+    throw error;
+  }
+  return data || [];
+}
+
 export async function getSessionsByCohort(cohortId: string): Promise<SessionRow[]> {
   const { data, error } = await supabase
     .from('sessions')

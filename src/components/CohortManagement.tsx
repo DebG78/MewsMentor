@@ -230,6 +230,20 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
   };
 
   const handleDeleteCohort = async (cohortId: string) => {
+    const cohortName = cohorts.find(c => c.id === cohortId)?.name || 'this cohort';
+    if (!window.confirm(
+      `Are you sure you want to delete "${cohortName}"?\n\n` +
+      `This will permanently delete ALL data associated with this cohort including:\n` +
+      `• All mentee and mentor profiles in this cohort\n` +
+      `• All matches and matching history\n` +
+      `• All messages sent to participants\n` +
+      `• All session logs and ratings\n\n` +
+      `If you want to keep this data, close the cohort instead.\n\n` +
+      `This cannot be undone.`
+    )) {
+      return;
+    }
+
     try {
       const success = await deleteCohort(cohortId);
       if (success) {

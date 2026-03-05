@@ -363,7 +363,16 @@ export default function CohortDetail() {
   const handleDeleteCohort = async () => {
     if (!cohort) return;
 
-    if (!window.confirm(`Are you sure you want to delete "${cohort.name}"? This cannot be undone.`)) {
+    if (!window.confirm(
+      `Are you sure you want to delete "${cohort.name}"?\n\n` +
+      `This will permanently delete ALL data associated with this cohort including:\n` +
+      `• All mentee and mentor profiles in this cohort\n` +
+      `• All matches and matching history\n` +
+      `• All messages sent to participants\n` +
+      `• All session logs and ratings\n\n` +
+      `If you want to keep this data, close the cohort instead.\n\n` +
+      `This cannot be undone.`
+    )) {
       return;
     }
 

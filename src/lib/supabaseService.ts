@@ -149,6 +149,121 @@ function generateCohortId(): string {
   return `cohort_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
+// ============================================================================
+// CROSS-COHORT MATCH LOOKUP
+// ============================================================================
+
+export interface PersonMatchInfo {
+  cohort_id: string;
+  cohort_name: string;
+  match_type: 'algorithmic' | 'manual';
+  partner_id: string;
+  partner_name: string;
+  partner_role: 'mentee' | 'mentor';
+  total_score?: number;
+  features?: Record<string, number>;
+  reasons?: string[];
+  risks?: string[];
+  ai_explanation?: string;
+  icebreaker?: string;
+  confidence?: number;
+  notes?: string;
+}
+
+/**
+ * Get all matches for a specific person across all cohorts.
+ * Scans cohorts.matches (algorithmic) and cohorts.manual_matches JSON fields.
+ */
+export async function getMatchesForPerson(
+  personId: string,
+  personType: 'mentee' | 'mentor'
+): Promise<PersonMatchInfo[]> {
+  const { data: cohorts, error } = await supabase
+    .from('cohorts')
+    .select('id, name, matches, manual_matches');
+
+  if (error) {
+    console.error('Error fetching cohorts for match lookup:', error);
+    throw error;
+  }
+
+  const results: PersonMatchInfo[] = [];
+
+  for (const cohort of cohorts || []) {
+    // Check algorithmic matches
+    const algoResults = (cohort.matches as any)?.results || [];
+    for (const r of algoResults) {
+      if (personType === 'mentee' && r.mentee_id === personId && r.proposed_assignment) {
+        const pa = r.proposed_assignment;
+        results.push({
+          cohort_id: cohort.id,
+          cohort_name: cohort.name,
+          match_type: 'algorithmic',
+          partner_id: pa.mentor_id || pa.id,
+          partner_name: pa.mentor_name || pa.name || pa.mentor_id || pa.id || 'Unknown',
+          partner_role: 'mentor',
+          total_score: pa.total_score,
+          features: pa.features,
+          reasons: pa.reasons,
+          risks: pa.risks,
+          ai_explanation: pa.ai_explanation,
+          icebreaker: pa.icebreaker,
+        });
+      }
+      if (personType === 'mentor') {
+        // Check if this mentor appears in any mentee's proposed_assignment
+        if (r.proposed_assignment && (r.proposed_assignment.mentor_id === personId || r.proposed_assignment.id === personId)) {
+          results.push({
+            cohort_id: cohort.id,
+            cohort_name: cohort.name,
+            match_type: 'algorithmic',
+            partner_id: r.mentee_id,
+            partner_name: r.mentee_name || r.mentee_id,
+            partner_role: 'mentee',
+            total_score: r.proposed_assignment.total_score,
+            features: r.proposed_assignment.features,
+            reasons: r.proposed_assignment.reasons,
+            risks: r.proposed_assignment.risks,
+            ai_explanation: r.proposed_assignment.ai_explanation,
+            icebreaker: r.proposed_assignment.icebreaker,
+          });
+        }
+      }
+    }
+
+    // Check manual matches
+    const manualMatches = (cohort.manual_matches as any)?.matches || [];
+    for (const m of manualMatches) {
+      if (personType === 'mentee' && m.mentee_id === personId) {
+        results.push({
+          cohort_id: cohort.id,
+          cohort_name: cohort.name,
+          match_type: 'manual',
+          partner_id: m.mentor_id,
+          partner_name: m.mentor_name || m.mentor_id,
+          partner_role: 'mentor',
+          confidence: m.confidence,
+          notes: m.notes,
+        });
+      }
+      if (personType === 'mentor' && m.mentor_id === personId) {
+        results.push({
+          cohort_id: cohort.id,
+          cohort_name: cohort.name,
+          match_type: 'manual',
+          partner_id: m.mentee_id,
+          partner_name: m.mentee_name || m.mentee_id,
+          partner_role: 'mentee',
+          confidence: m.confidence,
+          notes: m.notes,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
 // Create a new cohort
 export async function createCohort(
   name: string,
@@ -376,12 +491,13 @@ export async function removeFromCohort(
 
 // Delete cohort
 export async function deleteCohort(id: string): Promise<boolean> {
-  // Move mentees and mentors back to unassigned instead of deleting them
-  // Delete message_log entries that reference this cohort (FK constraint)
+  // Delete all related data — deleted cohorts are test/wrong data, not worth keeping
   await Promise.all([
-    supabase.from('mentees').update({ cohort_id: 'unassigned' }).eq('cohort_id', id),
-    supabase.from('mentors').update({ cohort_id: 'unassigned' }).eq('cohort_id', id),
+    supabase.from('mentees').delete().eq('cohort_id', id),
+    supabase.from('mentors').delete().eq('cohort_id', id),
     supabase.from('message_log').delete().eq('cohort_id', id),
+    supabase.from('sessions').delete().eq('cohort_id', id),
+    supabase.from('vip_scores').delete().eq('cohort_id', id),
   ])
 
   const { error } = await supabase

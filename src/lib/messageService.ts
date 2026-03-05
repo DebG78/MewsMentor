@@ -106,6 +106,23 @@ export async function deleteMessageTemplate(id: string): Promise<void> {
 }
 
 /**
+ * Get all message log entries for a specific recipient (by email/person_id).
+ */
+export async function getMessagesByRecipient(recipientEmail: string): Promise<MessageLogEntry[]> {
+  const { data, error } = await supabase
+    .from('message_log')
+    .select('*')
+    .eq('recipient_email', recipientEmail)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching messages for recipient:', error);
+    throw error;
+  }
+  return data || [];
+}
+
+/**
  * Get message log entries for a cohort.
  */
 export async function getMessageLog(cohortId: string): Promise<MessageLogEntry[]> {

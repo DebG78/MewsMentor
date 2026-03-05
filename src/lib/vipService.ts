@@ -66,6 +66,23 @@ export async function getVIPScoreByPerson(
 }
 
 /**
+ * Get all VIP scores for a specific person across all cohorts.
+ */
+export async function getVIPScoresForPerson(personId: string): Promise<VIPScore[]> {
+  const { data, error } = await supabase
+    .from('vip_scores')
+    .select('*')
+    .eq('person_id', personId)
+    .order('total_score', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching VIP scores for person:', error);
+    throw error;
+  }
+  return data || [];
+}
+
+/**
  * Get all VIPs for a cohort
  */
 export async function getVIPs(cohortId?: string): Promise<VIPScore[]> {

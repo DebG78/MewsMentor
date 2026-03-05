@@ -1,67 +1,40 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ProfileModal } from "./ProfileModal";
 import { supabase } from "@/lib/supabase";
-import { Users, Search, Eye, MapPin, Target, UserPlus } from "lucide-react";
+import {
+  Search,
+  Filter,
+  X,
+  User,
+  MapPin,
+  Briefcase,
+  Clock,
+  Users,
+  UserPlus,
+  ClipboardList,
+  GitMerge,
+  Mail,
+  BarChart3,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { assignToCohort } from "@/lib/cohortManager";
-import { toDisplayName } from '@/lib/displayName';
-
-interface MenteeRow {
-  id: string;
-  cohort_id: string;
-  mentee_id: string;
-  pronouns?: string;
-  role: string;
-  experience_years: number;
-  location_timezone: string;
-  topics_to_learn?: string[];
-  meeting_frequency?: string;
-  languages?: string[];
-  industry?: string;
-  motivation?: string;
-  main_reason?: string;
-  preferred_style?: string;
-  preferred_energy?: string;
-  feedback_preference?: string;
-  mentor_experience_importance?: string;
-  unwanted_qualities?: string;
-  mentor_qualities?: string;
-  expectations?: string;
-  created_at?: string;
-}
-
-interface MentorRow {
-  id: string;
-  cohort_id: string;
-  mentor_id: string;
-  pronouns?: string;
-  role: string;
-  experience_years: number;
-  location_timezone: string;
-  topics_to_mentor?: string[];
-  capacity_remaining: number;
-  meeting_frequency?: string;
-  languages?: string[];
-  industry?: string;
-  has_mentored_before?: boolean;
-  mentoring_style?: string;
-  meeting_style?: string;
-  mentor_energy?: string;
-  feedback_style?: string;
-  preferred_mentee_level?: string;
-  topics_not_to_mentor?: string;
-  motivation?: string;
-  expectations?: string;
-  created_at?: string;
-}
+import { toDisplayName } from "@/lib/displayName";
+import { SurveyInfoTab } from "./profiles/SurveyInfoTab";
+import { MatchesTab } from "./profiles/MatchesTab";
+import { MessagesTab } from "./profiles/MessagesTab";
+import { AnalyticsTab } from "./profiles/AnalyticsTab";
 
 interface GroupedProfile {
   id: string;
@@ -84,18 +57,13 @@ interface AllProfilesProps {
 }
 
 export function AllProfiles({ selectedCohort }: AllProfilesProps) {
-  const [mentees, setMentees] = useState<MenteeRow[]>([]);
-  const [mentors, setMentors] = useState<MentorRow[]>([]);
   const [groupedMentees, setGroupedMentees] = useState<GroupedProfile[]>([]);
   const [groupedMentors, setGroupedMentors] = useState<GroupedProfile[]>([]);
-  const [unassignedMentees, setUnassignedMentees] = useState<MenteeRow[]>([]);
-  const [unassignedMentors, setUnassignedMentors] = useState<MentorRow[]>([]);
   const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
-  const [activeTab, setActiveTab] = useState(selectedCohort ? "unassigned" : "mentees");
+  const [roleFilter, setRoleFilter] = useState<string>("");
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
-  const [selectedType, setSelectedType] = useState<'mentee' | 'mentor'>('mentee');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState<"mentee" | "mentor">("mentee");
   const [loading, setLoading] = useState(true);
   const [assigningPersonId, setAssigningPersonId] = useState<string | null>(null);
   const [cohortNameMap, setCohortNameMap] = useState<Record<string, string>>({});
@@ -114,9 +82,9 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
     setLoading(true);
     try {
       const [menteesResult, mentorsResult, cohortsResult] = await Promise.all([
-        supabase.from('mentees').select('*').order('created_at', { ascending: false }),
-        supabase.from('mentors').select('*').order('created_at', { ascending: false }),
-        supabase.from('cohorts').select('id, name')
+        supabase.from("mentees").select("*").order("created_at", { ascending: false }),
+        supabase.from("mentors").select("*").order("created_at", { ascending: false }),
+        supabase.from("cohorts").select("id, name"),
       ]);
 
       if (cohortsResult.data) {
@@ -127,25 +95,31 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
         setCohortNameMap(nameMap);
       }
 
-      if (menteesResult.data) {
-        setMentees(menteesResult.data);
-        setUnassignedMentees(menteesResult.data.filter(m => !m.cohort_id || m.cohort_id === 'unassigned'));
+      // Build a stable grouping key: prefer slack_user_id, then full_name, then raw ID
+      const groupKeyFor = (row: any, idField: string) =>
+        (row.slack_user_id || row.full_name || row[idField] || '').trim().toLowerCase();
 
-        // Group mentees by mentee_id
+      if (menteesResult.data) {
         const menteeMap = new Map<string, GroupedProfile>();
-        menteesResult.data.forEach((mentee) => {
+        menteesResult.data.forEach((mentee: any) => {
           const menteeId = mentee.mentee_id;
-          if (menteeMap.has(menteeId)) {
-            const existing = menteeMap.get(menteeId)!;
-            if (mentee.cohort_id && mentee.cohort_id !== 'unassigned') {
+          const groupKey = groupKeyFor(mentee, 'mentee_id');
+          if (menteeMap.has(groupKey)) {
+            const existing = menteeMap.get(groupKey)!;
+            if (mentee.cohort_id && mentee.cohort_id !== "unassigned" && !existing.cohort_ids.includes(mentee.cohort_id)) {
               existing.cohort_ids.push(mentee.cohort_id);
             }
+            // Prefer the row that's in an active cohort over the unassigned one
+            if (mentee.cohort_id && mentee.cohort_id !== "unassigned" && (!existing.cohort_id || existing.cohort_id === "unassigned")) {
+              const cohortIds = existing.cohort_ids;
+              Object.assign(existing, mentee, { person_id: menteeId, cohort_ids: cohortIds, topics: mentee.topics_to_learn || [] });
+            }
           } else {
-            menteeMap.set(menteeId, {
+            menteeMap.set(groupKey, {
               ...mentee,
               person_id: menteeId,
-              cohort_ids: mentee.cohort_id && mentee.cohort_id !== 'unassigned' ? [mentee.cohort_id] : [],
-              topics: mentee.topics_to_learn || []
+              cohort_ids: mentee.cohort_id && mentee.cohort_id !== "unassigned" ? [mentee.cohort_id] : [],
+              topics: mentee.topics_to_learn || [],
             });
           }
         });
@@ -153,251 +127,104 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
       }
 
       if (mentorsResult.data) {
-        setMentors(mentorsResult.data);
-        setUnassignedMentors(mentorsResult.data.filter(m => !m.cohort_id || m.cohort_id === 'unassigned'));
-
-        // Group mentors by mentor_id
         const mentorMap = new Map<string, GroupedProfile>();
-        mentorsResult.data.forEach((mentor) => {
+        mentorsResult.data.forEach((mentor: any) => {
           const mentorId = mentor.mentor_id;
-          if (mentorMap.has(mentorId)) {
-            const existing = mentorMap.get(mentorId)!;
-            if (mentor.cohort_id && mentor.cohort_id !== 'unassigned') {
+          const groupKey = groupKeyFor(mentor, 'mentor_id');
+          if (mentorMap.has(groupKey)) {
+            const existing = mentorMap.get(groupKey)!;
+            if (mentor.cohort_id && mentor.cohort_id !== "unassigned" && !existing.cohort_ids.includes(mentor.cohort_id)) {
               existing.cohort_ids.push(mentor.cohort_id);
             }
+            // Prefer the row that's in an active cohort over the unassigned one
+            if (mentor.cohort_id && mentor.cohort_id !== "unassigned" && (!existing.cohort_id || existing.cohort_id === "unassigned")) {
+              const cohortIds = existing.cohort_ids;
+              Object.assign(existing, mentor, { person_id: mentorId, cohort_ids: cohortIds, topics: mentor.topics_to_mentor || [], capacity_remaining: mentor.capacity_remaining });
+            }
           } else {
-            mentorMap.set(mentorId, {
+            mentorMap.set(groupKey, {
               ...mentor,
               person_id: mentorId,
-              cohort_ids: mentor.cohort_id && mentor.cohort_id !== 'unassigned' ? [mentor.cohort_id] : [],
+              cohort_ids: mentor.cohort_id && mentor.cohort_id !== "unassigned" ? [mentor.cohort_id] : [],
               topics: mentor.topics_to_mentor || [],
-              capacity_remaining: mentor.capacity_remaining
+              capacity_remaining: mentor.capacity_remaining,
             });
           }
         });
         setGroupedMentors(Array.from(mentorMap.values()));
       }
     } catch (error) {
-      console.error('Error loading profiles:', error);
+      console.error("Error loading profiles:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const openProfileModal = (profile: any, type: 'mentee' | 'mentor') => {
+  // Combined and filtered list
+  const allProfiles = useMemo(() => {
+    const mentees: Array<GroupedProfile & { _type: "mentee" | "mentor" }> =
+      groupedMentees.map((p) => ({ ...p, _type: "mentee" as const }));
+    const mentors: Array<GroupedProfile & { _type: "mentee" | "mentor" }> =
+      groupedMentors.map((p) => ({ ...p, _type: "mentor" as const }));
+    return [...mentees, ...mentors];
+  }, [groupedMentees, groupedMentors]);
+
+  const searchResults = useMemo(() => {
+    if (!searchTerm) return [];
+    const term = searchTerm.toLowerCase();
+
+    let results = allProfiles.filter((profile) =>
+      Object.values(profile).some((val) => {
+        if (typeof val === "string") return val.toLowerCase().includes(term);
+        if (Array.isArray(val))
+          return val.some((v) => typeof v === "string" && v.toLowerCase().includes(term));
+        return false;
+      })
+    );
+
+    if (roleFilter === "mentee") results = results.filter((p) => p._type === "mentee");
+    if (roleFilter === "mentor") results = results.filter((p) => p._type === "mentor");
+
+    return results;
+  }, [allProfiles, searchTerm, roleFilter]);
+
+  const handleSelectProfile = (profile: any, type: "mentee" | "mentor") => {
     setSelectedProfile(profile);
     setSelectedType(type);
-    setIsModalOpen(true);
   };
 
-  const handleAssignToCohort = async (
-    personId: string,
-    personType: 'mentee' | 'mentor'
-  ) => {
+  const handleAssignToCohort = async (personId: string, personType: "mentee" | "mentor") => {
     if (!selectedCohort) {
-      toast({
-        variant: "destructive",
-        title: "No cohort selected",
-        description: "Please select a cohort first to assign people to it."
-      });
+      toast({ variant: "destructive", title: "No cohort selected", description: "Please select a cohort first." });
       return;
     }
-
     setAssigningPersonId(personId);
     try {
       const result = await assignToCohort(personId, personType, selectedCohort.id);
-
       if (result.success) {
-        toast({
-          title: "Assignment Successful!",
-          description: `${personType === 'mentee' ? 'Mentee' : 'Mentor'} has been assigned to ${selectedCohort.name}.`,
-        });
+        toast({ title: "Assignment Successful!", description: `Assigned to ${selectedCohort.name}.` });
         await loadAllProfiles();
       } else {
         throw new Error(result.error || "Assignment failed");
       }
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Assignment Failed",
-        description: "Failed to assign to cohort. Please try again.",
-      });
+    } catch {
+      toast({ variant: "destructive", title: "Assignment Failed", description: "Please try again." });
     } finally {
       setAssigningPersonId(null);
     }
   };
 
-  const matchesSearch = (profile: GroupedProfile) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    // Search all string and string-array fields on the profile
-    return Object.values(profile).some(val => {
-      if (typeof val === 'string') return val.toLowerCase().includes(term);
-      if (Array.isArray(val)) return val.some(v => typeof v === 'string' && v.toLowerCase().includes(term));
-      return false;
-    });
-  };
-
-  const filteredMentees = groupedMentees.filter(matchesSearch);
-  const filteredMentors = groupedMentors.filter(matchesSearch);
-
-  // Auto-switch to the tab that has results when searching
-  useEffect(() => {
-    if (!searchTerm) return;
-    // If current tab shows no results but the other tab does, switch
-    if (activeTab === 'mentees' && filteredMentees.length === 0 && filteredMentors.length > 0) {
-      setActiveTab('mentors');
-    } else if (activeTab === 'mentors' && filteredMentors.length === 0 && filteredMentees.length > 0) {
-      setActiveTab('mentees');
-    }
-  }, [searchTerm, filteredMentees.length, filteredMentors.length]);
-
-  const ProfileTable = ({ profiles, type }: { profiles: any[], type: 'mentee' | 'mentor' }) => {
-    const isMentee = type === 'mentee';
-
-    return (
-      <ScrollArea className="h-[600px]">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name/ID</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Experience</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Cohorts</TableHead>
-              <TableHead>{isMentee ? 'Learning Topics' : 'Mentoring Topics'}</TableHead>
-              {!isMentee && <TableHead>Capacity</TableHead>}
-              <TableHead className="w-[100px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {profiles.map((profile) => {
-              const topics = profile.topics || [];
-              const cohortIds = profile.cohort_ids || [];
-              const isUnassigned = cohortIds.length === 0;
-
-              return (
-                <TableRow key={profile.id} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">
-                    <div>
-                      <div className="font-medium">
-                        {toDisplayName(profile.full_name || profile.person_id)}
-                      </div>
-                      {profile.pronouns && (
-                        <div className="text-xs text-muted-foreground">
-                          {profile.pronouns}
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-[200px] font-medium text-sm truncate" title={profile.role}>
-                      {profile.role}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {profile.experience_years}y
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm max-w-[150px] truncate" title={profile.location_timezone}>
-                      {profile.location_timezone}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-[200px]">
-                      {isUnassigned ? (
-                        <Badge variant="outline" className="text-xs">
-                          Unassigned
-                        </Badge>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {cohortIds.slice(0, 2).map((cohortId: string, idx: number) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {cohortNameMap[cohortId] || cohortId}
-                            </Badge>
-                          ))}
-                          {cohortIds.length > 2 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{cohortIds.length - 2}
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-[250px]">
-                      <div className="flex flex-wrap gap-1">
-                        {topics.slice(0, 2).map((topic: string, idx: number) => (
-                          <Badge key={idx} variant="outline" className="text-xs">
-                            {topic.length > 15 ? topic.substring(0, 15) + '...' : topic}
-                          </Badge>
-                        ))}
-                        {topics.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{topics.length - 2}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  {!isMentee && (
-                    <TableCell>
-                      <Badge
-                        variant={profile.capacity_remaining > 0 ? "default" : "destructive"}
-                        className="text-xs"
-                      >
-                        {profile.capacity_remaining}
-                      </Badge>
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        onClick={() => openProfileModal(profile, type)}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {selectedCohort && isUnassigned && (
-                        <Button
-                          onClick={() => handleAssignToCohort(
-                            profile.person_id,
-                            type
-                          )}
-                          variant="outline"
-                          size="sm"
-                          className={`h-8 text-xs ${
-                            isMentee
-                              ? 'text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 active:bg-blue-100'
-                              : 'text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700 hover:border-green-300 active:bg-green-100'
-                          }`}
-                          disabled={assigningPersonId === profile.person_id}
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          Assign
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </ScrollArea>
-    );
-  };
+  const activeFilterCount = (roleFilter ? 1 : 0);
+  const isMentee = selectedType === "mentee";
+  const personId = selectedProfile
+    ? selectedProfile[isMentee ? "mentee_id" : "mentor_id"] || selectedProfile.person_id
+    : null;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto" />
           <p className="mt-2 text-muted-foreground">Loading profiles...</p>
         </div>
       </div>
@@ -406,139 +233,317 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">All Profiles</h2>
-          <p className="text-muted-foreground">
-            {groupedMentees.length} unique mentees and {groupedMentors.length} unique mentors across all cohorts
-            {selectedCohort && ` • Managing ${selectedCohort.name}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Search className="w-4 h-4" />
-          <Input
-            placeholder="Search by name, role, or topics..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-80"
-          />
-        </div>
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className="text-2xl font-bold">{groupedMentees.length}</div>
+            <div className="text-xs text-muted-foreground">Total Mentees</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className="text-2xl font-bold">{groupedMentors.length}</div>
+            <div className="text-xs text-muted-foreground">Total Mentors</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className="text-2xl font-bold">{groupedMentees.length + groupedMentors.length}</div>
+            <div className="text-xs text-muted-foreground">Total Profiles</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className="text-2xl font-bold">{Object.keys(cohortNameMap).length}</div>
+            <div className="text-xs text-muted-foreground">Cohorts</div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList>
-          {selectedCohort && (
-            <TabsTrigger value="unassigned" className="flex items-center gap-2 data-[state=active]:bg-orange-100 data-[state=active]:text-orange-700">
-              <Target className="w-4 h-4" />
-              Unassigned ({unassignedMentees.length + unassignedMentors.length})
-            </TabsTrigger>
+      {/* Search / Filter bar — like People Analytics filter section */}
+      <Card className="p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Search className="w-4 h-4" />
+            Find profile:
+          </div>
+          <div className="relative flex-1 min-w-[250px] max-w-md">
+            <Input
+              placeholder="Search by name, role, topic, location..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-9 text-sm"
+            />
+          </div>
+          <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v === "_all" ? "" : v)}>
+            <SelectTrigger className="w-36 h-9 text-sm">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Roles</SelectItem>
+              <SelectItem value="mentee">Mentees only</SelectItem>
+              <SelectItem value="mentor">Mentors only</SelectItem>
+            </SelectContent>
+          </Select>
+          {activeFilterCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-sm"
+              onClick={() => setRoleFilter("")}
+            >
+              <X className="w-4 h-4 mr-1" /> Clear
+            </Button>
           )}
-          <TabsTrigger value="mentees" className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700">
-            <Users className="w-4 h-4" />
-            All Mentees ({filteredMentees.length})
-          </TabsTrigger>
-          <TabsTrigger value="mentors" className="flex items-center gap-2 data-[state=active]:bg-green-100 data-[state=active]:text-green-700">
-            <Users className="w-4 h-4" />
-            All Mentors ({filteredMentors.length})
-          </TabsTrigger>
-        </TabsList>
+          {searchTerm && (
+            <Badge variant="outline" className="text-xs">
+              {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+            </Badge>
+          )}
+        </div>
+      </Card>
 
-        {selectedCohort && (
-          <TabsContent value="unassigned" className="space-y-4">
-            {unassignedMentees.length === 0 && unassignedMentors.length === 0 ? (
-              <div className="text-center py-12">
-                <Target className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium">No Unassigned Profiles</h3>
-                <p className="text-muted-foreground">
-                  All mentors and mentees have been assigned to cohorts.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {unassignedMentees.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Users className="w-5 h-5 text-blue-600" />
-                        Unassigned Mentees ({unassignedMentees.length})
-                        <Badge variant="outline" className="ml-auto">Ready to assign to {selectedCohort.name}</Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <ProfileTable profiles={unassignedMentees} type="mentee" />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {unassignedMentors.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Target className="w-5 h-5 text-green-600" />
-                        Unassigned Mentors ({unassignedMentors.length})
-                        <Badge variant="outline" className="ml-auto">Ready to assign to {selectedCohort.name}</Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <ProfileTable profiles={unassignedMentors} type="mentor" />
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )}
-          </TabsContent>
-        )}
-
-        <TabsContent value="mentees" className="space-y-4">
-          {filteredMentees.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">No mentees found</h3>
-              <p className="text-muted-foreground">
-                {searchTerm ? 'Try adjusting your search criteria' : 'No mentees have been imported yet'}
-              </p>
+      {/* Search results dropdown */}
+      {searchTerm && searchResults.length > 0 && !selectedProfile && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="max-h-[350px] overflow-y-auto divide-y">
+              {searchResults.slice(0, 20).map((profile) => (
+                <div
+                  key={`${profile._type}-${profile.person_id}`}
+                  onClick={() => handleSelectProfile(profile, profile._type)}
+                  className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                        profile._type === "mentee"
+                          ? "bg-green-100 text-green-600"
+                          : "bg-blue-100 text-blue-600"
+                      }`}
+                    >
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm truncate">
+                          {toDisplayName(profile.full_name || profile.person_id)}
+                        </span>
+                        <Badge
+                          variant={profile._type === "mentee" ? "secondary" : "default"}
+                          className="text-[10px] shrink-0"
+                        >
+                          {profile._type}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {profile.business_title || profile.role}
+                        {profile.country || profile.location_timezone
+                          ? ` · ${profile.country || profile.location_timezone}`
+                          : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {profile.cohort_ids.length > 0 && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {cohortNameMap[profile.cohort_ids[0]] || "Assigned"}
+                        {profile.cohort_ids.length > 1 && ` +${profile.cohort_ids.length - 1}`}
+                      </Badge>
+                    )}
+                    {selectedCohort && profile.cohort_ids.length === 0 && (
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAssignToCohort(profile.person_id, profile._type);
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={assigningPersonId === profile.person_id}
+                      >
+                        <UserPlus className="h-3 w-3 mr-1" />
+                        Assign
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {searchResults.length > 20 && (
+                <div className="px-4 py-2 text-xs text-muted-foreground text-center">
+                  Showing 20 of {searchResults.length} results. Refine your search to see more.
+                </div>
+              )}
             </div>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Mentees ({filteredMentees.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ProfileTable profiles={filteredMentees} type="mentee" />
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+          </CardContent>
+        </Card>
+      )}
 
-        <TabsContent value="mentors" className="space-y-4">
-          {filteredMentors.length === 0 ? (
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">No mentors found</h3>
-              <p className="text-muted-foreground">
-                {searchTerm ? 'Try adjusting your search criteria' : 'No mentors have been imported yet'}
-              </p>
-            </div>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Mentors ({filteredMentors.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ProfileTable profiles={filteredMentors} type="mentor" />
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+      {/* No results */}
+      {searchTerm && searchResults.length === 0 && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <Users className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">No profiles match "{searchTerm}"</p>
+          </CardContent>
+        </Card>
+      )}
 
-      <ProfileModal
-        profile={selectedProfile}
-        type={selectedType}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
+      {/* Selected profile detail — full-width tabs like People Analytics */}
+      {selectedProfile && (
+        <>
+          {/* Profile header card */}
+          <Card>
+            <CardContent className="p-0">
+              <div
+                className={`px-6 py-4 ${
+                  isMentee
+                    ? "bg-green-50 dark:bg-green-950/30"
+                    : "bg-blue-50 dark:bg-blue-950/30"
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${
+                        isMentee
+                          ? "bg-green-100 dark:bg-green-900"
+                          : "bg-blue-100 dark:bg-blue-900"
+                      }`}
+                    >
+                      <User className={`w-6 h-6 ${isMentee ? "text-green-600" : "text-blue-600"}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-bold truncate">
+                          {toDisplayName(selectedProfile.full_name || selectedProfile.name || personId)}
+                        </h2>
+                        <Badge variant={isMentee ? "secondary" : "default"} className="shrink-0">
+                          {isMentee ? "Mentee" : "Mentor"}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-0.5 truncate">
+                        {selectedProfile.business_title || selectedProfile.role}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                        {(selectedProfile.country || selectedProfile.location_timezone) && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {selectedProfile.country || selectedProfile.location_timezone}
+                          </span>
+                        )}
+                        {(selectedProfile.compensation_grade || selectedProfile.experience_years) && (
+                          <span className="flex items-center gap-1">
+                            <Briefcase className="w-3 h-3" />
+                            {selectedProfile.compensation_grade || `${selectedProfile.experience_years} yrs`}
+                          </span>
+                        )}
+                        {selectedProfile.meeting_frequency && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {selectedProfile.meeting_frequency}
+                          </span>
+                        )}
+                        {!isMentee && selectedProfile.capacity_remaining !== undefined && (
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {selectedProfile.capacity_remaining} slots
+                          </span>
+                        )}
+                        {selectedProfile.pronouns && (
+                          <span className="text-[10px]">({selectedProfile.pronouns})</span>
+                        )}
+                      </div>
+                      {/* Cohort membership */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {selectedProfile.cohort_ids && selectedProfile.cohort_ids.length > 0 ? (
+                          selectedProfile.cohort_ids.map((cId: string) => (
+                            <Badge key={cId} variant="outline" className="text-[10px]">
+                              {cohortNameMap[cId] || cId}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-700">
+                            Holding Area
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setSelectedProfile(null)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
+          {/* Tabs — same pattern as People Analytics */}
+          <Tabs defaultValue="survey">
+            <TabsList>
+              <TabsTrigger value="survey">
+                <ClipboardList className="w-4 h-4 mr-1.5" />
+                Survey Info
+              </TabsTrigger>
+              <TabsTrigger value="matches">
+                <GitMerge className="w-4 h-4 mr-1.5" />
+                Matches
+              </TabsTrigger>
+              <TabsTrigger value="messages">
+                <Mail className="w-4 h-4 mr-1.5" />
+                Messages
+              </TabsTrigger>
+              <TabsTrigger value="analytics">
+                <BarChart3 className="w-4 h-4 mr-1.5" />
+                Analytics
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="survey" className="space-y-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <SurveyInfoTab profile={selectedProfile} type={selectedType} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="matches" className="space-y-4">
+              <MatchesTab personId={personId} personType={selectedType} />
+            </TabsContent>
+
+            <TabsContent value="messages" className="space-y-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <MessagesTab personId={personId} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="analytics" className="space-y-4">
+              <AnalyticsTab personId={personId} personType={selectedType} />
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+
+      {/* Empty state — no search yet and no profile selected */}
+      {!searchTerm && !selectedProfile && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Search className="w-10 h-10 mx-auto text-muted-foreground mb-3 opacity-40" />
+            <h3 className="text-base font-medium mb-1">Search for a profile</h3>
+            <p className="text-sm text-muted-foreground">
+              Type a name, role, topic, or location above to find someone.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
