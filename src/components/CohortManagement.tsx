@@ -389,10 +389,9 @@ export function CohortManagement({ onCohortSelected, selectedCohortId }: CohortM
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => {
-                  const sendMessages = window.confirm(
-                    'Mark cohort as active?\n\nClick OK to activate and send welcome messages.\nClick Cancel to activate without messages.'
-                  );
-                  handleStatusChange(cohort.id, 'active');
+                  if (window.confirm('Mark cohort as active?\n\nThis will change the cohort status to active.\n\nClick OK to proceed or Cancel to abort.')) {
+                    handleStatusChange(cohort.id, 'active');
+                  }
                 }}>
                   <Play className="h-4 w-4 mr-2" />
                   Mark Active

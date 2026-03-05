@@ -81,7 +81,7 @@ import {
 } from "@/lib/cohortManager";
 import { updateMenteeProfile, updateMentorProfile, removeFromCohort } from "@/lib/supabaseService";
 import {
-  sendWelcomeMessages, getMessageTemplates, sendBulkMessages,
+  getMessageTemplates, sendBulkMessages,
   buildParticipantContext, type MessageTemplate, type Participant,
 } from "@/lib/messageService";
 import { exportSlackIds } from "@/lib/exportService";
@@ -132,6 +132,7 @@ export default function CohortDetail() {
   const [msgBody, setMsgBody] = useState('');
   const [msgSelectedIds, setMsgSelectedIds] = useState<Set<string>>(new Set());
   const [sendingMessages, setSendingMessages] = useState(false);
+  const [activateDialogOpen, setActivateDialogOpen] = useState(false);
 
   useEffect(() => {
     loadCohort();
@@ -269,7 +270,7 @@ export default function CohortDetail() {
     }
   };
 
-  const handleStatusChange = async (newStatus: Cohort['status'], sendMessages = false) => {
+  const handleStatusChange = async (newStatus: Cohort['status']) => {
     if (!cohort) return;
 
     try {
@@ -287,34 +288,6 @@ export default function CohortDetail() {
             title: "Status updated",
             description: `Cohort status changed to ${newStatus}`,
           });
-        }
-
-        // Send welcome messages if activating and user opted in
-        if (newStatus === 'active' && sendMessages) {
-          // Check if there are matched pairs before trying to send
-          const hasManualMatches = (cohort.manual_matches as any)?.matches?.length > 0;
-          const hasAlgoMatches = (cohort.matches as any)?.results?.some((r: any) => r.proposed_assignment?.mentor_id);
-          if (!hasManualMatches && !hasAlgoMatches) {
-            toast({
-              title: "Cohort activated",
-              description: "No matched pairs found — welcome messages will be sent once you run matching.",
-            });
-          } else {
-            try {
-              const result = await sendWelcomeMessages(cohort.id);
-              toast({
-                title: "Welcome messages sent",
-                description: `${result.sent} messages sent${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
-              });
-            } catch (msgError) {
-              console.error('Welcome messages error:', msgError);
-              toast({
-                title: "Messages not sent",
-                description: "Cohort activated, but welcome messages failed. You can retry from the Runbook.",
-                variant: "destructive",
-              });
-            }
-          }
         }
       }
     } catch (error) {
@@ -841,10 +814,7 @@ export default function CohortDetail() {
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
-                const sendMessages = window.confirm(
-                  'Mark cohort as active?\n\nClick OK to activate and send welcome messages via Slack to all matched participants.\n\nClick Cancel to activate without sending messages.'
-                );
-                handleStatusChange('active', sendMessages);
+                setActivateDialogOpen(true);
               }}>
                 <Play className="h-4 w-4 mr-2" />
                 Mark Active
@@ -914,6 +884,29 @@ export default function CohortDetail() {
                     Save Changes
                   </Button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Activate Cohort Dialog */}
+          <Dialog open={activateDialogOpen} onOpenChange={setActivateDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Mark Cohort as Active</DialogTitle>
+                <DialogDescription>
+                  This will change the cohort status to active. You can send messages from the Runbook once the cohort is active.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setActivateDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => {
+                  setActivateDialogOpen(false);
+                  handleStatusChange('active');
+                }}>
+                  Activate
+                </Button>
               </div>
             </DialogContent>
           </Dialog>

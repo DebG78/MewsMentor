@@ -99,9 +99,14 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
       const groupKeyFor = (row: any, idField: string) =>
         (row.slack_user_id || row.full_name || row[idField] || '').trim().toLowerCase();
 
+      // Only keep rows that belong to an existing cohort or the holding area
+      const validCohortIds = new Set(cohortsResult.data?.map((c: any) => c.id) || []);
+      const isValidRow = (row: any) =>
+        !row.cohort_id || row.cohort_id === 'unassigned' || validCohortIds.has(row.cohort_id);
+
       if (menteesResult.data) {
         const menteeMap = new Map<string, GroupedProfile>();
-        menteesResult.data.forEach((mentee: any) => {
+        menteesResult.data.filter(isValidRow).forEach((mentee: any) => {
           const menteeId = mentee.mentee_id;
           const groupKey = groupKeyFor(mentee, 'mentee_id');
           if (menteeMap.has(groupKey)) {
@@ -128,7 +133,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
 
       if (mentorsResult.data) {
         const mentorMap = new Map<string, GroupedProfile>();
-        mentorsResult.data.forEach((mentor: any) => {
+        mentorsResult.data.filter(isValidRow).forEach((mentor: any) => {
           const mentorId = mentor.mentor_id;
           const groupKey = groupKeyFor(mentor, 'mentor_id');
           if (mentorMap.has(groupKey)) {
