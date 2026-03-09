@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -32,8 +31,9 @@ export function HelpGuide() {
           <AccordionContent className="space-y-4 pb-4">
             <p>
               MewsMentor accepts <Badge variant="outline">CSV (.csv)</Badge> and{" "}
-              <Badge variant="outline">Excel (.xlsx, .xls)</Badge> files. You can upload mentee and
-              mentor data as separate files or combined into one file.
+              <Badge variant="outline">Excel (.xlsx, .xls)</Badge> files. Mentees and mentors are
+              uploaded in a single combined file — each row has a{" "}
+              <strong>"How would you like to participate as?"</strong> column that determines the role.
             </p>
 
             <Card>
@@ -41,21 +41,17 @@ export function HelpGuide() {
                 <CardTitle className="text-base">How does it know if a row is a mentee or mentor?</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <p>The parser identifies rows using these methods (in priority order):</p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>
-                    <strong>"Role Type" column</strong> (most reliable) — values: <code>mentee</code>,{" "}
-                    <code>mentor</code>, or <code>both</code>
-                  </li>
-                  <li>
-                    <strong>Header-based detection</strong> — if no "Role Type" column exists, it checks for
-                    columns unique to mentor surveys (e.g., "Have you mentored before?") or mentee surveys
-                    (e.g., "What's the main reason you'd like a mentor?")
-                  </li>
-                  <li>
-                    <strong>Fallback</strong> — rows with at least 3 non-empty fields default to mentee
-                  </li>
-                </ol>
+                <p>The parser uses the <strong>"How would you like to participate as?"</strong> column:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><strong>Mentee</strong> — creates a mentee profile (fills mentee columns)</li>
+                  <li><strong>Mentor</strong> — creates a mentor profile (fills mentor columns)</li>
+                  <li><strong>Both</strong> — creates both a mentee and mentor profile from the same row</li>
+                </ul>
+                <p className="text-muted-foreground mt-2">
+                  The system auto-detects the survey format version. The current format (V3) is detected
+                  when Workday columns like "Business Title" or "Compensation Grade" are present alongside
+                  the role selection column.
+                </p>
               </CardContent>
             </Card>
 
@@ -73,8 +69,16 @@ export function HelpGuide() {
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-mono text-sm"># or id</TableCell>
-                      <TableCell>A unique identifier for the person (e.g., row number, employee ID)</TableCell>
+                      <TableCell className="font-mono text-sm">Name</TableCell>
+                      <TableCell>Full name of the participant</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-sm">Email</TableCell>
+                      <TableCell>Work email address (used as unique identifier for deduplication)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-sm">How would you like to participate as?</TableCell>
+                      <TableCell>Role selection: Mentee, Mentor, or Both</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -83,7 +87,7 @@ export function HelpGuide() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Optional but recommended</CardTitle>
+                <CardTitle className="text-base">Recommended columns</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -95,11 +99,41 @@ export function HelpGuide() {
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-mono text-sm">Full Name or Name</TableCell>
-                      <TableCell>The person's display name. If absent, the ID is used as the name.</TableCell>
+                      <TableCell className="font-mono text-sm">Business Title</TableCell>
+                      <TableCell>Workday job title (e.g. Senior Software Engineer)</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-sm">Compensation Grade</TableCell>
+                      <TableCell>Workday level (L1-L7) — used for seniority-based matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-sm">Location Address - Country</TableCell>
+                      <TableCell>Country — auto-converted to timezone for matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-mono text-sm">Slack User ID</TableCell>
+                      <TableCell>Slack member ID (e.g. U01ABC123) — required for automated messaging</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Multi-select fields</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <p>
+                  Fields that accept multiple values (e.g. "What kind of mentor help would you like?")
+                  should use <strong>semicolons</strong> as separators:
+                </p>
+                <code className="block bg-muted rounded-md p-2 text-xs">
+                  Accountability partner;Sounding board;Career guidance
+                </code>
+                <p className="text-muted-foreground">
+                  This matches the Microsoft Forms multi-select export format.
+                </p>
               </CardContent>
             </Card>
           </AccordionContent>
@@ -110,151 +144,69 @@ export function HelpGuide() {
           <AccordionTrigger className="text-lg font-semibold">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5" />
-              Mentee Spreadsheet Columns
+              Mentee Columns (Q7-Q14)
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-4">
+            <p className="text-sm text-muted-foreground">
+              These columns are filled in by participants who selected <strong>Mentee</strong> or <strong>Both</strong>.
+              Column headers use flexible keyword matching — you don't need exact names.
+            </p>
+
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Profile Information</CardTitle>
+                <CardTitle className="text-base">Mentee Questions</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  These columns use flexible matching — the parser looks for keywords in the column header.
-                </p>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Column</TableHead>
                       <TableHead>Matching keywords</TableHead>
-                      <TableHead>Description</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Role</TableCell>
-                      <TableCell className="text-xs font-mono">"current role"</TableCell>
-                      <TableCell>Current job role</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Experience</TableCell>
-                      <TableCell className="text-xs font-mono">"years of work experience"</TableCell>
-                      <TableCell>e.g., "3-5", "6-10", "10+"</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Location</TableCell>
-                      <TableCell className="text-xs font-mono">"where are you based", "location", "time zone"</TableCell>
-                      <TableCell>Location or timezone</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Pronouns</TableCell>
-                      <TableCell className="text-xs font-mono">"Do you want to share your pronouns?"</TableCell>
-                      <TableCell>Optional pronouns</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Department</TableCell>
-                      <TableCell className="text-xs font-mono">"department", "team", "business unit"</TableCell>
-                      <TableCell>Department or team name</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Job Grade</TableCell>
-                      <TableCell className="text-xs font-mono">"job grade", "job_grade", "grade", "level", "band"</TableCell>
-                      <TableCell>Job grade or level</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Email</TableCell>
-                      <TableCell className="text-xs font-mono">"email", "work email", "email address"</TableCell>
-                      <TableCell>Work email (used for webhook respondent matching)</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Development Topics (boolean columns)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Column headers with a value of <code>1</code>, <code>true</code>, or any non-empty text to indicate selection:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    "Career growth & progression",
-                    "Leadership & management",
-                    "Technical / product knowledge",
-                    "Customer success & client relationships",
-                    "Communication & soft skills",
-                    "Cross-functional collaboration",
-                    "Strategic thinking & vision",
-                    "Change management / navigating transformation",
-                    "Diversity, equity & inclusion",
-                    "Work-life balance & wellbeing",
-                  ].map((topic) => (
-                    <Badge key={topic} variant="secondary" className="text-xs">
-                      {topic}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Life Experiences (boolean columns)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    "Returning from maternity/paternity/parental leave",
-                    "Navigating menopause or andropause",
-                    "Career break / sabbatical",
-                    "Relocation to a new country",
-                    "Career change or industry switch",
-                    "Managing health challenges",
-                    "Stepping into leadership for the first time",
-                    "Working towards a promotion",
-                    "Thinking about an internal move",
-                  ].map((exp) => (
-                    <Badge key={exp} variant="outline" className="text-xs">
-                      {exp}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Preferences & Goals (text columns)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Column</TableHead>
                       <TableHead>Used for</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[
-                      ["Why would you like to join the mentorship program?", "Motivation — used in goals text for matching"],
-                      ["What's the main reason you'd like a mentor?", "Main reason — used in goals text for matching"],
-                      ["What expectations do you have for the mentorship program", "Expectations — used in goals text for matching"],
-                      ["What kind of mentor style do you think would help you most", "Preferred mentor style"],
-                      ["What kind of mentor energy would help you thrive?", "Preferred mentor energy"],
-                      ["How do you prefer to receive feedback?", "Feedback preference"],
-                      ["How important is it that your mentor has prior mentoring experience?", "Mentor experience importance"],
-                      ["What do you NOT want in a mentor?", "Dealbreakers"],
-                      ["How often would you ideally like to meet with a mentor?", "Meeting frequency"],
-                      ["What qualities would you like in a mentor", "Desired mentor qualities — used in AI matching"],
-                    ].map(([col, usage]) => (
-                      <TableRow key={col}>
-                        <TableCell className="text-xs">{col}</TableCell>
-                        <TableCell className="text-sm">{usage}</TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow>
+                      <TableCell className="text-xs">What capabilities would you like to develop?</TableCell>
+                      <TableCell className="text-xs font-mono">"capabilities" + "develop"</TableCell>
+                      <TableCell className="text-sm">Free-text capabilities — primary input for matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Job-specific or role-related mentoring area</TableCell>
+                      <TableCell className="text-xs font-mono">"job-specific", "role-specific"</TableCell>
+                      <TableCell className="text-sm">Role-specific development area</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Mentoring goal (I want to...)</TableCell>
+                      <TableCell className="text-xs font-mono">"mentoring goal", "using the format"</TableCell>
+                      <TableCell className="text-sm">Goal statement — used for semantic matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Specific situation or challenge</TableCell>
+                      <TableCell className="text-xs font-mono">"specific situation", "specific challenge"</TableCell>
+                      <TableCell className="text-sm">Current challenge context</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">What kind of mentor help would you like?</TableCell>
+                      <TableCell className="text-xs font-mono">"kind of mentor help"</TableCell>
+                      <TableCell className="text-sm">Multi-select (semicolons) — help type preferences</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Open to a first-time mentor?</TableCell>
+                      <TableCell className="text-xs font-mono">"open to" + "first-time"</TableCell>
+                      <TableCell className="text-sm">First-time mentor acceptance</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Session style preference</TableCell>
+                      <TableCell className="text-xs font-mono">"session style"</TableCell>
+                      <TableCell className="text-sm">Preferred meeting format</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Feedback style preference</TableCell>
+                      <TableCell className="text-xs font-mono">"feedback style"</TableCell>
+                      <TableCell className="text-sm">How they prefer to receive feedback</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>
@@ -267,125 +219,83 @@ export function HelpGuide() {
           <AccordionTrigger className="text-lg font-semibold">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5" />
-              Mentor Spreadsheet Columns
+              Mentor Columns (Q15-Q25)
             </div>
           </AccordionTrigger>
           <AccordionContent className="space-y-4 pb-4">
+            <p className="text-sm text-muted-foreground">
+              These columns are filled in by participants who selected <strong>Mentor</strong> or <strong>Both</strong>.
+            </p>
+
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Profile Information</CardTitle>
+                <CardTitle className="text-base">Mentor Questions</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">Same flexible matching as mentee columns:</p>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Column</TableHead>
                       <TableHead>Matching keywords</TableHead>
-                      <TableHead>Description</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Role</TableCell>
-                      <TableCell className="text-xs font-mono">"current role", "role at", "your role"</TableCell>
-                      <TableCell>Current job role</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Experience</TableCell>
-                      <TableCell className="text-xs font-mono">"years of work experience"</TableCell>
-                      <TableCell>e.g., "3-5", "6-10", "10+"</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Location</TableCell>
-                      <TableCell className="text-xs font-mono">"where are you based", "location", "time zone"</TableCell>
-                      <TableCell>Location or timezone</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Pronouns</TableCell>
-                      <TableCell className="text-xs font-mono">"Do you want to share your pronouns?"</TableCell>
-                      <TableCell>Optional pronouns</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Capacity</TableCell>
-                      <TableCell className="text-xs font-mono">"capacity", "how many mentees", "max mentees"</TableCell>
-                      <TableCell>How many mentees this mentor can take. Defaults to 1.</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Department</TableCell>
-                      <TableCell className="text-xs font-mono">"department", "team", "business unit"</TableCell>
-                      <TableCell>Department or team name</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Job Grade</TableCell>
-                      <TableCell className="text-xs font-mono">"job grade", "job_grade", "grade", "level", "band"</TableCell>
-                      <TableCell>Job grade or level</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Email</TableCell>
-                      <TableCell className="text-xs font-mono">"email", "work email", "email address"</TableCell>
-                      <TableCell>Work email (used for webhook respondent matching)</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Topics to Mentor (boolean columns)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Same topic list as mentees — indicates which areas this mentor can coach on.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Preferred Mentee Levels (boolean columns)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {["Early-career", "Mid-level", "Senior stretch role"].map((level) => (
-                    <Badge key={level} variant="secondary" className="text-xs">
-                      {level}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Mentoring Approach (text columns)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Column</TableHead>
                       <TableHead>Used for</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[
-                      ["Have you mentored before?", "Value \"1\" = yes"],
-                      ["Your mentoring style / How would you describe your preferred mentoring style?", "Mentoring style — used in AI matching"],
-                      ["What type of meeting style do you usually prefer?", "Meeting style preference"],
-                      ["How would you describe your energy as a mentor?", "Mentor energy"],
-                      ["What's your feedback style?", "Feedback style"],
-                      ["Are there any topics you would prefer NOT to mentor on?", "Topics to avoid (comma-separated)"],
-                      ["How often would you ideally like to meet with a mentee?", "Meeting frequency"],
-                      ["What do you hope to gain from being a mentor?", "Motivation — used in bio text for matching"],
-                      ["What expectations do you have for the mentorship program?", "Expectations — used in bio text for matching"],
-                    ].map(([col, usage]) => (
-                      <TableRow key={col}>
-                        <TableCell className="text-xs">{col}</TableCell>
-                        <TableCell className="text-sm">{usage}</TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow>
+                      <TableCell className="text-xs">Why do you want to mentor?</TableCell>
+                      <TableCell className="text-xs font-mono">"want to mentor", "hope to get out"</TableCell>
+                      <TableCell className="text-sm">Motivation — used for semantic matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">How many mentees would you like?</TableCell>
+                      <TableCell className="text-xs font-mono">"how many mentees"</TableCell>
+                      <TableCell className="text-sm">Capacity (accepts "One", "Two", or numbers). Defaults to 1.</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Is this your first time mentoring?</TableCell>
+                      <TableCell className="text-xs font-mono">"first time mentoring"</TableCell>
+                      <TableCell className="text-sm">Experience level — parsed to boolean</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">What support would help you feel confident?</TableCell>
+                      <TableCell className="text-xs font-mono">"support" + "feel confident"</TableCell>
+                      <TableCell className="text-sm">Multi-select — support resources wanted</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Capabilities you feel confident mentoring on</TableCell>
+                      <TableCell className="text-xs font-mono">"confident mentoring", "capabilities" + "confident"</TableCell>
+                      <TableCell className="text-sm">Multi-select (semicolons) — primary input for matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Something specific about your job a mentee could benefit from?</TableCell>
+                      <TableCell className="text-xs font-mono">"benefit from" + "job"</TableCell>
+                      <TableCell className="text-sm">Role-specific offering</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Meaningful impact story</TableCell>
+                      <TableCell className="text-xs font-mono">"meaningful impact"</TableCell>
+                      <TableCell className="text-sm">Story — used for semantic matching</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">What do you naturally bring? (Pick up to 3)</TableCell>
+                      <TableCell className="text-xs font-mono">"naturally bring", "natural strengths"</TableCell>
+                      <TableCell className="text-sm">Multi-select — mentor strengths</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Preferred session style (Mentor)</TableCell>
+                      <TableCell className="text-xs font-mono">"session style" + "mentor"</TableCell>
+                      <TableCell className="text-sm">Meeting format preference</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Topics you prefer not to be matched on</TableCell>
+                      <TableCell className="text-xs font-mono">"prefer not" + "matched"</TableCell>
+                      <TableCell className="text-sm">Exclusions — prevents matching on these areas</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="text-xs">Anything else that would make a match not work?</TableCell>
+                      <TableCell className="text-xs font-mono">"make a match not work"</TableCell>
+                      <TableCell className="text-sm">Additional matching exclusions</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </CardContent>
@@ -575,43 +485,44 @@ export function HelpGuide() {
               </CardContent>
             </Card>
 
-            {/* Experience Levels */}
+            {/* Seniority Levels */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Experience Level Mapping</CardTitle>
+                <CardTitle className="text-base">Seniority Level Mapping (Compensation Grade)</CardTitle>
               </CardHeader>
               <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  The V3 format uses Workday Compensation Grade for seniority matching. Lower L-number = higher seniority.
+                </p>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Experience</TableHead>
-                      <TableHead>Band</TableHead>
+                      <TableHead>Compensation Grade</TableHead>
+                      <TableHead>Level</TableHead>
                       <TableHead>Score</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow>
-                      <TableCell>0-2 years</TableCell>
-                      <TableCell>IC1</TableCell>
-                      <TableCell>1</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>3-5 years</TableCell>
-                      <TableCell>IC2</TableCell>
-                      <TableCell>2</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>6-10 years</TableCell>
-                      <TableCell>IC3</TableCell>
-                      <TableCell>3</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>10+ years</TableCell>
-                      <TableCell>IC4</TableCell>
-                      <TableCell>4</TableCell>
-                    </TableRow>
+                    {[
+                      ["L7", "Entry level", "1"],
+                      ["L6", "Junior IC", "2"],
+                      ["L5", "Mid IC", "3"],
+                      ["L4", "Senior IC / Lead", "4"],
+                      ["L3", "Sr. Manager", "5"],
+                      ["L2", "Director", "6"],
+                      ["L1", "SVP/VP", "7"],
+                    ].map(([grade, level, score]) => (
+                      <TableRow key={grade}>
+                        <TableCell className="font-mono">{grade}</TableCell>
+                        <TableCell>{level}</TableCell>
+                        <TableCell>{score}</TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Ideal match: mentor is 1-2 levels above the mentee. Same level scores 50%. Mentor below mentee scores 20%.
+                </p>
               </CardContent>
             </Card>
           </AccordionContent>

@@ -10,7 +10,10 @@ import {
   Database,
   BarChart3,
   MessageSquare,
+  Download,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { downloadUploadTemplate } from "@/lib/templateDownload";
 import { SurveyTemplateManager } from "@/components/SurveyTemplateManager";
 import { SurveyMigrationHelper } from "@/components/SurveyMigrationHelper";
 import { HelpGuide } from "@/components/HelpGuide";
@@ -552,6 +555,29 @@ const Settings = () => {
 
             {/* Mentor/Mentee Data Upload */}
             <TabsContent value="data-help" className="space-y-6">
+              <Card className="border-green-200 bg-green-50/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <Download className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-green-900">
+                          Download Upload Template
+                        </p>
+                        <p className="text-sm text-green-700">
+                          Get the Excel template with all required columns, sample data, and a column reference guide.
+                          Delete the sample rows and fill in your data.
+                        </p>
+                      </div>
+                    </div>
+                    <Button onClick={downloadUploadTemplate} variant="outline" className="shrink-0 gap-2">
+                      <Download className="w-4 h-4" />
+                      Download .xlsx
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
