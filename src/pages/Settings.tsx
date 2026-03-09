@@ -525,6 +525,83 @@ const Settings = () => {
                     </div>
                   </div>
 
+                  {/* Message Sending Paths — How It All Fits Together */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Message Sending Paths — Quick Reference
+                      <Badge variant="outline">Architecture</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      There are four distinct paths for sending Slack messages. All paths go through the same Zapier webhook,
+                      but they differ in <strong>who triggers them</strong>, <strong>who receives them</strong>, and <strong>how recipients are filtered</strong>.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-4 text-sm">
+
+                      {/* Path 1 — Welcome Messages */}
+                      <div>
+                        <span className="font-medium">Path 1: Welcome Messages (Launch stage)</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Trigger:</strong> Admin clicks "Send Welcome Messages" in the Cohort Runbook launch stage</li>
+                          <li><strong>Recipients:</strong> Only mentees and mentors in <strong>approved match pairs</strong> (from <code className="bg-background px-1 rounded">manual_matches</code> or <code className="bg-background px-1 rounded">proposed_assignment</code>)</li>
+                          <li><strong>Template routing:</strong> <code className="bg-background px-1 rounded">welcome_mentee</code> goes to mentees, <code className="bg-background px-1 rounded">welcome_mentor</code> goes to mentors, <code className="bg-background px-1 rounded">channel_announcement</code> goes to the Slack channel</li>
+                          <li><strong>Edge function:</strong> <code className="bg-background px-1 rounded">send-welcome-messages</code> (standard path) or <code className="bg-background px-1 rounded">send-bulk-messages</code> (when templates have overrides)</li>
+                          <li><strong>Unmatched/pending participants do NOT receive welcome messages</strong></li>
+                        </ul>
+                      </div>
+
+                      {/* Path 2 — Auto-send after session logging */}
+                      <div>
+                        <span className="font-medium">Path 2: Auto-Send After Session Logging</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Trigger:</strong> A mentor or mentee logs a session via MS Forms &rarr; Power Automate &rarr; <code className="bg-background px-1 rounded">log-session</code> edge function</li>
+                          <li><strong>Recipients:</strong> Only the <strong>individual person</strong> who logged the session</li>
+                          <li><strong>Phase detection:</strong> Uses the phase the respondent selected in the form, or auto-detects from session count (1-2 = Getting Started, 3-5 = Building, 6-7 = Midpoint, 8+ = Wrapping Up)</li>
+                          <li><strong>Template routing:</strong> Sends the <code className="bg-background px-1 rounded">next_steps_mentee</code> or <code className="bg-background px-1 rounded">next_steps_mentor</code> template matching the detected phase; falls back to generic <code className="bg-background px-1 rounded">next_steps</code></li>
+                          <li><strong>Deduplication:</strong> Each person receives a given phase's message <strong>only once</strong> — checked via <code className="bg-background px-1 rounded">message_log</code></li>
+                          <li><strong>Only people in approved match pairs</strong> can log sessions (the edge function searches for matching pairs)</li>
+                        </ul>
+                      </div>
+
+                      {/* Path 3 — Manual stage messages from Runbook */}
+                      <div>
+                        <span className="font-medium">Path 3: Manual Stage Messages (Runbook Midpoint / Closure)</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Trigger:</strong> Admin clicks "Send Midpoint Messages" or "Send Wrapping Up Messages" in the Cohort Runbook</li>
+                          <li><strong>Recipients:</strong> Only mentees and mentors in <strong>approved match pairs</strong></li>
+                          <li><strong>Phase-aware filtering:</strong> Each pair's current journey phase is determined from their session logs (self-reported phase takes priority, otherwise auto-detected from session count). Templates are only sent to pairs whose phase matches the template's <code className="bg-background px-1 rounded">journey_phase</code></li>
+                          <li><strong>Template routing:</strong> <code className="bg-background px-1 rounded">next_steps_mentee</code> goes to mentees only, <code className="bg-background px-1 rounded">next_steps_mentor</code> goes to mentors only, generic <code className="bg-background px-1 rounded">next_steps</code> goes to both</li>
+                          <li><strong>Deduplication:</strong> Anyone who was already auto-sent the message (via Path 2) is <strong>automatically skipped</strong></li>
+                          <li><strong>Edge function:</strong> <code className="bg-background px-1 rounded">send-stage-messages</code> (standard path) or <code className="bg-background px-1 rounded">send-bulk-messages</code> (when templates have overrides or partial selection)</li>
+                          <li><strong>Unmatched/pending participants do NOT receive stage messages</strong></li>
+                        </ul>
+                      </div>
+
+                      {/* Path 4 — Compose & Send (ad-hoc) */}
+                      <div>
+                        <span className="font-medium">Path 4: Compose &amp; Send (Ad-Hoc Bulk)</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Trigger:</strong> Admin uses the Compose &amp; Send UI (Settings &rarr; Messages tab)</li>
+                          <li><strong>Recipients:</strong> Admin manually selects from one of three audiences: all in cohort, unmatched in cohort, or holding area</li>
+                          <li><strong>No automatic filtering by match status or phase</strong> — this is intentionally open-ended for ad-hoc communication</li>
+                          <li><strong>Use cases:</strong> Notifying unmatched people, sending updates to the holding area, custom announcements</li>
+                          <li><strong>Edge function:</strong> <code className="bg-background px-1 rounded">send-bulk-messages</code></li>
+                        </ul>
+                      </div>
+
+                      {/* Key safety rules */}
+                      <div className="border-t pt-3 mt-3">
+                        <span className="font-medium">Key safety rules across all paths:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Paths 1-3 <strong>only send to approved match pairs</strong> — pending/unmatched participants are excluded</li>
+                          <li>Path 3 respects <strong>per-pair journey phase</strong> — a pair in "Building" won't receive "Wrapping Up" templates</li>
+                          <li>Deduplication via <code className="bg-background px-1 rounded">message_log</code> prevents duplicate messages for the same phase</li>
+                          <li>All messages are logged with delivery status for auditing</li>
+                          <li>Participants without a <code className="bg-background px-1 rounded">slack_user_id</code> are silently skipped</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Summary of all secrets */}
                   <div className="space-y-3 border-t pt-6">
                     <h3 className="text-base font-semibold">All Supabase Secrets Summary</h3>

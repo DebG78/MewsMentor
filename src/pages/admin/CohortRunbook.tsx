@@ -80,10 +80,10 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
   getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
-  sendBulkMessages, getCohortParticipants, buildParticipantContext,
+  sendBulkMessages, getMatchedPairsWithPhase, buildParticipantContext,
   seedDefaultTemplatesForStage, STAGE_DEFAULT_TEMPLATE_TYPES,
   TEMPLATE_TYPES,
-  type MessageTemplate, type MessageLogSummary, type Participant,
+  type MessageTemplate, type MessageLogSummary,
 } from '@/lib/messageService';
 
 // Icon mapping for stage types
@@ -538,33 +538,53 @@ export default function CohortRunbook() {
       const selectedIds = launchStage ? (selectedTemplatesForSend[launchStage.id] || new Set<string>()) : new Set<string>();
 
       if (hasOverrides && launchStage) {
-        // Use bulk send with overridden bodies
-        const participants = await getCohortParticipants(selectedCohort);
+        // Use bulk send with overridden bodies — only send to approved match pairs
+        const matchedPairs = await getMatchedPairsWithPhase(selectedCohort);
         const cohortName = cohorts.find(c => c.id === selectedCohort)?.name || '';
         const assigned = (stageAssignedTemplates[launchStage.id] || []).filter(t => selectedIds.has(t.id));
         let totalSent = 0, totalFailed = 0;
 
-        const withSlack = participants.filter(p => p.slack_user_id);
-        console.log('[sendWelcome] bulk path: participants=', participants.length, 'withSlackId=', withSlack.length, 'templates=', assigned.length);
+        console.log('[sendWelcome] bulk path: matchedPairs=', matchedPairs.length, 'templates=', assigned.length);
 
         if (assigned.length === 0) {
           toast({ title: 'No templates assigned', description: 'Assign welcome templates to the launch stage first.', variant: 'destructive' });
           return;
         }
-        if (participants.length === 0) {
-          toast({ title: 'No participants found', description: 'The cohort has no mentees or mentors in the database.', variant: 'destructive' });
-          return;
-        }
-        if (withSlack.length === 0) {
-          toast({ title: 'No Slack IDs', description: 'None of the participants have a Slack user ID. Add Slack IDs to mentees/mentors before sending.', variant: 'destructive' });
+        if (matchedPairs.length === 0) {
+          toast({ title: 'No matched pairs found', description: 'Run matching first and approve matches before sending.', variant: 'destructive' });
           return;
         }
 
         for (const tpl of assigned) {
           const body = getEffectiveBody(tpl.id);
           if (!body) continue;
-          const recipients = withSlack
-            .map(p => ({ slack_user_id: p.slack_user_id!, context: buildParticipantContext(p, cohortName) }));
+
+          const isMenteeTemplate = tpl.template_type.toLowerCase().includes('mentee');
+          const isMentorTemplate = tpl.template_type.toLowerCase().includes('mentor') && !isMenteeTemplate;
+
+          const recipients: Array<{ slack_user_id: string; context: Record<string, string> }> = [];
+          for (const pair of matchedPairs) {
+            const pairContext = {
+              MENTEE_FIRST_NAME: pair.mentee.first_name,
+              MENTEE_FULL_NAME: pair.mentee.full_name,
+              MENTOR_FIRST_NAME: pair.mentor.first_name,
+              MENTOR_FULL_NAME: pair.mentor.full_name,
+            };
+
+            if (!isMentorTemplate && pair.mentee.slack_user_id) {
+              recipients.push({
+                slack_user_id: pair.mentee.slack_user_id,
+                context: { ...buildParticipantContext(pair.mentee, cohortName), ...pairContext },
+              });
+            }
+            if (!isMenteeTemplate && pair.mentor.slack_user_id) {
+              recipients.push({
+                slack_user_id: pair.mentor.slack_user_id,
+                context: { ...buildParticipantContext(pair.mentor, cohortName), ...pairContext },
+              });
+            }
+          }
+
           if (recipients.length === 0) continue;
           const result = await sendBulkMessages({
             cohortId: selectedCohort,
@@ -648,7 +668,7 @@ export default function CohortRunbook() {
     if (!selectedCohort) return;
     setIsSendingStageMessages(true);
     try {
-      const participants = await getCohortParticipants(selectedCohort);
+      const matchedPairs = await getMatchedPairsWithPhase(selectedCohort);
       const cohortName = cohorts.find(c => c.id === selectedCohort)?.name || '';
       const selectedIds = selectedTemplatesForSend[stageId] || new Set<string>();
       const assigned = (stageAssignedTemplates[stageId] || []).filter(t => selectedIds.has(t.id));
@@ -657,9 +677,43 @@ export default function CohortRunbook() {
       for (const tpl of assigned) {
         const body = getEffectiveBody(tpl.id);
         if (!body) continue;
-        const recipients = participants
-          .filter(p => p.slack_user_id)
-          .map(p => ({ slack_user_id: p.slack_user_id!, context: buildParticipantContext(p, cohortName) }));
+
+        // Filter pairs to those whose journey phase matches this template's phase
+        const applicablePairs = tpl.journey_phase
+          ? matchedPairs.filter(p => p.journeyPhase === tpl.journey_phase)
+          : matchedPairs;
+
+        // Determine which role(s) this template targets
+        const isMenteeTemplate = tpl.template_type.includes('_mentee');
+        const isMentorTemplate = tpl.template_type.includes('_mentor');
+
+        // Build recipients — one per applicable participant in each pair
+        const recipients: Array<{ slack_user_id: string; context: Record<string, string> }> = [];
+        for (const pair of applicablePairs) {
+          const pairContext = {
+            MENTEE_FIRST_NAME: pair.mentee.first_name,
+            MENTEE_FULL_NAME: pair.mentee.full_name,
+            MENTOR_FIRST_NAME: pair.mentor.first_name,
+            MENTOR_FULL_NAME: pair.mentor.full_name,
+          };
+
+          // Send to mentee (unless template is mentor-only)
+          if (!isMentorTemplate && pair.mentee.slack_user_id) {
+            recipients.push({
+              slack_user_id: pair.mentee.slack_user_id,
+              context: { ...buildParticipantContext(pair.mentee, cohortName), ...pairContext },
+            });
+          }
+
+          // Send to mentor (unless template is mentee-only)
+          if (!isMenteeTemplate && pair.mentor.slack_user_id) {
+            recipients.push({
+              slack_user_id: pair.mentor.slack_user_id,
+              context: { ...buildParticipantContext(pair.mentor, cohortName), ...pairContext },
+            });
+          }
+        }
+
         if (recipients.length === 0) continue;
         const result = await sendBulkMessages({
           cohortId: selectedCohort,

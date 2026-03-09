@@ -508,6 +508,7 @@ export function AnalyticsHelpGuide() {
                   <li>Check People Analytics topic demand vs supply for the new cohort</li>
                   <li>Set up an MS Form for session logging and share with participants</li>
                   <li>Create <strong>next-steps message templates</strong> in Settings &rarr; Message Templates for each journey phase</li>
+                  <li><strong>Monthly session reminders</strong> are enabled automatically when the cohort is activated — check the Runbook to confirm</li>
                 </ul>
               </CardContent>
             </Card>
@@ -535,6 +536,7 @@ export function AnalyticsHelpGuide() {
               </CardHeader>
               <CardContent className="text-sm space-y-1">
                 <ul className="list-disc list-inside space-y-1">
+                  <li><strong>Monthly session reminders</strong> are sent automatically to all participants — no action needed (toggle on/off in the Cohort Runbook)</li>
                   <li>Record success metric snapshot values (use the "Record Value" button)</li>
                   <li>Import survey feedback CSV if surveys were sent</li>
                   <li>Update VIP engagement scores (manually or via CSV import)</li>
@@ -736,6 +738,24 @@ export function AnalyticsHelpGuide() {
                   <li>Follow up on pairs with low session frequency (visible in the Pair Analysis tab)</li>
                   <li>Track rating trends to catch declining satisfaction early</li>
                 </ol>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Automatic Monthly Session Reminders</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-2">
+                <p>
+                  Every active cohort automatically sends monthly reminders to all matched mentors and mentees,
+                  encouraging them to log their sessions. Reminders are counted from the cohort's start date.
+                </p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><strong>Enabled by default:</strong> When a cohort is activated, monthly reminders turn on automatically and the start date is set.</li>
+                  <li><strong>Toggle on/off:</strong> Use the switch in the Cohort Runbook (Midpoint stage) to enable or disable reminders.</li>
+                  <li><strong>Deduplicated:</strong> Each participant receives only one reminder per month, even if the system runs multiple times.</li>
+                  <li><strong>Template:</strong> Customise the reminder message in Settings &rarr; Message Templates using the "Session Reminder (Monthly)" template type.</li>
+                </ul>
               </CardContent>
             </Card>
 

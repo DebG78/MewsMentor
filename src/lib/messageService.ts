@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { JourneyPhase } from '@/types/mentoring';
 
 // ============================================================================
 // MESSAGE TEMPLATE MANAGEMENT
@@ -458,6 +459,116 @@ export async function getUnmatchedInCohort(cohortId: string): Promise<Participan
   return (mentees || [])
     .filter(m => !matchedMenteeIds.has(m.mentee_id))
     .map(menteeToParticipant);
+}
+
+// ============================================================================
+// MATCHED PAIRS WITH JOURNEY PHASE
+// ============================================================================
+
+export interface MatchedPairWithPhase {
+  mentee: Participant;
+  mentor: Participant;
+  journeyPhase: JourneyPhase;
+  sessionCount: number;
+}
+
+function detectJourneyPhase(sessionCount: number): JourneyPhase {
+  if (sessionCount <= 2) return 'getting_started';
+  if (sessionCount <= 5) return 'building';
+  if (sessionCount <= 7) return 'midpoint';
+  return 'wrapping_up';
+}
+
+/**
+ * Get approved match pairs with their current journey phase.
+ * Phase is determined by: most recent self-reported phase from session logs,
+ * or auto-detected from completed session count.
+ */
+export async function getMatchedPairsWithPhase(cohortId: string): Promise<MatchedPairWithPhase[]> {
+  // 1. Get cohort match data
+  const { data: cohort, error } = await supabase
+    .from('cohorts')
+    .select('matches, manual_matches')
+    .eq('id', cohortId)
+    .single();
+
+  if (error || !cohort) return [];
+
+  // 2. Extract approved pairs (same logic as send-stage-messages edge function)
+  const manualMatches = (cohort.manual_matches as any)?.matches || [];
+  const algoResults = (cohort.matches as any)?.results || [];
+
+  const pairs: Array<{ mentee_id: string; mentor_id: string }> = [];
+  if (manualMatches.length > 0) {
+    for (const m of manualMatches) {
+      pairs.push({ mentee_id: m.mentee_id, mentor_id: m.mentor_id });
+    }
+  } else {
+    for (const r of algoResults) {
+      if (r.proposed_assignment?.mentor_id) {
+        pairs.push({ mentee_id: r.mentee_id, mentor_id: r.proposed_assignment.mentor_id });
+      }
+    }
+  }
+
+  if (pairs.length === 0) return [];
+
+  // 3. Fetch mentees, mentors, and sessions in parallel
+  const [menteesRes, mentorsRes, sessionsRes, phasesRes] = await Promise.all([
+    supabase.from('mentees').select('*').eq('cohort_id', cohortId),
+    supabase.from('mentors').select('*').eq('cohort_id', cohortId),
+    supabase
+      .from('sessions')
+      .select('mentor_id, mentee_id')
+      .eq('cohort_id', cohortId)
+      .eq('status', 'completed'),
+    supabase
+      .from('sessions')
+      .select('mentor_id, mentee_id, journey_phase, scheduled_datetime')
+      .eq('cohort_id', cohortId)
+      .not('journey_phase', 'is', null)
+      .order('scheduled_datetime', { ascending: false }),
+  ]);
+
+  const menteeMap = new Map((menteesRes.data || []).map(m => [m.mentee_id, m]));
+  const mentorMap = new Map((mentorsRes.data || []).map(m => [m.mentor_id, m]));
+
+  // 4. Count sessions per pair
+  const sessionCounts = new Map<string, number>();
+  for (const s of sessionsRes.data || []) {
+    const key = `${s.mentee_id}:${s.mentor_id}`;
+    sessionCounts.set(key, (sessionCounts.get(key) || 0) + 1);
+  }
+
+  // 5. Get most recent self-reported phase per pair
+  const selfReportedPhases = new Map<string, JourneyPhase>();
+  for (const s of phasesRes.data || []) {
+    const key = `${s.mentee_id}:${s.mentor_id}`;
+    if (!selfReportedPhases.has(key)) {
+      selfReportedPhases.set(key, s.journey_phase as JourneyPhase);
+    }
+  }
+
+  // 6. Build results
+  const results: MatchedPairWithPhase[] = [];
+  for (const pair of pairs) {
+    const menteeRaw = menteeMap.get(pair.mentee_id);
+    const mentorRaw = mentorMap.get(pair.mentor_id);
+    if (!menteeRaw || !mentorRaw) continue;
+
+    const key = `${pair.mentee_id}:${pair.mentor_id}`;
+    const count = sessionCounts.get(key) || 0;
+    const phase = selfReportedPhases.get(key) || detectJourneyPhase(count);
+
+    results.push({
+      mentee: menteeToParticipant(menteeRaw),
+      mentor: mentorToParticipant(mentorRaw),
+      journeyPhase: phase,
+      sessionCount: count,
+    });
+  }
+
+  return results;
 }
 
 /**
