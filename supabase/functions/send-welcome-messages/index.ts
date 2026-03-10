@@ -164,10 +164,23 @@ Deno.serve(async (req) => {
     const menteeMap = new Map(mentees.map(m => [m.mentee_id, m]));
     const mentorMap = new Map(mentors.map(m => [m.mentor_id, m]));
 
+    // Load already-sent welcome messages for deduplication
+    const { data: alreadySent } = await supabaseAdmin
+      .from('message_log')
+      .select('slack_user_id, template_type')
+      .eq('cohort_id', cohortId)
+      .in('template_type', ['welcome_mentee', 'welcome_mentor'])
+      .eq('delivery_status', 'sent');
+
+    const sentWelcomeSet = new Set(
+      (alreadySent || []).map(e => `${e.slack_user_id}:${e.template_type}`)
+    );
+
     let sentCount = 0;
     let failedCount = 0;
     let skippedNoLookup = 0;
     let skippedNoSlack = 0;
+    let skippedAlreadySent = 0;
     const errors: string[] = [];
 
     // Send welcome DMs for each pair
@@ -204,7 +217,7 @@ Deno.serve(async (req) => {
       };
 
       // ---- Mentee welcome DM ----
-      if (menteeTemplate && mentee.slack_user_id) {
+      if (menteeTemplate && mentee.slack_user_id && !sentWelcomeSet.has(`${mentee.slack_user_id}:welcome_mentee`)) {
         const menteeContext: TemplateContext = {
           ...baseContext,
           FIRST_NAME: mentee.first_name || mentee.full_name?.split(' ')[0] || '',
@@ -216,6 +229,11 @@ Deno.serve(async (req) => {
           BIO: mentee.bio || '',
           SESSION_STYLE: mentee.preferred_style || '',
           FEEDBACK_STYLE: mentee.feedback_preference || '',
+          // Include mentor fields so templates can cross-reference
+          NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
+          HARD_EARNED_LESSON: mentor.hard_earned_lesson || mentor.meaningful_impact || '',
+          MENTOR_MOTIVATION: mentor.mentor_motivation || '',
+          MENTORING_EXPERIENCE: mentor.mentoring_experience || '',
         };
 
         const messageText = renderTemplate(menteeTemplate, menteeContext);
@@ -258,10 +276,12 @@ Deno.serve(async (req) => {
             error_detail: err.message,
           });
         }
+      } else if (menteeTemplate && mentee.slack_user_id && sentWelcomeSet.has(`${mentee.slack_user_id}:welcome_mentee`)) {
+        skippedAlreadySent++;
       }
 
       // ---- Mentor welcome DM ----
-      if (mentorTemplate && mentor.slack_user_id) {
+      if (mentorTemplate && mentor.slack_user_id && !sentWelcomeSet.has(`${mentor.slack_user_id}:welcome_mentor`)) {
         const mentorContext: TemplateContext = {
           ...baseContext,
           FIRST_NAME: mentor.first_name || mentor.full_name?.split(' ')[0] || '',
@@ -273,6 +293,9 @@ Deno.serve(async (req) => {
           NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
           BIO: mentor.bio || '',
           SESSION_STYLE: mentor.meeting_style || mentor.mentor_session_style || '',
+          // Include mentee fields so templates can cross-reference
+          MENTORING_GOAL: mentee.mentoring_goal || '',
+          SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
         };
 
         const messageText = renderTemplate(mentorTemplate, mentorContext);
@@ -314,6 +337,8 @@ Deno.serve(async (req) => {
             error_detail: err.message,
           });
         }
+      } else if (mentorTemplate && mentor.slack_user_id && sentWelcomeSet.has(`${mentor.slack_user_id}:welcome_mentor`)) {
+        skippedAlreadySent++;
       }
     }
 
@@ -354,10 +379,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('[send-welcome-messages] done: pairs=', pairs.length, 'sent=', sentCount, 'failed=', failedCount, 'skippedNoLookup=', skippedNoLookup, 'skippedNoSlack=', skippedNoSlack);
+    console.log('[send-welcome-messages] done: pairs=', pairs.length, 'sent=', sentCount, 'failed=', failedCount, 'skippedNoLookup=', skippedNoLookup, 'skippedNoSlack=', skippedNoSlack, 'skippedAlreadySent=', skippedAlreadySent);
 
     // Build diagnostic hints when nothing was sent
     const diagnostics: string[] = [];
+    if (skippedAlreadySent > 0) diagnostics.push(`${skippedAlreadySent} message(s) skipped: already sent to those recipients`);
     if (sentCount === 0 && failedCount === 0) {
       if (skippedNoLookup > 0) diagnostics.push(`${skippedNoLookup} pair(s) skipped: mentee/mentor ID not found in database`);
       if (skippedNoSlack > 0) diagnostics.push(`${skippedNoSlack} pair(s) have no Slack user IDs`);
@@ -371,6 +397,7 @@ Deno.serve(async (req) => {
         pairs: pairs.length,
         sent: sentCount,
         failed: failedCount,
+        skipped: skippedAlreadySent,
         ...(errors.length > 0 ? { errors } : {}),
         ...(diagnostics.length > 0 ? { diagnostics } : {}),
       }),

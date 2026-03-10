@@ -156,6 +156,10 @@ Deno.serve(async (req) => {
             SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
             MENTORING_GOAL: mentee.mentoring_goal || '',
             BIO: mentee.bio || '',
+            // Cross-reference: mentor fields available in mentee templates
+            NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
+            HARD_EARNED_LESSON: mentor.hard_earned_lesson || mentor.meaningful_impact || '',
+            MENTOR_MOTIVATION: mentor.mentor_motivation || '',
           },
         },
         {
@@ -171,6 +175,9 @@ Deno.serve(async (req) => {
             HARD_EARNED_LESSON: mentor.hard_earned_lesson || mentor.meaningful_impact || '',
             NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
             BIO: mentor.bio || '',
+            // Cross-reference: mentee fields available in mentor templates
+            MENTORING_GOAL: mentee.mentoring_goal || '',
+            SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
           },
         },
       ];
