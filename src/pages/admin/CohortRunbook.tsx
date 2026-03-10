@@ -523,7 +523,10 @@ export default function CohortRunbook() {
   };
 
   function renderPreview(template: string): string {
-    return template.replace(/\{(\w+)\}/g, (match, key) => SAMPLE_CONTEXT[key] || match);
+    return template.replace(/\{(\w+)\}/g, (match, key) => {
+      const val = SAMPLE_CONTEXT[key] ?? SAMPLE_CONTEXT[key.toUpperCase()];
+      return val !== undefined && val !== null ? val : match;
+    });
   }
 
   const handleSendWelcomeMessages = async () => {

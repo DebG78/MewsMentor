@@ -63,7 +63,8 @@ const SAMPLE_CONTEXT: Record<string, string> = {
 
 function renderPreview(template: string): string {
   return template.replace(/\{(\w+)\}/g, (match, key) => {
-    return SAMPLE_CONTEXT[key] || match;
+    const val = SAMPLE_CONTEXT[key] ?? SAMPLE_CONTEXT[key.toUpperCase()];
+    return val !== undefined && val !== null ? val : match;
   });
 }
 

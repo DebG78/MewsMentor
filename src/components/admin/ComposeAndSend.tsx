@@ -29,7 +29,10 @@ const AUDIENCE_SOURCES: { value: AudienceSource; label: string; description: str
 ];
 
 function renderPreview(template: string, context: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (match, key) => context[key] || match);
+  return template.replace(/\{(\w+)\}/g, (match, key) => {
+    const val = context[key] ?? context[key.toUpperCase()];
+    return val !== undefined && val !== null ? val : match;
+  });
 }
 
 interface ComposeAndSendProps {

@@ -185,10 +185,13 @@ Deno.serve(async (req) => {
         skippedNoSlack++;
       }
 
-      // Find shared capability
-      const menteeCapabilities = [mentee.primary_capability, mentee.secondary_capability].filter(Boolean).map((c: string) => c.toLowerCase());
-      const mentorCapabilities = [mentor.primary_capability, ...(mentor.secondary_capabilities || [])].filter(Boolean).map((c: string) => c.toLowerCase());
-      const sharedCap = menteeCapabilities.find((c: string) => mentorCapabilities.includes(c)) || mentee.primary_capability || '';
+      // Find shared capability (fall back to V3 columns if V2 are null)
+      const menteePrimary = mentee.primary_capability || mentee.capabilities_wanted;
+      const menteeSecondary = mentee.secondary_capability || mentee.role_specific_area;
+      const mentorPrimary = mentor.primary_capability || mentor.capabilities_offered;
+      const menteeCapabilities = [menteePrimary, menteeSecondary].filter(Boolean).map((c: string) => c.toLowerCase());
+      const mentorCapabilities = [mentorPrimary, ...(mentor.secondary_capabilities || [])].filter(Boolean).map((c: string) => c.toLowerCase());
+      const sharedCap = menteeCapabilities.find((c: string) => mentorCapabilities.includes(c)) || menteePrimary || '';
 
       const baseContext: TemplateContext = {
         COHORT_NAME: cohort.name,
@@ -207,8 +210,8 @@ Deno.serve(async (req) => {
           FIRST_NAME: mentee.first_name || mentee.full_name?.split(' ')[0] || '',
           FULL_NAME: mentee.full_name || '',
           ROLE_TITLE: mentee.role || '',
-          PRIMARY_CAPABILITY: mentee.primary_capability || '',
-          SECONDARY_CAPABILITY: mentee.secondary_capability || '',
+          PRIMARY_CAPABILITY: mentee.primary_capability || mentee.capabilities_wanted || '',
+          SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
           MENTORING_GOAL: mentee.mentoring_goal || '',
           BIO: mentee.bio || '',
           SESSION_STYLE: mentee.preferred_style || '',
@@ -264,12 +267,12 @@ Deno.serve(async (req) => {
           FIRST_NAME: mentor.first_name || mentor.full_name?.split(' ')[0] || '',
           FULL_NAME: mentor.full_name || '',
           ROLE_TITLE: mentor.role || '',
-          PRIMARY_CAPABILITY: mentor.primary_capability || '',
+          PRIMARY_CAPABILITY: mentor.primary_capability || mentor.capabilities_offered || '',
           MENTOR_MOTIVATION: mentor.mentor_motivation || '',
-          HARD_EARNED_LESSON: mentor.hard_earned_lesson || '',
+          HARD_EARNED_LESSON: mentor.hard_earned_lesson || mentor.meaningful_impact || '',
           NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
           BIO: mentor.bio || '',
-          SESSION_STYLE: mentor.meeting_style || '',
+          SESSION_STYLE: mentor.meeting_style || mentor.mentor_session_style || '',
         };
 
         const messageText = renderTemplate(mentorTemplate, mentorContext);

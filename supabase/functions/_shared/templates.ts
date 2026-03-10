@@ -38,7 +38,8 @@ export interface TemplateContext {
 
 export function renderTemplate(template: string, context: TemplateContext): string {
   return template.replace(/\{(\w+)\}/g, (match, key) => {
-    return context[key] || match;
+    const val = context[key] ?? context[key.toUpperCase()];
+    return val !== undefined && val !== null ? val : match;
   });
 }
 
