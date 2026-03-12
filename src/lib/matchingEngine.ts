@@ -114,6 +114,13 @@ export function applyHardFilters(
     }
   }
 
+  // Same-team hard block: mentee and mentor must not be on the same team (org_level_05)
+  if (mentee.org_level_05 && mentor.org_level_05) {
+    if (mentee.org_level_05.toLowerCase() === mentor.org_level_05.toLowerCase()) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -164,6 +171,12 @@ export function applyHardFiltersWithDiagnostics(
     const overlap = excludeWords.filter(w => wantedWords.has(w));
     if (excludeWords.length > 0 && overlap.length >= 3 && (overlap.length / excludeWords.length) >= 0.5) {
       blockedBy.push(`Topic exclusion overlap (shared words: ${overlap.join(', ')})`);
+    }
+  }
+
+  if (mentee.org_level_05 && mentor.org_level_05) {
+    if (mentee.org_level_05.toLowerCase() === mentor.org_level_05.toLowerCase()) {
+      blockedBy.push(`Same team (${mentee.org_level_05})`);
     }
   }
 

@@ -68,6 +68,7 @@ import {
   Search,
   Download,
   Loader2,
+  UserX,
 } from "lucide-react";
 import {
   getCohortById,
@@ -172,6 +173,21 @@ export default function CohortDetail() {
       setLoading(false);
     }
   };
+
+  // Auto-redirect from hidden Unmatched tab when all mentees are matched
+  useEffect(() => {
+    if (activeTab === "unmatched" && cohort && cohort.mentees.length > 0) {
+      const matchedIds = new Set(
+        (cohort.matches?.results || [])
+          .filter(r => r.proposed_assignment)
+          .map(r => r.mentee_id)
+      );
+      const hasUnmatched = cohort.mentees.some(m => !matchedIds.has(m.id));
+      if (!hasUnmatched) {
+        setActiveTab("matches");
+      }
+    }
+  }, [activeTab, cohort]);
 
   // Auto-migrate any already-finalized manual matches that were saved before the conversion logic existed
   useEffect(() => {
@@ -672,6 +688,8 @@ export default function CohortDetail() {
     adjustedMentors.map((m) => [m.id, m.capacity_remaining])
   );
 
+  const availableMentors = adjustedMentors.filter(m => m.capacity_remaining > 0);
+
   // Validate matching readiness using adjusted values (accounts for already-matched mentees)
   const adjustedCapacity = adjustedMentors.reduce((sum, m) => sum + m.capacity_remaining, 0);
   const matchingIssues: string[] = [];
@@ -684,6 +702,7 @@ export default function CohortDetail() {
   if (adjustedCapacity === 0 && unmatchedMentees.length > 0) {
     matchingIssues.push("No available mentor capacity");
   }
+  const allMatched = unmatchedMentees.length === 0 && cohort.mentees.length > 0;
   const matchingReady = matchingIssues.length === 0 && unmatchedMentees.length > 0 && cohort.mentors.length > 0;
   const matchingWarning = matchingReady && adjustedCapacity < unmatchedMentees.length
     ? `Capacity covers ${adjustedCapacity} of ${unmatchedMentees.length} unmatched mentees — partial matching will be used`
@@ -944,8 +963,16 @@ export default function CohortDetail() {
         </div>
       </div>
 
-      {/* Matching Readiness Warning */}
-      {!matchingReady && !isEmpty && matchingIssues.length > 0 && (
+      {/* Matching Status */}
+      {allMatched && !isEmpty && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription>
+            All mentees are matched! View results in the <strong>Matches</strong> tab.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!matchingReady && !isEmpty && !allMatched && matchingIssues.length > 0 && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
@@ -986,6 +1013,11 @@ export default function CohortDetail() {
             <TabsTrigger value="mentors">
               Mentors ({cohort.mentors.length})
             </TabsTrigger>
+            {unmatchedMentees.length > 0 && (
+              <TabsTrigger value="unmatched">
+                Unmatched ({unmatchedMentees.length})
+              </TabsTrigger>
+            )}
             {cohort.matches && cohort.matches.results && cohort.matches.results.length > 0 && (
               <TabsTrigger value="matches">
                 Matches ({cohort.matches.results.length})
@@ -1216,6 +1248,158 @@ export default function CohortDetail() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Unmatched Tab */}
+        <TabsContent value="unmatched">
+          <div className="space-y-4">
+            {/* Quick Actions — only shown when there are unmatched mentees */}
+            {unmatchedMentees.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsMatchingDialogOpen(true)}
+                  disabled={!matchingReady}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Re-run Matching
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab("manual-matching")}
+                >
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Go to Manual Matching
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const tpls = await getMessageTemplates();
+                      setMessageTemplates(tpls.filter(t => t.is_active));
+                    } catch { /* ignore */ }
+                    setMsgSelectedIds(new Set(
+                      unmatchedMentees.filter(m => m.slack_user_id).map(m => m.id)
+                    ));
+                    setSelectedMsgTemplateId('');
+                    setMsgBody('');
+                    setIsMessageUnmatchedOpen(true);
+                  }}
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Message Unmatched
+                </Button>
+              </div>
+            )}
+
+            {/* Unmatched Mentees */}
+            {unmatchedMentees.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                All mentees have been matched.
+              </div>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Unmatched Mentees</CardTitle>
+                  <CardDescription>
+                    {unmatchedMentees.length} mentee{unmatchedMentees.length !== 1 ? 's' : ''} without a match
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Experience</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unmatchedMentees.map((mentee) => (
+                        <TableRow key={mentee.id}>
+                          <TableCell className="font-medium">{toDisplayName(mentee.name || mentee.id)}</TableCell>
+                          <TableCell>{mentee.role}</TableCell>
+                          <TableCell>{mentee.location_timezone}</TableCell>
+                          <TableCell>{mentee.experience_years}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setViewingProfile({ profile: mentee, type: 'mentee' })}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Available Mentors */}
+            {availableMentors.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                All mentors are at capacity.
+              </div>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Mentors with Available Capacity</CardTitle>
+                  <CardDescription>
+                    {availableMentors.length} mentor{availableMentors.length !== 1 ? 's' : ''} can take more mentees
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Capacity</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {availableMentors.map((mentor) => (
+                        <TableRow key={mentor.id}>
+                          <TableCell className="font-medium">{toDisplayName(mentor.name || mentor.id)}</TableCell>
+                          <TableCell>{mentor.role}</TableCell>
+                          <TableCell>{mentor.location_timezone}</TableCell>
+                          <TableCell>
+                            <Badge variant="default">
+                              {mentor.capacity_remaining} remaining
+                              <span className="text-muted-foreground ml-1">
+                                / {cohort.mentors.find(m => m.id === mentor.id)?.capacity_remaining ?? 0} total
+                              </span>
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setViewingProfile({ profile: cohort.mentors.find(m => m.id === mentor.id)!, type: 'mentor' })}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
 
         {/* Matches Tab */}

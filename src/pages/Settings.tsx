@@ -177,11 +177,12 @@ const Settings = () => {
                       <Badge variant="outline">Zapier</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      All Slack messages (welcome DMs, next-steps messages, bulk messages, and channel announcements) are sent via a Zapier webhook.
-                      Four edge functions use this webhook:{' '}
+                      All Slack messages (welcome DMs, next-steps messages, bulk messages, session reminders, and channel announcements) are sent via a Zapier webhook.
+                      Five edge functions use this webhook:{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-welcome-messages</code> (launch),{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">send-stage-messages</code> (manual midpoint/closure blasts),{' '}
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-bulk-messages</code> (ad-hoc messages to any group), and{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-bulk-messages</code> (ad-hoc messages to any group),{' '}
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">send-session-reminders</code> (monthly session-logging reminders), and{' '}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> (auto-sends next-steps after each logged session).
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
@@ -220,9 +221,15 @@ const Settings = () => {
                     <h3 className="text-base font-semibold flex items-center gap-2">
                       Mentor/Mentee Signup Survey Import
                       <Badge variant="outline">Power Automate</Badge>
+                      <Badge variant="secondary">Legacy</Badge>
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Automatically import mentor/mentee signup survey responses from Microsoft Forms into MewsMentor.
+                      <strong>Note:</strong> Sign-up surveys are now imported via <strong>CSV bulk upload</strong> through
+                      the admin UI (Admin &rarr; Data Import &rarr; CSV Upload). The Power Automate webhook below is kept
+                      for backward compatibility with existing flows but should not be used for new integrations.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      The legacy webhook imports mentor/mentee signup survey responses from Microsoft Forms into MewsMentor.
                       Each form submission creates a mentee and/or mentor profile. Participants can go directly into a
                       specific cohort, or land in the <strong>Holding Area</strong> for later assignment.
                     </p>
@@ -301,9 +308,9 @@ const Settings = () => {
                     </h3>
                     <p className="text-sm text-muted-foreground">
                       Participants log mentoring sessions via a form. The <code className="text-xs bg-muted px-1 py-0.5 rounded">log-session</code> edge
-                      function records the session and <strong>automatically detects the journey phase</strong> based on how many
-                      sessions the pair has completed. If a next-steps template exists for that phase, it sends it to the
-                      respondent via Slack — no admin action required.
+                      function records the session using the <strong>self-reported journey phase</strong> from the form submission.
+                      If a <code className="text-xs bg-muted px-1 py-0.5 rounded">journey_phase</code> is provided and a next-steps
+                      template exists for that phase, the function sends it to the respondent via Slack — no admin action required.
                     </p>
                     <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
                       <div>
@@ -314,7 +321,7 @@ const Settings = () => {
                           <li>Action: <strong>HTTP</strong> → POST</li>
                           <li>URI: your Supabase edge function URL + <code className="bg-background px-1 rounded">/log-session</code></li>
                           <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
-                          <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_name": "...", "slack_user_id": "U...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4 }`}</code></li>
+                          <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_name": "...", "slack_user_id": "U...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4, "journey_phase": "building" }`}</code></li>
                         </ol>
                       </div>
                       <div>
@@ -328,13 +335,17 @@ const Settings = () => {
                         </ol>
                       </div>
                       <div>
-                        <span className="font-medium">Default session thresholds (configurable per cohort):</span>
+                        <span className="font-medium">Accepted journey_phase values (self-reported on the form):</span>
                         <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
-                          <li>Sessions 1–2 → <strong>Getting Started</strong></li>
-                          <li>Sessions 3–5 → <strong>Building</strong></li>
-                          <li>Sessions 6–7 → <strong>Midpoint</strong></li>
-                          <li>Sessions 8+ → <strong>Wrapping Up</strong></li>
+                          <li><code className="bg-background px-1 rounded">getting_started</code> (or "Getting Started")</li>
+                          <li><code className="bg-background px-1 rounded">building</code> (or "Building")</li>
+                          <li><code className="bg-background px-1 rounded">midpoint</code> (or "Midpoint Check-In")</li>
+                          <li><code className="bg-background px-1 rounded">wrapping_up</code> (or "Wrapping Up")</li>
                         </ul>
+                        <p className="mt-1 ml-2 text-muted-foreground text-xs">
+                          The function accepts both internal keys and human-readable labels (e.g. from a Power Automate dropdown).
+                          If omitted, the session is saved without a phase and no next-steps message is auto-sent.
+                        </p>
                       </div>
                       <div>
                         <span className="font-medium">Deduplication:</span>
@@ -348,6 +359,43 @@ const Settings = () => {
                         <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
                           <li><code className="bg-background px-1 rounded">LOG_SESSION_API_KEY</code> — shared key for authenticating session log calls</li>
                         </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Session Reminders */}
+                  <div className="space-y-3">
+                    <h3 className="text-base font-semibold flex items-center gap-2">
+                      Monthly Session Reminders
+                      <Badge variant="outline">Zapier</Badge>
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      The <code className="text-xs bg-muted px-1 py-0.5 rounded">send-session-reminders</code> edge function
+                      sends monthly session-logging reminder DMs to all matched participants in active cohorts. It can be
+                      triggered by a cron job (processes all active cohorts) or manually for a single cohort.
+                    </p>
+                    <div className="bg-muted rounded-md p-4 space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium">How it works:</span>
+                        <ol className="list-decimal list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li>Finds all active cohorts with a <code className="bg-background px-1 rounded">start_date</code> and reminders enabled</li>
+                          <li>Calculates the number of complete months since the cohort's start date</li>
+                          <li>For each month boundary, sends a reminder DM to every matched mentee and mentor who hasn't already received one for that month</li>
+                          <li>Uses the <code className="bg-background px-1 rounded">session_reminder</code> message template (cohort-specific or global)</li>
+                        </ol>
+                      </div>
+                      <div>
+                        <span className="font-medium">Invocation:</span>
+                        <ul className="list-disc list-inside mt-1 ml-2 space-y-1 text-muted-foreground">
+                          <li><strong>Cron (all cohorts):</strong> POST with empty body</li>
+                          <li><strong>Single cohort:</strong> POST with <code className="bg-background px-1 rounded">{`{ "cohort_id": "..." }`}</code></li>
+                        </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium">Deduplication:</span>
+                        <p className="mt-1 ml-2 text-muted-foreground">
+                          Each person only receives one reminder per month (tracked via <code className="bg-background px-1 rounded">journey_phase = "month_N"</code> in the message log).
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -519,7 +567,18 @@ const Settings = () => {
                       <div>
                         <span className="font-medium">Available placeholders:</span>
                         <code className="block bg-background p-2 rounded mt-1 text-xs">
-                          {'{FIRST_NAME}'}, {'{FULL_NAME}'}, {'{ROLE_TITLE}'}, {'{PRIMARY_CAPABILITY}'}, {'{SECONDARY_CAPABILITY}'}, {'{MENTORING_GOAL}'}, {'{BIO}'}, {'{COHORT_NAME}'}, {'{ADMIN_EMAIL}'}
+                          {'{FIRST_NAME}'}, {'{FULL_NAME}'}, {'{ROLE_TITLE}'}, {'{PRIMARY_CAPABILITY}'}, {'{SECONDARY_CAPABILITY}'}, {'{MENTORING_GOAL}'}, {'{BIO}'}, {'{COHORT_NAME}'}, {'{ADMIN_EMAIL}'}, {'{RESOURCE_LINK}'}, {'{SURVEY_LINK}'}
+                        </code>
+                      </div>
+                      <div>
+                        <span className="font-medium">Slack link formatting:</span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Plain URLs in templates are auto-linked by Slack. For named links (e.g. "mentoring guide" instead of the raw URL), use Slack mrkdwn syntax directly in templates:
+                        </p>
+                        <code className="block bg-background p-2 rounded mt-1 text-xs">
+                          {'<{RESOURCE_LINK}|mentoring guide>'} → clickable "mentoring guide" link{'\n'}
+                          {'<{SURVEY_LINK}|take the survey>'} → clickable "take the survey" link{'\n'}
+                          {'<mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}>'} → clickable email link
                         </code>
                       </div>
                     </div>

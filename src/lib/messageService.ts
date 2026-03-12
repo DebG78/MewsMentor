@@ -660,7 +660,9 @@ Here's what we know about your match:
 
 We recommend meeting every 2-3 weeks for 30-60 minutes. You'll receive a session log form after each meeting to help us track how things are going.
 
-If you have any questions, reach out to {ADMIN_EMAIL}.
+Check out the <{RESOURCE_LINK}|mentoring guide> for tips on getting started.
+
+If you have any questions, reach out to <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}>.
 
 Happy mentoring! 🚀`,
   },
@@ -688,7 +690,7 @@ After each session, you'll receive a short log form. This helps us understand en
 
 Your motivation for mentoring: {MENTOR_MOTIVATION} — hold onto that, it matters!
 
-Questions? Reach out to {ADMIN_EMAIL}.
+Questions? Reach out to <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}>.
 
 Thank you for investing in someone's growth! 🙏`,
   },
@@ -719,7 +721,7 @@ Since you're in the **Getting Started** phase, here are some tips for your next 
 
 Keep the momentum going — regular sessions make the biggest difference.
 
-Questions or need support? Contact {ADMIN_EMAIL}.`,
+Questions or need support? Contact <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}>.`,
   },
   {
     template_type: 'next_steps',
@@ -734,7 +736,7 @@ You're in the **Building** phase — this is where the real growth happens. For 
 
 Remember: the best mentoring conversations are the honest ones.
 
-Need anything? Reach out to {ADMIN_EMAIL}.`,
+Need anything? Reach out to <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}>.`,
   },
   {
     template_type: 'next_steps',
@@ -749,9 +751,9 @@ Time for a quick check-in:
 
 This is a great time to have an honest conversation with your mentor/mentee about what's working and what could be better.
 
-You'll receive a brief midpoint survey soon — your feedback helps us improve the program.
+You'll receive a <{SURVEY_LINK}|brief midpoint survey> soon — your feedback helps us improve the program.
 
-Questions? {ADMIN_EMAIL} is here to help.`,
+Questions? <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}> is here to help.`,
   },
   {
     template_type: 'next_steps',
@@ -764,11 +766,11 @@ As you wrap up your mentoring journey:
 • Discuss with your mentor/mentee whether you'd like to stay in touch informally
 • Think about what advice you'd give to future participants
 
-You'll receive a final survey soon — we'd love to hear about your experience.
+You'll receive a <{SURVEY_LINK}|final survey> soon — we'd love to hear about your experience.
 
 Thank you for being part of this program. Whether you were a mentor or mentee, you've contributed to someone else's growth, and that matters.
 
-Reach out to {ADMIN_EMAIL} if there's anything you need. 🙏`,
+Reach out to <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}> if there's anything you need. 🙏`,
   },
   {
     template_type: 'session_reminder',
@@ -781,7 +783,7 @@ Logging your sessions helps us understand how the program is going and where we 
 
 If you haven't had a session this month, that's okay — consider reaching out to your mentor/mentee to schedule one.
 
-Questions or need help? Contact {ADMIN_EMAIL}.`,
+Questions or need help? Contact <mailto:{ADMIN_EMAIL}|{ADMIN_EMAIL}>.`,
   },
 ];
 
