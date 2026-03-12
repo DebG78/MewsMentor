@@ -80,7 +80,7 @@ import {
   saveMatchesToCohort,
   saveManualMatches,
 } from "@/lib/cohortManager";
-import { updateMenteeProfile, updateMentorProfile, removeFromCohort } from "@/lib/supabaseService";
+import { updateMenteeProfile, updateMentorProfile, removeFromCohort, markDropout } from "@/lib/supabaseService";
 import {
   getMessageTemplates, sendBulkMessages,
   buildParticipantContext, type MessageTemplate, type Participant,
@@ -101,6 +101,7 @@ import { ManualMatchingBoard } from "@/components/admin/ManualMatchingBoard";
 import { MatchComparison } from "@/components/admin/MatchComparison";
 import { toDisplayName } from '@/lib/displayName';
 import { calculateMatchScore } from '@/lib/matchingEngine';
+import { supabase } from '@/lib/supabase';
 
 export default function CohortDetail() {
   const { cohortId, tab } = useParams<{ cohortId: string; tab?: string }>();
@@ -135,6 +136,10 @@ export default function CohortDetail() {
   const [msgSelectedIds, setMsgSelectedIds] = useState<Set<string>>(new Set());
   const [sendingMessages, setSendingMessages] = useState(false);
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  const [dropoutTarget, setDropoutTarget] = useState<MatchingResult | null>(null);
+  const [dropoutPerson, setDropoutPerson] = useState<'mentee' | 'mentor'>('mentee');
+  const [dropoutReason, setDropoutReason] = useState('');
+  const [summarizing, setSummarizing] = useState(false);
 
   useEffect(() => {
     loadCohort();
@@ -659,6 +664,24 @@ export default function CohortDetail() {
   const statusInfo = getCohortStatusInfo(cohort.status);
   const isEmpty = cohort.mentees.length === 0 && cohort.mentors.length === 0;
 
+  // Compute dropped participants from matches data
+  const droppedMenteeIds = new Set(
+    (cohort.matches?.results || [])
+      .filter(r => r.dropout?.dropped_person === 'mentee')
+      .map(r => r.mentee_id)
+  );
+  const droppedMentorIds = new Set(
+    (cohort.matches?.results || [])
+      .filter(r => r.dropout?.dropped_person === 'mentor')
+      .map(r => r.dropout!.dropped_person_id)
+  );
+  // Map mentee_id → dropout info for context in unmatched tab
+  const menteeDropoutInfo = new Map(
+    (cohort.matches?.results || [])
+      .filter(r => r.dropout && r.dropout.dropped_person === 'mentor')
+      .map(r => [r.mentee_id, r.dropout!])
+  );
+
   // Compute unmatched mentees and adjusted mentor capacities for re-matching
   const approvedMatches = cohort.matches?.results?.filter(
     (r) => r.proposed_assignment?.mentor_id
@@ -668,7 +691,9 @@ export default function CohortDetail() {
     ...approvedMatches.map((r) => r.mentee_id),
     ...manualMatches.map((m) => m.mentee_id),
   ]);
-  const unmatchedMentees = cohort.mentees.filter((m) => !matchedMenteeIds.has(m.id));
+  const unmatchedMentees = cohort.mentees.filter(
+    (m) => !matchedMenteeIds.has(m.id) && !droppedMenteeIds.has(m.id)
+  );
 
   // Count how many mentees are already assigned to each mentor (algo + manual)
   const mentorAssignedCounts = new Map<string, number>();
@@ -679,10 +704,12 @@ export default function CohortDetail() {
   manualMatches.forEach((m) => {
     mentorAssignedCounts.set(m.mentor_id, (mentorAssignedCounts.get(m.mentor_id) || 0) + 1);
   });
-  const adjustedMentors = cohort.mentors.map((m) => ({
-    ...m,
-    capacity_remaining: Math.max(0, (m.capacity_remaining || 0) - (mentorAssignedCounts.get(m.id) || 0)),
-  }));
+  const adjustedMentors = cohort.mentors
+    .filter(m => !droppedMentorIds.has(m.id))
+    .map((m) => ({
+      ...m,
+      capacity_remaining: Math.max(0, (m.capacity_remaining || 0) - (mentorAssignedCounts.get(m.id) || 0)),
+    }));
   // Lookup for effective capacity per mentor (original capacity minus approved matches)
   const effectiveCapacity = new Map<string, number>(
     adjustedMentors.map((m) => [m.id, m.capacity_remaining])
@@ -858,6 +885,34 @@ export default function CohortDetail() {
                 Mark Completed
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={summarizing}
+                onClick={async () => {
+                  setSummarizing(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('summarize-profiles', {
+                      body: { cohort_id: cohort.id, force: false },
+                    });
+                    if (error) throw error;
+                    toast({
+                      title: "Summaries Generated",
+                      description: `Updated ${data.fields_updated} field(s) across ${data.profiles_updated} profile(s).`,
+                    });
+                  } catch (err: any) {
+                    toast({
+                      variant: "destructive",
+                      title: "Summarization Failed",
+                      description: err.message || "Failed to generate summaries",
+                    });
+                  } finally {
+                    setSummarizing(false);
+                  }
+                }}
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                {summarizing ? 'Generating Summaries...' : 'Generate Summaries'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleDeleteCohort} className="text-destructive">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Cohort
@@ -961,6 +1016,15 @@ export default function CohortDetail() {
           <span className="font-semibold">{stats.matches_approved}</span>
           <span className="text-muted-foreground">matched</span>
         </div>
+        {stats.dropouts > 0 && (
+          <div className="flex items-center gap-2">
+            <UserX className="h-4 w-4 text-red-500" />
+            <span className="font-semibold">{stats.dropouts}</span>
+            <span className="text-muted-foreground">
+              dropped{stats.dropout_rate !== null ? ` (${stats.dropout_rate}%)` : ''}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Matching Status */}
@@ -1124,7 +1188,11 @@ export default function CohortDetail() {
                       >
                         <TableCell className="font-medium">
                           {toDisplayName(mentor.name || mentor.id)}
-                          {isAtCapacity && (
+                          {droppedMentorIds.has(mentor.id) ? (
+                            <Badge variant="destructive" className="ml-2 text-xs">
+                              Dropped
+                            </Badge>
+                          ) : isAtCapacity && (
                             <Badge variant="secondary" className="ml-2 text-xs">
                               At Capacity
                             </Badge>
@@ -1208,7 +1276,9 @@ export default function CohortDetail() {
                         <TableCell>{mentee.location_timezone}</TableCell>
                         <TableCell>{mentee.experience_years}</TableCell>
                         <TableCell>
-                          {hasMatch ? (
+                          {droppedMenteeIds.has(mentee.id) ? (
+                            <Badge variant="destructive">Dropped</Badge>
+                          ) : hasMatch ? (
                             <Badge variant="default">Matched</Badge>
                           ) : (
                             <Badge variant="secondary">Unmatched</Badge>
@@ -1259,23 +1329,6 @@ export default function CohortDetail() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsMatchingDialogOpen(true)}
-                  disabled={!matchingReady}
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Re-run Matching
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActiveTab("manual-matching")}
-                >
-                  <ArrowRight className="h-4 w-4 mr-2" />
-                  Go to Manual Matching
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
                   onClick={async () => {
                     try {
                       const tpls = await getMessageTemplates();
@@ -1317,16 +1370,28 @@ export default function CohortDetail() {
                         <TableHead>Role</TableHead>
                         <TableHead>Location</TableHead>
                         <TableHead>Experience</TableHead>
+                        <TableHead>Reason</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {unmatchedMentees.map((mentee) => (
+                      {unmatchedMentees.map((mentee) => {
+                        const dropInfo = menteeDropoutInfo.get(mentee.id);
+                        return (
                         <TableRow key={mentee.id}>
                           <TableCell className="font-medium">{toDisplayName(mentee.name || mentee.id)}</TableCell>
                           <TableCell>{mentee.role}</TableCell>
                           <TableCell>{mentee.location_timezone}</TableCell>
                           <TableCell>{mentee.experience_years}</TableCell>
+                          <TableCell>
+                            {dropInfo ? (
+                              <span className="text-xs text-amber-700">
+                                Mentor {toDisplayName(dropInfo.dropped_person_name || '')} dropped out
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
@@ -1337,7 +1402,8 @@ export default function CohortDetail() {
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -2280,6 +2346,25 @@ export default function CohortDetail() {
                       <div className="text-sm italic">{assignment.comment}</div>
                     </div>
                   )}
+
+                  {/* Dropout Action */}
+                  {assignment?.mentor_id && (
+                    <div className="border-t pt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => {
+                          setDropoutTarget(selectedMatch);
+                          setDropoutPerson('mentee');
+                          setDropoutReason('');
+                        }}
+                      >
+                        <UserX className="w-3.5 h-3.5 mr-1.5" />
+                        Mark Dropout
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -2339,6 +2424,109 @@ export default function CohortDetail() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleRemoveFromCohort} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dropout Confirmation Dialog */}
+      <AlertDialog open={!!dropoutTarget} onOpenChange={(open) => { if (!open) { setDropoutTarget(null); setDropoutReason(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark Dropout</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Who dropped out of this pair?</p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="dropout-person"
+                      checked={dropoutPerson === 'mentee'}
+                      onChange={() => setDropoutPerson('mentee')}
+                      className="accent-red-600"
+                    />
+                    <span className="text-sm">
+                      <strong>{toDisplayName(dropoutTarget?.mentee_name || dropoutTarget?.mentee_id || '')}</strong> (mentee)
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="dropout-person"
+                      checked={dropoutPerson === 'mentor'}
+                      onChange={() => setDropoutPerson('mentor')}
+                      className="accent-red-600"
+                    />
+                    <span className="text-sm">
+                      <strong>{toDisplayName(dropoutTarget?.proposed_assignment?.mentor_name || dropoutTarget?.proposed_assignment?.mentor_id || '')}</strong> (mentor)
+                    </span>
+                  </label>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+                  {dropoutPerson === 'mentee'
+                    ? "The mentee will be marked as dropped. The mentor's capacity will be freed up."
+                    : (() => {
+                        const mentorId = dropoutTarget?.proposed_assignment?.mentor_id;
+                        const affectedCount = mentorId
+                          ? (cohort.matches?.results || []).filter(r => r.proposed_assignment?.mentor_id === mentorId).length
+                          : 0;
+                        return `The mentor will be marked as dropped. ${affectedCount} mentee${affectedCount !== 1 ? 's' : ''} will be moved to the Unmatched tab for re-matching.`;
+                      })()
+                  }
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Reason (optional)</Label>
+                  <Textarea
+                    value={dropoutReason}
+                    onChange={(e) => setDropoutReason(e.target.value)}
+                    placeholder="e.g., Left the company, personal reasons..."
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!dropoutTarget || !cohort) return;
+                const droppedId = dropoutPerson === 'mentee'
+                  ? dropoutTarget.mentee_id
+                  : dropoutTarget.proposed_assignment?.mentor_id;
+                const droppedName = dropoutPerson === 'mentee'
+                  ? dropoutTarget.mentee_name
+                  : dropoutTarget.proposed_assignment?.mentor_name;
+                if (!droppedId) return;
+                const result = await markDropout(
+                  cohort.id,
+                  droppedId,
+                  dropoutPerson,
+                  droppedName || undefined,
+                  dropoutReason.trim() || undefined,
+                );
+                if (result) {
+                  setCohort(result);
+                  setSelectedMatch(null);
+                  toast({
+                    title: 'Dropout recorded',
+                    description: `${toDisplayName(droppedName || droppedId)} has been marked as dropped.`,
+                  });
+                } else {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: 'Failed to record dropout. Please try again.',
+                  });
+                }
+                setDropoutTarget(null);
+                setDropoutReason('');
+              }}
+            >
+              Confirm Dropout
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

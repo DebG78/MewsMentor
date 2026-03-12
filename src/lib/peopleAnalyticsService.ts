@@ -394,6 +394,8 @@ export interface PopulationStats {
   activeCohorts: number;
   uniqueTopics: number;
   avgMatchScore: number | null;
+  totalDropouts: number;
+  dropoutRate: number | null;
 }
 
 export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
@@ -404,6 +406,7 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
   let activeCohorts = 0;
   let matchScoreSum = 0;
   let matchCount = 0;
+  let totalDropouts = 0;
 
   for (const cohort of cohorts) {
     totalMentors += cohort.mentors.length;
@@ -433,6 +436,9 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
 
     if (cohort.matches?.results) {
       for (const result of cohort.matches.results) {
+        if (result.dropout) {
+          totalDropouts++;
+        }
         if (result.proposed_assignment?.mentor_id) {
           totalPairs++;
           const rec = result.recommendations.find(
@@ -447,6 +453,7 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
     }
   }
 
+  const totalEverMatched = totalPairs + totalDropouts;
   return {
     totalMentors,
     totalMentees,
@@ -454,5 +461,7 @@ export function getPopulationStats(cohorts: Cohort[]): PopulationStats {
     activeCohorts,
     uniqueTopics: topics.size,
     avgMatchScore: matchCount > 0 ? Math.round(matchScoreSum / matchCount) : null,
+    totalDropouts,
+    dropoutRate: totalEverMatched > 0 ? Math.round((totalDropouts / totalEverMatched) * 100) : null,
   };
 }

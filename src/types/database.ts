@@ -114,6 +114,9 @@ export interface Database {
           role_specific_area: string | null
           specific_challenge: string | null
           open_to_first_time_mentor: string | null
+          // Pre-computed LLM summaries for message placeholders
+          mentoring_goal_summary: string | null
+          bio_summary: string | null
           // Workday enrichment fields
           business_title: string | null
           compensation_grade: string | null
@@ -166,6 +169,9 @@ export interface Database {
           role_specific_area?: string | null
           specific_challenge?: string | null
           open_to_first_time_mentor?: string | null
+          // Pre-computed LLM summaries for message placeholders
+          mentoring_goal_summary?: string | null
+          bio_summary?: string | null
           // Workday enrichment fields
           business_title?: string | null
           compensation_grade?: string | null
@@ -217,6 +223,9 @@ export interface Database {
           role_specific_area?: string | null
           specific_challenge?: string | null
           open_to_first_time_mentor?: string | null
+          // Pre-computed LLM summaries for message placeholders
+          mentoring_goal_summary?: string | null
+          bio_summary?: string | null
           // Workday enrichment fields
           business_title?: string | null
           compensation_grade?: string | null
@@ -279,6 +288,11 @@ export interface Database {
           mentor_support_wanted: string[] | null
           mentor_session_style: string | null
           topics_prefer_not: string | null
+          // Pre-computed LLM summaries for message placeholders
+          bio_summary: string | null
+          hard_earned_lesson_summary: string | null
+          mentor_motivation_summary: string | null
+          mentoring_experience_summary: string | null
           // Workday enrichment fields
           business_title: string | null
           compensation_grade: string | null
@@ -339,6 +353,11 @@ export interface Database {
           mentor_support_wanted?: string[] | null
           mentor_session_style?: string | null
           topics_prefer_not?: string | null
+          // Pre-computed LLM summaries for message placeholders
+          bio_summary?: string | null
+          hard_earned_lesson_summary?: string | null
+          mentor_motivation_summary?: string | null
+          mentoring_experience_summary?: string | null
           // Workday enrichment fields
           business_title?: string | null
           compensation_grade?: string | null
@@ -398,6 +417,11 @@ export interface Database {
           mentor_support_wanted?: string[] | null
           mentor_session_style?: string | null
           topics_prefer_not?: string | null
+          // Pre-computed LLM summaries for message placeholders
+          bio_summary?: string | null
+          hard_earned_lesson_summary?: string | null
+          mentor_motivation_summary?: string | null
+          mentoring_experience_summary?: string | null
           // Workday enrichment fields
           business_title?: string | null
           compensation_grade?: string | null

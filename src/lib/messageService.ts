@@ -107,14 +107,22 @@ export async function deleteMessageTemplate(id: string): Promise<void> {
 }
 
 /**
- * Get all message log entries for a specific recipient (by email/person_id).
+ * Get all message log entries for a specific recipient.
+ * Queries by slack_user_id (primary) and falls back to recipient_email with personId.
  */
-export async function getMessagesByRecipient(recipientEmail: string): Promise<MessageLogEntry[]> {
-  const { data, error } = await supabase
+export async function getMessagesByRecipient(personId: string, slackUserId?: string): Promise<MessageLogEntry[]> {
+  let query = supabase
     .from('message_log')
     .select('*')
-    .eq('recipient_email', recipientEmail)
     .order('created_at', { ascending: false });
+
+  if (slackUserId) {
+    query = query.or(`slack_user_id.eq.${slackUserId},recipient_email.eq.${slackUserId},recipient_email.eq.${personId}`);
+  } else {
+    query = query.eq('recipient_email', personId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching messages for recipient:', error);
@@ -364,6 +372,12 @@ export interface Participant {
   // Style fields (mentee: preferred_style/feedback_preference, mentor: meeting_style/feedback_style)
   session_style: string | null;
   feedback_style: string | null;
+  // Pre-computed LLM summaries (used in message placeholders when available)
+  mentoring_goal_summary: string | null;
+  bio_summary: string | null;
+  hard_earned_lesson_summary: string | null;
+  mentor_motivation_summary: string | null;
+  mentoring_experience_summary: string | null;
 }
 
 function menteeToParticipant(m: any): Participant {
@@ -385,6 +399,11 @@ function menteeToParticipant(m: any): Participant {
     mentoring_experience: null,
     session_style: m.preferred_style || null,
     feedback_style: m.feedback_preference || null,
+    mentoring_goal_summary: m.mentoring_goal_summary || null,
+    bio_summary: m.bio_summary || null,
+    hard_earned_lesson_summary: null,
+    mentor_motivation_summary: null,
+    mentoring_experience_summary: null,
   };
 }
 
@@ -407,6 +426,11 @@ function mentorToParticipant(m: any): Participant {
     mentoring_experience: m.mentoring_experience || null,
     session_style: m.meeting_style || m.mentor_session_style || null,
     feedback_style: m.feedback_style || null,
+    mentoring_goal_summary: null,
+    bio_summary: m.bio_summary || null,
+    hard_earned_lesson_summary: m.hard_earned_lesson_summary || null,
+    mentor_motivation_summary: m.mentor_motivation_summary || null,
+    mentoring_experience_summary: m.mentoring_experience_summary || null,
   };
 }
 
@@ -614,17 +638,17 @@ export function buildParticipantContext(
     ROLE_TITLE: participant.role || '',
     PRIMARY_CAPABILITY: participant.primary_capability || '',
     SECONDARY_CAPABILITY: participant.secondary_capability || '',
-    MENTORING_GOAL: participant.mentoring_goal || '',
-    BIO: participant.bio || '',
+    MENTORING_GOAL: participant.mentoring_goal_summary || participant.mentoring_goal || '',
+    BIO: participant.bio_summary || participant.bio || '',
     SESSION_STYLE: participant.session_style || '',
     FEEDBACK_STYLE: participant.feedback_style || '',
     // Mentor-specific
     NATURAL_STRENGTHS: Array.isArray(participant.natural_strengths)
       ? participant.natural_strengths.join(', ')
       : '',
-    HARD_EARNED_LESSON: participant.hard_earned_lesson || '',
-    MENTOR_MOTIVATION: participant.mentor_motivation || '',
-    MENTORING_EXPERIENCE: participant.mentoring_experience || '',
+    HARD_EARNED_LESSON: participant.hard_earned_lesson_summary || participant.hard_earned_lesson || '',
+    MENTOR_MOTIVATION: participant.mentor_motivation_summary || participant.mentor_motivation || '',
+    MENTORING_EXPERIENCE: participant.mentoring_experience_summary || participant.mentoring_experience || '',
     COHORT_NAME: cohortName || '',
     ADMIN_EMAIL: 'mentoring@mews.com',
   };

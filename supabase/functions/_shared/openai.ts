@@ -31,6 +31,7 @@ export async function createEmbeddings(texts: string[]): Promise<number[][]> {
 export async function generateChatCompletion(
   systemPrompt: string,
   userPrompt: string,
+  maxTokens = 300,
 ): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -44,7 +45,7 @@ export async function generateChatCompletion(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      max_tokens: 300,
+      max_tokens: maxTokens,
       temperature: 0.7,
     }),
   });

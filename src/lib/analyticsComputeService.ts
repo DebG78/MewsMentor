@@ -190,16 +190,19 @@ export function computePairSurvivalRate(
   return cohorts
     .filter(c => c.matches?.results && c.matches.results.length > 0)
     .map(cohort => {
-      const totalPairs = cohort.matches!.results.filter(
+      const results = cohort.matches!.results;
+      const droppedPairs = results.filter(r => r.dropout).length;
+      const activePairs = results.filter(
         r => r.proposed_assignment?.mentor_id
       ).length;
+      const totalPairs = activePairs + droppedPairs;
 
       return {
         cohort_id: cohort.id,
         cohort_name: cohort.name,
         totalPairs,
-        survivingPairs: totalPairs,
-        survivalRate: 100,
+        survivingPairs: activePairs,
+        survivalRate: totalPairs > 0 ? Math.round((activePairs / totalPairs) * 100) : 100,
       };
     });
 }

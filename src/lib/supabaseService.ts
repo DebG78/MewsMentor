@@ -888,6 +888,14 @@ export async function addImportDataToCohort(
     }
   }
 
+  // Trigger LLM summarization for long free-text fields (fire-and-forget)
+  supabase.functions.invoke('summarize-profiles', {
+    body: { cohort_id: cohortId },
+  }).then(({ error }) => {
+    if (error) console.warn('Auto-summarize after import failed:', error.message);
+    else console.log('Auto-summarize triggered for cohort:', cohortId);
+  }).catch(err => console.warn('Auto-summarize after import error:', err));
+
   // Return updated cohort
   return getCohortById(cohortId)
 }
@@ -1058,6 +1066,86 @@ export async function deletePair(cohortId: string, menteeId: string): Promise<Co
     return result;
   } catch (error) {
     console.error('Error deleting pair:', error);
+    return null;
+  }
+}
+
+// Mark a person as dropped out and unmatch their pair(s)
+export async function markDropout(
+  cohortId: string,
+  droppedPersonId: string,
+  droppedPersonType: 'mentee' | 'mentor',
+  droppedPersonName?: string,
+  reason?: string
+): Promise<Cohort | null> {
+  console.log('Marking dropout:', { cohortId, droppedPersonId, droppedPersonType, reason });
+
+  const currentCohort = await getCohortById(cohortId);
+  if (!currentCohort) {
+    console.error('Could not retrieve current cohort');
+    return null;
+  }
+
+  const dropoutInfo = {
+    dropped_person: droppedPersonType,
+    dropped_person_id: droppedPersonId,
+    dropped_person_name: droppedPersonName,
+    dropped_at: new Date().toISOString(),
+    reason,
+  };
+
+  // Update algorithmic matches
+  let updatedResults = currentCohort.matches?.results || [];
+  if (droppedPersonType === 'mentee') {
+    updatedResults = updatedResults.map(result => {
+      if (result.mentee_id === droppedPersonId) {
+        return {
+          ...result,
+          proposed_assignment: { mentor_id: null, mentor_name: null },
+          dropout: dropoutInfo,
+        };
+      }
+      return result;
+    });
+  } else {
+    // Mentor dropped — unmatch ALL mentees assigned to this mentor
+    updatedResults = updatedResults.map(result => {
+      if (result.proposed_assignment?.mentor_id === droppedPersonId) {
+        return {
+          ...result,
+          proposed_assignment: { mentor_id: null, mentor_name: null },
+          dropout: dropoutInfo,
+        };
+      }
+      return result;
+    });
+  }
+
+  const updates: Record<string, unknown> = {};
+
+  if (currentCohort.matches) {
+    updates.matches = { ...currentCohort.matches, results: updatedResults };
+  }
+
+  // Clean up manual matches involving the dropped person
+  if (currentCohort.manual_matches?.matches) {
+    const filteredManual = currentCohort.manual_matches.matches.filter(m =>
+      droppedPersonType === 'mentee'
+        ? m.mentee_id !== droppedPersonId
+        : m.mentor_id !== droppedPersonId
+    );
+    updates.manual_matches = {
+      ...currentCohort.manual_matches,
+      matches: filteredManual,
+    };
+  }
+
+  try {
+    const result = await updateCohort(cohortId, updates);
+    console.log('Mark dropout result:', result);
+    return result;
+  } catch (error) {
+    console.error('Error marking dropout:', error);
     return null;
   }
 }

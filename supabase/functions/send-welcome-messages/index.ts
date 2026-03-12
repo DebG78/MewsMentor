@@ -225,15 +225,15 @@ Deno.serve(async (req) => {
           ROLE_TITLE: mentee.role || '',
           PRIMARY_CAPABILITY: mentee.primary_capability || mentee.capabilities_wanted || '',
           SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
-          MENTORING_GOAL: mentee.mentoring_goal || '',
-          BIO: mentee.bio || '',
+          MENTORING_GOAL: mentee.mentoring_goal_summary || mentee.mentoring_goal || '',
+          BIO: mentee.bio_summary || mentee.bio || '',
           SESSION_STYLE: mentee.preferred_style || '',
           FEEDBACK_STYLE: mentee.feedback_preference || '',
           // Include mentor fields so templates can cross-reference
           NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
-          HARD_EARNED_LESSON: mentor.hard_earned_lesson || mentor.meaningful_impact || '',
-          MENTOR_MOTIVATION: mentor.mentor_motivation || '',
-          MENTORING_EXPERIENCE: mentor.mentoring_experience || '',
+          HARD_EARNED_LESSON: mentor.hard_earned_lesson_summary || mentor.hard_earned_lesson || mentor.meaningful_impact || '',
+          MENTOR_MOTIVATION: mentor.mentor_motivation_summary || mentor.mentor_motivation || '',
+          MENTORING_EXPERIENCE: mentor.mentoring_experience_summary || mentor.mentoring_experience || '',
         };
 
         const messageText = renderTemplate(menteeTemplate, menteeContext);
@@ -288,13 +288,13 @@ Deno.serve(async (req) => {
           FULL_NAME: mentor.full_name || '',
           ROLE_TITLE: mentor.role || '',
           PRIMARY_CAPABILITY: mentor.primary_capability || mentor.capabilities_offered || '',
-          MENTOR_MOTIVATION: mentor.mentor_motivation || '',
-          HARD_EARNED_LESSON: mentor.hard_earned_lesson || mentor.meaningful_impact || '',
+          MENTOR_MOTIVATION: mentor.mentor_motivation_summary || mentor.mentor_motivation || '',
+          HARD_EARNED_LESSON: mentor.hard_earned_lesson_summary || mentor.hard_earned_lesson || mentor.meaningful_impact || '',
           NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
-          BIO: mentor.bio || '',
+          BIO: mentor.bio_summary || mentor.bio || '',
           SESSION_STYLE: mentor.meeting_style || mentor.mentor_session_style || '',
           // Include mentee fields so templates can cross-reference
-          MENTORING_GOAL: mentee.mentoring_goal || '',
+          MENTORING_GOAL: mentee.mentoring_goal_summary || mentee.mentoring_goal || '',
           SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
         };
 

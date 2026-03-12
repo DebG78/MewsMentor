@@ -238,7 +238,7 @@ export default function PeopleAnalytics() {
       <PageHeader title="People Analytics" description="Population-level insights across all cohorts" />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <Card>
           <CardContent className="pt-4 text-center">
             <div className="text-2xl font-bold">{populationStats.totalMentors}</div>
@@ -275,6 +275,14 @@ export default function PeopleAnalytics() {
               {populationStats.avgMatchScore !== null ? populationStats.avgMatchScore : '-'}
             </div>
             <div className="text-xs text-muted-foreground">Avg Match Score</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className={`text-2xl font-bold ${populationStats.totalDropouts > 0 ? 'text-red-600' : ''}`}>
+              {populationStats.dropoutRate !== null ? `${populationStats.dropoutRate}%` : '-'}
+            </div>
+            <div className="text-xs text-muted-foreground">Dropout Rate</div>
           </CardContent>
         </Card>
       </div>

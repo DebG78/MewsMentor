@@ -1,25 +1,29 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mail, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Mail, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, X } from "lucide-react";
 import { getMessagesByRecipient, type MessageLogEntry } from "@/lib/messageService";
+import { DatePicker } from "@/components/ui/date-picker";
 
 interface MessagesTabProps {
   personId: string;
+  slackUserId?: string;
 }
 
-export function MessagesTab({ personId }: MessagesTabProps) {
+export function MessagesTab({ personId, slackUserId }: MessagesTabProps) {
   const [messages, setMessages] = useState<MessageLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    getMessagesByRecipient(personId)
+    getMessagesByRecipient(personId, slackUserId)
       .then((data) => {
         if (!cancelled) setMessages(data);
       })
@@ -31,7 +35,7 @@ export function MessagesTab({ personId }: MessagesTabProps) {
       });
 
     return () => { cancelled = true; };
-  }, [personId]);
+  }, [personId, slackUserId]);
 
   if (loading) {
     return <LoadingState />;
@@ -56,9 +60,20 @@ export function MessagesTab({ personId }: MessagesTabProps) {
 
   // Get unique template types for filter chips
   const templateTypes = [...new Set(messages.map((m) => m.template_type))];
-  const filtered = filter
-    ? messages.filter((m) => m.template_type === filter)
-    : messages;
+  const hasDateFilter = dateFrom || dateTo;
+  const filtered = messages.filter((m) => {
+    if (filter && m.template_type !== filter) return false;
+    if (dateFrom) {
+      const msgDate = new Date(m.created_at);
+      if (msgDate < dateFrom) return false;
+    }
+    if (dateTo) {
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      if (new Date(m.created_at) > end) return false;
+    }
+    return true;
+  });
 
   const statusCounts = {
     sent: messages.filter((m) => m.delivery_status === "sent").length,
@@ -114,9 +129,33 @@ export function MessagesTab({ personId }: MessagesTabProps) {
         </div>
       )}
 
+      {/* Date filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">From</span>
+          <DatePicker date={dateFrom} onDateChange={setDateFrom} placeholder="Start date" className="h-8 text-xs w-[150px]" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">To</span>
+          <DatePicker date={dateTo} onDateChange={setDateTo} placeholder="End date" className="h-8 text-xs w-[150px]" />
+        </div>
+        {hasDateFilter && (
+          <button
+            onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+          >
+            <X className="w-3 h-3" /> Clear dates
+          </button>
+        )}
+      </div>
+
       {/* Message list */}
       <div className="space-y-2">
-        {filtered.map((msg) => (
+        {filtered.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground">No messages match the current filters.</p>
+          </div>
+        ) : filtered.map((msg) => (
           <MessageCard key={msg.id} message={msg} />
         ))}
       </div>

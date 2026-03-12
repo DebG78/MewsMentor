@@ -214,6 +214,13 @@ export interface MatchingResult {
     comment?: string;
   };
   filter_block_reasons?: string[];
+  dropout?: {
+    dropped_person: 'mentee' | 'mentor';
+    dropped_person_id: string;
+    dropped_person_name?: string;
+    dropped_at: string;
+    reason?: string;
+  };
 }
 
 export interface MatchingStats {
@@ -289,6 +296,8 @@ export interface CohortStats {
   matches_approved: number;
   active_sessions: number;
   completed_sessions: number;
+  dropouts: number;
+  dropout_rate: number | null; // percentage, null if no matches yet
 }
 
 // Data import types

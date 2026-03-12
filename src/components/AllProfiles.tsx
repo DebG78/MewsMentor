@@ -545,7 +545,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
             <TabsContent value="messages" className="space-y-4">
               <Card>
                 <CardContent className="pt-6">
-                  <MessagesTab personId={personId} />
+                  <MessagesTab personId={personId} slackUserId={selectedProfile?.slack_user_id} />
                 </CardContent>
               </Card>
             </TabsContent>

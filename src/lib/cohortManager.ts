@@ -38,6 +38,14 @@ export function calculateCohortStats(cohort: Cohort): CohortStats {
     }
   }
 
+  // Count dropouts
+  const dropouts = (cohort.matches?.results || []).filter(r => r.dropout).length;
+  // Total participants who were ever matched (active + dropped)
+  const totalEverMatched = matchesApproved + dropouts;
+  const dropoutRate = totalEverMatched > 0
+    ? Math.round((dropouts / totalEverMatched) * 100)
+    : null;
+
   return {
     total_mentees: cohort.mentees.length,
     total_mentors: cohort.mentors.length,
@@ -45,7 +53,9 @@ export function calculateCohortStats(cohort: Cohort): CohortStats {
     matches_created: matchesCreated,
     matches_approved: matchesApproved,
     active_sessions: 0, // Would be calculated from actual session data
-    completed_sessions: 0 // Would be calculated from actual session data
+    completed_sessions: 0, // Would be calculated from actual session data
+    dropouts,
+    dropout_rate: dropoutRate,
   };
 }
 
