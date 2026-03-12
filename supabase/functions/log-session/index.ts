@@ -34,14 +34,15 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { respondent_name, slack_user_id, date, duration_minutes, rating, journey_phase } = body;
+    console.log('[log-session] Body keys:', Object.keys(body));
+    const { respondent_name, slack_user_id, date, duration_minutes, rating, journey_phase, feedback, comments } = body;
 
     // Validate required fields — at least one of name or slack_user_id is needed
     if (!respondent_name && !slack_user_id) {
       return errorResponse(400, 'At least one of respondent_name or slack_user_id is required');
     }
-    if (!date || !duration_minutes || !rating) {
-      return errorResponse(400, 'Missing required fields: date, duration_minutes, rating');
+    if (!rating) {
+      return errorResponse(400, 'Missing required field: rating');
     }
 
     // Validate rating
@@ -50,17 +51,22 @@ Deno.serve(async (req) => {
       return errorResponse(400, 'Rating must be an integer between 1 and 5');
     }
 
-    // Validate duration
-    const durationNum = Number(duration_minutes);
-    if (!VALID_DURATIONS.includes(durationNum)) {
-      return errorResponse(400, `Duration must be one of: ${VALID_DURATIONS.join(', ')}`);
-    }
+    // Duration defaults to 60 if not provided; snap to nearest valid value
+    const rawDuration = duration_minutes ? Number(duration_minutes) : 60;
+    const durationNum = VALID_DURATIONS.includes(rawDuration)
+      ? rawDuration
+      : VALID_DURATIONS.reduce((prev, curr) =>
+          Math.abs(curr - rawDuration) < Math.abs(prev - rawDuration) ? curr : prev
+        );
 
-    // Validate date
-    const parsedDate = new Date(date);
+    // Date defaults to now if not provided
+    const parsedDate = date ? new Date(date) : new Date();
     if (isNaN(parsedDate.getTime())) {
       return errorResponse(400, 'Invalid date format');
     }
+
+    // Capture feedback/comments from the form
+    const sessionNotes = (feedback || comments || '').toString().trim() || null;
 
     // Create admin Supabase client (bypasses RLS)
     const supabaseAdmin = createClient(
@@ -200,18 +206,26 @@ Deno.serve(async (req) => {
     // Determine which rating field to populate
     const ratingField = pair.respondent_role === 'mentee' ? 'mentee_rating' : 'mentor_rating';
 
-    // Normalize journey_phase — accept both internal keys and human-readable labels from PA dropdown
-    const PHASE_LABEL_MAP: Record<string, string> = {
-      'getting started': 'getting_started',
-      'building': 'building',
-      'midpoint': 'midpoint',
-      'midpoint check-in': 'midpoint',
-      'wrapping up': 'wrapping_up',
-    };
+    // Normalize journey_phase — accept internal keys, short labels, or full MS Forms
+    // option text like "Getting Started - (Typical signals: introductions...)"
+    const PHASE_PREFIX_MAP: Array<{ prefix: string; key: string }> = [
+      { prefix: 'getting started', key: 'getting_started' },
+      { prefix: 'building', key: 'building' },
+      { prefix: 'midpoint', key: 'midpoint' },
+      { prefix: 'wrapping up', key: 'wrapping_up' },
+    ];
     const rawPhase = (journey_phase || '').toString().trim().toLowerCase();
-    const normalizedPhase = PHASE_LABEL_MAP[rawPhase] || rawPhase;
+    let sessionJourneyPhase: string | null = null;
+    // Check exact match first (internal keys like 'getting_started')
     const validJourneyPhases = ['getting_started', 'building', 'midpoint', 'wrapping_up'];
-    const sessionJourneyPhase = validJourneyPhases.includes(normalizedPhase) ? normalizedPhase : null;
+    if (validJourneyPhases.includes(rawPhase)) {
+      sessionJourneyPhase = rawPhase;
+    } else {
+      // Prefix match for MS Forms values like "Getting Started - (Typical signals...)"
+      const match = PHASE_PREFIX_MAP.find(p => rawPhase.startsWith(p.prefix));
+      if (match) sessionJourneyPhase = match.key;
+    }
+    console.log(`[log-session] Journey phase: raw="${rawPhase}" → resolved="${sessionJourneyPhase}"`);
 
     // Insert session
     const { error: insertError } = await supabaseAdmin
@@ -220,12 +234,13 @@ Deno.serve(async (req) => {
         mentor_id: pair.mentor_id,
         mentee_id: pair.mentee_id,
         cohort_id: pair.cohort_id,
-        title: 'Session logged externally',
+        title: 'Session logged via form',
         scheduled_datetime: parsedDate.toISOString(),
         duration_minutes: durationNum,
         status: 'completed',
         logged_by: pair.respondent_role,
         [ratingField]: ratingNum,
+        ...(sessionNotes ? { notes: sessionNotes } : {}),
         ...(sessionJourneyPhase ? { journey_phase: sessionJourneyPhase } : {}),
       });
 

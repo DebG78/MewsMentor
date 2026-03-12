@@ -321,7 +321,7 @@ const Settings = () => {
                           <li>Action: <strong>HTTP</strong> → POST</li>
                           <li>URI: your Supabase edge function URL + <code className="bg-background px-1 rounded">/log-session</code></li>
                           <li>Headers: <code className="bg-background px-1 rounded">x-api-key: YOUR_API_KEY</code>, <code className="bg-background px-1 rounded">Content-Type: application/json</code></li>
-                          <li>Body: <code className="bg-background px-1 rounded">{`{ "respondent_name": "...", "slack_user_id": "U...", "date": "2026-01-15", "duration_minutes": 30, "rating": 4, "journey_phase": "building" }`}</code></li>
+                          <li>Body: <code className="bg-background px-1 rounded">{`{ "slack_user_id": "U...", "rating": 4, "journey_phase": "Getting Started", "feedback": "..." }`}</code> — <code className="bg-background px-1 rounded">date</code> and <code className="bg-background px-1 rounded">duration_minutes</code> are optional (default: now, 60 min)</li>
                         </ol>
                       </div>
                       <div>
