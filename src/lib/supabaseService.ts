@@ -1676,13 +1676,13 @@ export async function getUnassignedSignups(): Promise<{
   const { data: mentees } = await supabase
     .from('mentees')
     .select('*')
-    .eq('cohort_id', 'unassigned')
+    .or('cohort_id.eq.unassigned,cohort_id.is.null')
     .order('created_at', { ascending: false })
 
   const { data: mentors } = await supabase
     .from('mentors')
     .select('*')
-    .eq('cohort_id', 'unassigned')
+    .or('cohort_id.eq.unassigned,cohort_id.is.null')
     .order('created_at', { ascending: false })
 
   return {
