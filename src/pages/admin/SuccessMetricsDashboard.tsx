@@ -1,19 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -40,11 +31,11 @@ import {
   Users,
   AlertTriangle,
   AlertCircle,
-  Plus,
   Target,
   BarChart3,
   ChevronDown,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import {
   LineChart,
@@ -65,7 +56,6 @@ import type {
   MetricWithStatus,
   MetricsDashboardSummary,
   MetricCategory,
-  SuccessTarget,
   TrendDataPoint,
   CohortComparison,
 } from '@/types/metrics';
@@ -77,11 +67,14 @@ import {
 import {
   getMetricsDashboardSummary,
   getMetricsWithStatus,
-  createMetricSnapshot,
   getMetricTrend,
   compareCohortMetrics,
+  getMetricsDashboardSummaryAllCohorts,
+  getMetricsWithStatusAllCohorts,
+  getMetricTrendAllCohorts,
 } from '@/lib/metricsService';
 import { getAllCohorts } from '@/lib/supabaseService';
+import { computeAndStoreMetrics } from '@/lib/metricsComputeService';
 import { cn } from '@/lib/utils';
 import { PageHeader } from "@/components/admin/PageHeader";
 
@@ -104,7 +97,7 @@ const radarConfig = {
 export default function SuccessMetricsDashboard() {
   const { toast } = useToast();
   const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
-  const [selectedCohort, setSelectedCohort] = useState<string>('');
+  const [selectedCohort, setSelectedCohort] = useState<string>('__all__');
   const [summary, setSummary] = useState<MetricsDashboardSummary | null>(null);
   const [metrics, setMetrics] = useState<MetricWithStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,11 +116,8 @@ export default function SuccessMetricsDashboard() {
   const [comparisonData, setComparisonData] = useState<CohortComparison[]>([]);
   const [comparisonLoading, setComparisonLoading] = useState(false);
 
-  // Record value dialog
-  const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
-  const [selectedMetricForRecord, setSelectedMetricForRecord] = useState<SuccessTarget | null>(null);
-  const [recordValue, setRecordValue] = useState('');
-  const [recordDate, setRecordDate] = useState(new Date().toISOString().split('T')[0]);
+  // Refresh metrics state
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadCohorts();
@@ -143,21 +133,24 @@ export default function SuccessMetricsDashboard() {
     try {
       const data = await getAllCohorts();
       setCohorts(data.map(c => ({ id: c.id, name: c.name })));
-      if (data.length > 0) {
-        setSelectedCohort(data[0].id);
-      }
     } catch {
       toast({ title: 'Error', description: 'Failed to load cohorts', variant: 'destructive' });
     }
   };
+
+  const isAllCohorts = selectedCohort === '__all__';
 
   const loadMetrics = async () => {
     if (!selectedCohort) return;
     setIsLoading(true);
     try {
       const [summaryData, metricsData] = await Promise.all([
-        getMetricsDashboardSummary(selectedCohort),
-        getMetricsWithStatus(selectedCohort),
+        isAllCohorts
+          ? getMetricsDashboardSummaryAllCohorts()
+          : getMetricsDashboardSummary(selectedCohort),
+        isAllCohorts
+          ? getMetricsWithStatusAllCohorts()
+          : getMetricsWithStatus(selectedCohort),
       ]);
       setSummary(summaryData);
       setMetrics(metricsData);
@@ -168,22 +161,36 @@ export default function SuccessMetricsDashboard() {
     }
   };
 
-  const handleRecordValue = async () => {
-    if (!selectedMetricForRecord || !recordValue || !selectedCohort) return;
+  const handleRefreshMetrics = async () => {
+    if (!selectedCohort) return;
+    setIsRefreshing(true);
     try {
-      await createMetricSnapshot({
-        cohort_id: selectedCohort,
-        metric_name: selectedMetricForRecord.metric_name,
-        actual_value: parseFloat(recordValue),
-        snapshot_date: recordDate,
-      });
-      toast({ title: 'Success', description: 'Metric value recorded' });
-      setIsRecordDialogOpen(false);
-      setRecordValue('');
-      setSelectedMetricForRecord(null);
-      loadMetrics();
+      if (isAllCohorts) {
+        // Refresh metrics for every cohort
+        let totalStored = 0, totalSkipped = 0;
+        const allErrors: string[] = [];
+        for (const cohort of cohorts) {
+          const result = await computeAndStoreMetrics(cohort.id);
+          totalStored += result.stored;
+          totalSkipped += result.skipped;
+          allErrors.push(...result.errors);
+        }
+        const parts = [`${totalStored} metrics computed across ${cohorts.length} cohorts`];
+        if (totalSkipped > 0) parts.push(`${totalSkipped} skipped`);
+        if (allErrors.length > 0) parts.push(`${allErrors.length} errors`);
+        toast({ title: 'All Cohorts Refreshed', description: parts.join('. ') });
+      } else {
+        const result = await computeAndStoreMetrics(selectedCohort);
+        const parts = [`${result.stored} metrics computed and saved`];
+        if (result.skipped > 0) parts.push(`${result.skipped} skipped (insufficient data)`);
+        if (result.errors.length > 0) parts.push(`${result.errors.length} errors`);
+        toast({ title: 'Metrics Refreshed', description: parts.join('. ') });
+      }
+      await loadMetrics();
     } catch {
-      toast({ title: 'Error', description: 'Failed to record value', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to refresh metrics', variant: 'destructive' });
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -195,7 +202,9 @@ export default function SuccessMetricsDashboard() {
     setExpandedMetric(metricName);
     setTrendLoading(true);
     try {
-      const data = await getMetricTrend(selectedCohort, metricName, 180);
+      const data = isAllCohorts
+        ? await getMetricTrendAllCohorts(metricName, 180)
+        : await getMetricTrend(selectedCohort, metricName, 180);
       setTrendData(data);
     } catch {
       setTrendData([]);
@@ -235,6 +244,7 @@ export default function SuccessMetricsDashboard() {
       case 'on_track': return <Badge className="bg-green-500">On Track</Badge>;
       case 'warning': return <Badge className="bg-yellow-500">Warning</Badge>;
       case 'critical': return <Badge className="bg-red-500">Critical</Badge>;
+      case 'no_data': return <Badge variant="outline" className="text-muted-foreground">Awaiting Data</Badge>;
       default: return null;
     }
   };
@@ -244,6 +254,7 @@ export default function SuccessMetricsDashboard() {
       case 'on_track': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'warning': return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
       case 'critical': return <AlertCircle className="w-5 h-5 text-red-500" />;
+      case 'no_data': return <BarChart3 className="w-5 h-5 text-muted-foreground" />;
       default: return null;
     }
   };
@@ -269,18 +280,33 @@ export default function SuccessMetricsDashboard() {
     <div className="space-y-6">
       <PageHeader title="Success Metrics" description="Track program performance against targets" />
 
-      <div className="w-64">
-        <Label>Select Cohort</Label>
-        <Select value={selectedCohort} onValueChange={setSelectedCohort}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select cohort" />
-          </SelectTrigger>
-          <SelectContent>
-            {cohorts.map(cohort => (
-              <SelectItem key={cohort.id} value={cohort.id}>{cohort.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-end gap-4">
+        <div className="w-64">
+          <Label>Select Cohort</Label>
+          <Select value={selectedCohort} onValueChange={setSelectedCohort}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select cohort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All Cohorts</SelectItem>
+              {cohorts.map(cohort => (
+                <SelectItem key={cohort.id} value={cohort.id}>{cohort.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          onClick={handleRefreshMetrics}
+          disabled={isRefreshing || !selectedCohort}
+          variant="outline"
+        >
+          {isRefreshing ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4 mr-2" />
+          )}
+          Refresh Metrics
+        </Button>
       </div>
 
       {isLoading ? (
@@ -298,7 +324,7 @@ export default function SuccessMetricsDashboard() {
           {/* OVERVIEW TAB */}
           <TabsContent value="overview" className="space-y-6">
             {summary && (
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 <Card>
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between">
@@ -343,6 +369,19 @@ export default function SuccessMetricsDashboard() {
                     </div>
                   </CardContent>
                 </Card>
+                {summary.noData > 0 && (
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Awaiting Data</p>
+                          <p className="text-3xl font-bold text-muted-foreground">{summary.noData}</p>
+                        </div>
+                        <BarChart3 className="w-10 h-10 text-muted-foreground opacity-50" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 
@@ -382,6 +421,7 @@ export default function SuccessMetricsDashboard() {
                                 <span className="text-green-600">{cat.onTrack} ok</span>
                                 <span className="text-yellow-600">{cat.warning} warn</span>
                                 <span className="text-red-600">{cat.critical} crit</span>
+                                {cat.noData > 0 && <span className="text-muted-foreground">{cat.noData} pending</span>}
                               </div>
                             </div>
                           </div>
@@ -452,16 +492,6 @@ export default function SuccessMetricsDashboard() {
                             </p>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedMetricForRecord(metric.target);
-                            setIsRecordDialogOpen(true);
-                          }}
-                        >
-                          Update Value
-                        </Button>
                       </div>
                     ))}
                   </div>
@@ -515,7 +545,6 @@ export default function SuccessMetricsDashboard() {
                         <TableHead className="text-right">Actual</TableHead>
                         <TableHead className="text-center">Status</TableHead>
                         <TableHead>Progress</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -566,12 +595,13 @@ export default function SuccessMetricsDashboard() {
                               <TableCell>
                                 <div className="flex items-center gap-2 min-w-[120px]">
                                   <Progress
-                                    value={Math.min(100, metric.percentOfTarget)}
+                                    value={metric.status === 'no_data' ? 0 : Math.min(100, metric.percentOfTarget)}
                                     className={cn(
                                       'h-2 flex-1',
                                       metric.status === 'on_track' && '[&>div]:bg-green-500',
                                       metric.status === 'warning' && '[&>div]:bg-yellow-500',
-                                      metric.status === 'critical' && '[&>div]:bg-red-500'
+                                      metric.status === 'critical' && '[&>div]:bg-red-500',
+                                      metric.status === 'no_data' && '[&>div]:bg-gray-300'
                                     )}
                                   />
                                   <span className="text-xs text-muted-foreground w-10">
@@ -579,26 +609,12 @@ export default function SuccessMetricsDashboard() {
                                   </span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedMetricForRecord(metric.target);
-                                    setIsRecordDialogOpen(true);
-                                  }}
-                                >
-                                  <Plus className="w-3 h-3 mr-1" />
-                                  Record
-                                </Button>
-                              </TableCell>
                             </TableRow>
 
                             {/* Expanded Trend Chart Row */}
                             {isExpanded && (
                               <TableRow key={`${metric.target.id}-trend`}>
-                                <TableCell colSpan={7} className="bg-muted/20 p-0">
+                                <TableCell colSpan={6} className="bg-muted/20 p-0">
                                   <div className="px-6 py-4">
                                     {trendLoading ? (
                                       <div className="flex justify-center py-8">
@@ -606,7 +622,7 @@ export default function SuccessMetricsDashboard() {
                                       </div>
                                     ) : trendData.length === 0 ? (
                                       <div className="text-center py-6 text-muted-foreground text-sm">
-                                        No historical data recorded yet. Use the "Record" button to add values over time.
+                                        No historical data yet. Use "Refresh Metrics" to compute values from live data.
                                       </div>
                                     ) : (
                                       <div>
@@ -780,54 +796,6 @@ export default function SuccessMetricsDashboard() {
         </Tabs>
       )}
 
-      {/* Record Value Dialog */}
-      <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record Metric Value</DialogTitle>
-            <DialogDescription>
-              {selectedMetricForRecord && (
-                <>
-                  Recording value for{' '}
-                  <strong>
-                    {METRIC_LABELS[selectedMetricForRecord.metric_name] || selectedMetricForRecord.metric_name}
-                  </strong>
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Value</Label>
-              <Input
-                type="number"
-                step="0.1"
-                value={recordValue}
-                onChange={(e) => setRecordValue(e.target.value)}
-                placeholder="Enter value..."
-              />
-              {selectedMetricForRecord?.target_unit && (
-                <p className="text-xs text-muted-foreground">
-                  Unit: {selectedMetricForRecord.target_unit}
-                  {' '}| Target: {formatMetricValue(selectedMetricForRecord.target_value, selectedMetricForRecord.target_unit)}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={recordDate}
-                onChange={(e) => setRecordDate(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRecordDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleRecordValue}>Record Value</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

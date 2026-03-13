@@ -6,7 +6,7 @@ export type MetricCategory = 'engagement' | 'satisfaction' | 'completion' | 'ret
 
 export type ComparisonDirection = 'higher_is_better' | 'lower_is_better';
 
-export type MetricStatus = 'on_track' | 'warning' | 'critical';
+export type MetricStatus = 'on_track' | 'warning' | 'critical' | 'no_data';
 
 export interface SuccessTarget {
   id: string;
@@ -137,6 +137,7 @@ export interface CategorySummary {
   onTrack: number;
   warning: number;
   critical: number;
+  noData: number;
   averagePerformance: number;
 }
 
@@ -163,6 +164,7 @@ export interface MetricsDashboardSummary {
   onTrack: number;
   warning: number;
   critical: number;
+  noData: number;
   categorySummaries: CategorySummary[];
   topPerformers: MetricWithStatus[];
   needsAttention: MetricWithStatus[];
@@ -196,6 +198,7 @@ export const METRIC_CATEGORY_METADATA: Record<MetricCategory, { label: string; i
 export const METRIC_LABELS: Record<string, string> = {
   session_completion_rate: 'Session Completion Rate',
   average_sessions_per_pair: 'Avg Sessions per Pair',
+  check_in_response_rate: 'Check-in Response Rate',
 
   mentee_satisfaction_score: 'Mentee Satisfaction',
   mentor_satisfaction_score: 'Mentor Satisfaction',

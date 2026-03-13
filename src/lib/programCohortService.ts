@@ -220,6 +220,32 @@ export async function addParticipantToCohort(
 }
 
 /**
+ * Get ALL participants in a cohort regardless of status (active, completed, dropped, etc.)
+ */
+export async function getAllCohortParticipants(
+  cohortId: string,
+  role?: string
+): Promise<ProgramParticipant[]> {
+  let query = supabase
+    .from('program_participants')
+    .select('*')
+    .eq('program_cohort_id', cohortId)
+
+  if (role) {
+    query = query.eq('role_in_program', role)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Error fetching all cohort participants:', error)
+    return []
+  }
+
+  return data || []
+}
+
+/**
  * Remove a participant from a cohort
  */
 export async function removeParticipantFromCohort(participantId: string): Promise<boolean> {

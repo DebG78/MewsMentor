@@ -54,18 +54,18 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 const mentoringItems = [
   { title: 'Cohorts', href: '/admin/mentoring/cohorts', icon: Users },
-  { title: 'Unassigned', href: '/admin/mentoring/unassigned', icon: Clock },
-  { title: 'Sessions', href: '/admin/mentoring/sessions', icon: Calendar },
   { title: 'Runbook', href: '/admin/mentoring/runbook', icon: BookOpen },
+  { title: 'Sessions', href: '/admin/mentoring/sessions', icon: Calendar },
+  { title: 'Unassigned', href: '/admin/mentoring/unassigned', icon: Clock },
 ]
 
 const analyticsItems = [
   { title: 'Success Metrics', href: '/admin/analytics/metrics', icon: Gauge },
+  { title: 'Session Analytics', href: '/admin/analytics/sessions', icon: Calendar },
   { title: 'VIP Management', href: '/admin/analytics/vip', icon: Crown },
   { title: 'People Analytics', href: '/admin/people/analytics', icon: BarChart3 },
   { title: 'Cohort Comparison', href: '/admin/analytics/compare', icon: GitCompareArrows },
   { title: 'Match Quality', href: '/admin/analytics/match-quality', icon: Sparkles },
-  { title: 'Session Analytics', href: '/admin/analytics/sessions', icon: Calendar },
 ]
 
 export function AppSidebar() {

@@ -104,9 +104,11 @@ export default function CohortComparison() {
     return cohorts
       .filter(c => c.status === 'active' || c.status === 'completed')
       .map(cohort => {
-        const matchCount = cohort.matches?.results?.filter(
+        const algorithmicPairs = cohort.matches?.results?.filter(
           r => r.proposed_assignment?.mentor_id
         ).length || 0;
+        const manualPairs = cohort.manual_matches?.matches?.length || 0;
+        const matchCount = algorithmicPairs || manualPairs;
 
         const avgScore = cohort.matches?.stats
           ? Math.round((cohort.matches.stats as { avg_score?: number }).avg_score || 0)

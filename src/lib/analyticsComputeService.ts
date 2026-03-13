@@ -2,6 +2,43 @@ import type { Cohort } from '@/types/mentoring';
 import type { SessionRow } from './sessionService';
 
 // ============================================================================
+// HELPERS — unified pair extraction from algorithmic or manual matches
+// ============================================================================
+
+function hasMatchData(cohort: Cohort): boolean {
+  return (
+    (cohort.matches?.results && cohort.matches.results.length > 0) ||
+    (cohort.manual_matches?.matches && cohort.manual_matches.matches.length > 0)
+  );
+}
+
+function getMatchedPairs(cohort: Cohort): Array<{ mentee_id: string; mentor_id: string }> {
+  const pairs: Array<{ mentee_id: string; mentor_id: string }> = [];
+
+  // Algorithmic matches
+  if (cohort.matches?.results) {
+    for (const result of cohort.matches.results) {
+      if (result.proposed_assignment?.mentor_id) {
+        pairs.push({ mentee_id: result.mentee_id, mentor_id: result.proposed_assignment.mentor_id });
+      }
+    }
+  }
+
+  // Manual matches (avoid duplicates if both exist)
+  if (cohort.manual_matches?.matches) {
+    const existing = new Set(pairs.map(p => `${p.mentee_id}:${p.mentor_id}`));
+    for (const match of cohort.manual_matches.matches) {
+      const key = `${match.mentee_id}:${match.mentor_id}`;
+      if (!existing.has(key)) {
+        pairs.push({ mentee_id: match.mentee_id, mentor_id: match.mentor_id });
+      }
+    }
+  }
+
+  return pairs;
+}
+
+// ============================================================================
 // COMPUTED METRICS
 // ============================================================================
 
@@ -107,15 +144,13 @@ export function computePairHealthScores(
 
 export function computeMentorLoadBalance(cohorts: Cohort[]): MentorLoadBalance[] {
   return cohorts
-    .filter(c => c.matches?.results && c.matches.results.length > 0)
+    .filter(c => hasMatchData(c))
     .map(cohort => {
       const mentorLoads = new Map<string, number>();
 
-      for (const result of cohort.matches!.results) {
-        if (result.proposed_assignment?.mentor_id) {
-          const mid = result.proposed_assignment.mentor_id;
-          mentorLoads.set(mid, (mentorLoads.get(mid) || 0) + 1);
-        }
+      const pairs = getMatchedPairs(cohort);
+      for (const { mentor_id } of pairs) {
+        mentorLoads.set(mentor_id, (mentorLoads.get(mentor_id) || 0) + 1);
       }
 
       const loads = Array.from(mentorLoads.values());
@@ -148,25 +183,24 @@ export function computeMentorLoadBalance(cohorts: Cohort[]): MentorLoadBalance[]
 
 export function computeTopicCoverage(cohorts: Cohort[]): TopicCoverageRate[] {
   return cohorts
-    .filter(c => c.matches?.results && c.matches.results.length > 0)
+    .filter(c => hasMatchData(c))
     .map(cohort => {
       let totalTopics = 0;
       let coveredTopics = 0;
 
-      for (const result of cohort.matches!.results) {
-        const mentee = cohort.mentees.find(m => m.id === result.mentee_id);
+      const pairs = getMatchedPairs(cohort);
+      for (const { mentee_id, mentor_id } of pairs) {
+        const mentee = cohort.mentees.find(m => m.id === mentee_id);
         if (!mentee) continue;
 
         const menteeTopics = mentee.topics_to_learn || [];
         totalTopics += menteeTopics.length;
 
-        if (result.proposed_assignment?.mentor_id) {
-          const mentor = cohort.mentors.find(m => m.id === result.proposed_assignment!.mentor_id);
-          if (mentor) {
-            const mentorTopics = new Set(mentor.topics_to_mentor || []);
-            const covered = menteeTopics.filter(t => mentorTopics.has(t)).length;
-            coveredTopics += covered;
-          }
+        const mentor = cohort.mentors.find(m => m.id === mentor_id);
+        if (mentor) {
+          const mentorTopics = new Set(mentor.topics_to_mentor || []);
+          const covered = menteeTopics.filter(t => mentorTopics.has(t)).length;
+          coveredTopics += covered;
         }
       }
 
@@ -188,21 +222,34 @@ export function computePairSurvivalRate(
   cohorts: Cohort[]
 ): PairSurvivalRate[] {
   return cohorts
-    .filter(c => c.matches?.results && c.matches.results.length > 0)
+    .filter(c => hasMatchData(c))
     .map(cohort => {
-      const results = cohort.matches!.results;
-      const droppedPairs = results.filter(r => r.dropout).length;
-      const activePairs = results.filter(
-        r => r.proposed_assignment?.mentor_id
-      ).length;
-      const totalPairs = activePairs + droppedPairs;
+      // For algorithmic matches, we can detect dropouts
+      if (cohort.matches?.results && cohort.matches.results.length > 0) {
+        const results = cohort.matches.results;
+        const droppedPairs = results.filter(r => r.dropout).length;
+        const activePairs = results.filter(
+          r => r.proposed_assignment?.mentor_id
+        ).length;
+        const totalPairs = activePairs + droppedPairs;
 
+        return {
+          cohort_id: cohort.id,
+          cohort_name: cohort.name,
+          totalPairs,
+          survivingPairs: activePairs,
+          survivalRate: totalPairs > 0 ? Math.round((activePairs / totalPairs) * 100) : 100,
+        };
+      }
+
+      // For manual matches, all matches are "active" (no dropout tracking)
+      const pairs = getMatchedPairs(cohort);
       return {
         cohort_id: cohort.id,
         cohort_name: cohort.name,
-        totalPairs,
-        survivingPairs: activePairs,
-        survivalRate: totalPairs > 0 ? Math.round((activePairs / totalPairs) * 100) : 100,
+        totalPairs: pairs.length,
+        survivingPairs: pairs.length,
+        survivalRate: 100,
       };
     });
 }

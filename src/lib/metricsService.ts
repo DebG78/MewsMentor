@@ -44,7 +44,17 @@ export async function getSuccessTargets(cohortId?: string): Promise<SuccessTarge
     throw error;
   }
 
-  return data || [];
+  if (!cohortId) return data || [];
+
+  // Deduplicate by metric_name: prefer cohort-specific target over global
+  const byName = new Map<string, SuccessTarget>();
+  for (const target of data || []) {
+    const existing = byName.get(target.metric_name);
+    if (!existing || (target.cohort_id !== null && existing.cohort_id === null)) {
+      byName.set(target.metric_name, target);
+    }
+  }
+  return Array.from(byName.values());
 }
 
 /**
@@ -328,7 +338,7 @@ export async function getMetricsWithStatus(cohortId: string): Promise<MetricWith
     const latestValue = snapshot?.actual_value;
     const status = latestValue !== undefined
       ? calculateMetricStatus(latestValue, target)
-      : 'warning';
+      : 'no_data' as const;
     const percentOfTarget = latestValue !== undefined
       ? calculatePercentOfTarget(latestValue, target)
       : 0;
@@ -382,9 +392,11 @@ export async function getCategorySummaries(cohortId: string): Promise<CategorySu
     const onTrack = categoryMetrics.filter(m => m.status === 'on_track').length;
     const warning = categoryMetrics.filter(m => m.status === 'warning').length;
     const critical = categoryMetrics.filter(m => m.status === 'critical').length;
+    const noData = categoryMetrics.filter(m => m.status === 'no_data').length;
 
-    const avgPerformance = categoryMetrics.length > 0
-      ? categoryMetrics.reduce((sum, m) => sum + m.percentOfTarget, 0) / categoryMetrics.length
+    const metricsWithData = categoryMetrics.filter(m => m.status !== 'no_data');
+    const avgPerformance = metricsWithData.length > 0
+      ? metricsWithData.reduce((sum, m) => sum + m.percentOfTarget, 0) / metricsWithData.length
       : 0;
 
     return {
@@ -393,6 +405,7 @@ export async function getCategorySummaries(cohortId: string): Promise<CategorySu
       onTrack,
       warning,
       critical,
+      noData,
       averagePerformance: Math.round(avgPerformance),
     };
   });
@@ -410,11 +423,13 @@ export async function getMetricsDashboardSummary(cohortId: string): Promise<Metr
   const onTrack = metrics.filter(m => m.status === 'on_track');
   const warning = metrics.filter(m => m.status === 'warning');
   const critical = metrics.filter(m => m.status === 'critical');
+  const noData = metrics.filter(m => m.status === 'no_data');
 
-  // Sort by performance to get top performers and needs attention
-  const sorted = [...metrics].sort((a, b) => b.percentOfTarget - a.percentOfTarget);
+  // Sort by performance to get top performers and needs attention (exclude no_data)
+  const metricsWithData = metrics.filter(m => m.status !== 'no_data');
+  const sorted = [...metricsWithData].sort((a, b) => b.percentOfTarget - a.percentOfTarget);
   const topPerformers = sorted.slice(0, 3);
-  const needsAttention = [...metrics]
+  const needsAttention = [...metricsWithData]
     .filter(m => m.status === 'critical' || m.status === 'warning')
     .sort((a, b) => a.percentOfTarget - b.percentOfTarget)
     .slice(0, 3);
@@ -424,6 +439,7 @@ export async function getMetricsDashboardSummary(cohortId: string): Promise<Metr
     onTrack: onTrack.length,
     warning: warning.length,
     critical: critical.length,
+    noData: noData.length,
     categorySummaries,
     topPerformers,
     needsAttention,
@@ -461,4 +477,201 @@ export async function compareCohortMetrics(
   }
 
   return results;
+}
+
+// ============================================================================
+// ALL-COHORTS AGGREGATION
+// ============================================================================
+
+/**
+ * Get latest snapshots averaged across all cohorts per metric.
+ */
+export async function getLatestSnapshotsAllCohorts(): Promise<MetricSnapshot[]> {
+  const { data, error } = await supabase
+    .from('metric_snapshots')
+    .select('*')
+    .order('snapshot_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching all snapshots:', error);
+    throw error;
+  }
+
+  // For each cohort+metric, take the latest snapshot
+  const latestByCohortMetric = new Map<string, MetricSnapshot>();
+  for (const snapshot of data || []) {
+    const key = `${snapshot.cohort_id}::${snapshot.metric_name}`;
+    if (!latestByCohortMetric.has(key)) {
+      latestByCohortMetric.set(key, snapshot);
+    }
+  }
+
+  // Average across cohorts per metric
+  const metricValues = new Map<string, number[]>();
+  const metricDates = new Map<string, string>();
+  for (const snapshot of latestByCohortMetric.values()) {
+    const values = metricValues.get(snapshot.metric_name) || [];
+    values.push(snapshot.actual_value);
+    metricValues.set(snapshot.metric_name, values);
+    // Keep the most recent date
+    const existing = metricDates.get(snapshot.metric_name);
+    if (!existing || snapshot.snapshot_date > existing) {
+      metricDates.set(snapshot.metric_name, snapshot.snapshot_date);
+    }
+  }
+
+  return Array.from(metricValues.entries()).map(([metric_name, values]) => ({
+    id: `all_${metric_name}`,
+    cohort_id: '__all__',
+    metric_name,
+    actual_value: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
+    snapshot_date: metricDates.get(metric_name) || '',
+    notes: `Average across ${values.length} cohort(s)`,
+    created_at: '',
+  }));
+}
+
+/**
+ * Get all unique success targets across all cohorts (global + cohort-specific, deduplicated by metric_name).
+ */
+export async function getAllSuccessTargets(): Promise<SuccessTarget[]> {
+  const { data, error } = await supabase
+    .from('success_targets')
+    .select('*')
+    .eq('is_active', true)
+    .order('metric_category', { ascending: true })
+    .order('metric_name', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching all success targets:', error);
+    throw error;
+  }
+
+  // Deduplicate by metric_name, preferring global targets (cohort_id is null)
+  const byName = new Map<string, SuccessTarget>();
+  for (const target of data || []) {
+    if (!byName.has(target.metric_name) || target.cohort_id === null) {
+      byName.set(target.metric_name, target);
+    }
+  }
+  return Array.from(byName.values());
+}
+
+/**
+ * Get metrics with status aggregated across all cohorts.
+ */
+export async function getMetricsWithStatusAllCohorts(): Promise<MetricWithStatus[]> {
+  const [targets, snapshots] = await Promise.all([
+    getAllSuccessTargets(),
+    getLatestSnapshotsAllCohorts(),
+  ]);
+
+  const snapshotMap = new Map(snapshots.map(s => [s.metric_name, s]));
+
+  return targets.map(target => {
+    const snapshot = snapshotMap.get(target.metric_name);
+    const latestValue = snapshot?.actual_value;
+    const status = latestValue !== undefined
+      ? calculateMetricStatus(latestValue, target)
+      : 'no_data' as const;
+    const percentOfTarget = latestValue !== undefined
+      ? calculatePercentOfTarget(latestValue, target)
+      : 0;
+
+    return {
+      target,
+      latestValue,
+      latestDate: snapshot?.snapshot_date,
+      status,
+      percentOfTarget,
+    };
+  });
+}
+
+/**
+ * Get dashboard summary aggregated across all cohorts.
+ */
+export async function getMetricsDashboardSummaryAllCohorts(): Promise<MetricsDashboardSummary> {
+  const metricsWithStatus = await getMetricsWithStatusAllCohorts();
+
+  const categories: MetricCategory[] = ['engagement', 'satisfaction', 'completion', 'retention'];
+  const categorySummaries: CategorySummary[] = categories.map(category => {
+    const categoryMetrics = metricsWithStatus.filter(m => m.target.metric_category === category);
+    const onTrack = categoryMetrics.filter(m => m.status === 'on_track').length;
+    const warning = categoryMetrics.filter(m => m.status === 'warning').length;
+    const critical = categoryMetrics.filter(m => m.status === 'critical').length;
+    const noData = categoryMetrics.filter(m => m.status === 'no_data').length;
+    const metricsWithValues = categoryMetrics.filter(m => m.status !== 'no_data');
+    const avgPerformance = metricsWithValues.length > 0
+      ? metricsWithValues.reduce((sum, m) => sum + m.percentOfTarget, 0) / metricsWithValues.length
+      : 0;
+    return { category, totalMetrics: categoryMetrics.length, onTrack, warning, critical, noData, averagePerformance: Math.round(avgPerformance) };
+  });
+
+  const onTrack = metricsWithStatus.filter(m => m.status === 'on_track');
+  const warning = metricsWithStatus.filter(m => m.status === 'warning');
+  const critical = metricsWithStatus.filter(m => m.status === 'critical');
+  const noData = metricsWithStatus.filter(m => m.status === 'no_data');
+
+  const metricsWithData = metricsWithStatus.filter(m => m.status !== 'no_data');
+  const sorted = [...metricsWithData].sort((a, b) => b.percentOfTarget - a.percentOfTarget);
+  const topPerformers = sorted.slice(0, 3);
+  const needsAttention = [...metricsWithData]
+    .filter(m => m.status === 'critical' || m.status === 'warning')
+    .sort((a, b) => a.percentOfTarget - b.percentOfTarget)
+    .slice(0, 3);
+
+  return {
+    totalMetrics: metricsWithStatus.length,
+    onTrack: onTrack.length,
+    warning: warning.length,
+    critical: critical.length,
+    noData: noData.length,
+    categorySummaries,
+    topPerformers,
+    needsAttention,
+  };
+}
+
+/**
+ * Get trend data for a metric aggregated across all cohorts.
+ */
+export async function getMetricTrendAllCohorts(
+  metricName: string,
+  days: number = 30
+): Promise<TrendDataPoint[]> {
+  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0];
+
+  const { data, error } = await supabase
+    .from('metric_snapshots')
+    .select('*')
+    .eq('metric_name', metricName)
+    .gte('snapshot_date', startDate)
+    .order('snapshot_date', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching all-cohorts trend:', error);
+    return [];
+  }
+
+  const targets = await getSuccessTargets();
+  const target = targets.find(t => t.metric_name === metricName);
+
+  // Average values per date across cohorts
+  const dateValues = new Map<string, number[]>();
+  for (const snapshot of data || []) {
+    const values = dateValues.get(snapshot.snapshot_date) || [];
+    values.push(snapshot.actual_value);
+    dateValues.set(snapshot.snapshot_date, values);
+  }
+
+  return Array.from(dateValues.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, values]) => ({
+      date,
+      value: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
+      target: target?.target_value,
+    }));
 }

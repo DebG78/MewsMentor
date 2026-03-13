@@ -93,7 +93,7 @@ export default function PeopleAnalytics() {
   // Demographic filters
   const [deptFilter, setDeptFilter] = useState('');
   const [gradeFilter, setGradeFilter] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
+
 
   useEffect(() => {
     loadData();
@@ -116,46 +116,40 @@ export default function PeopleAnalytics() {
   const filterOptions = useMemo(() => {
     const depts = new Set<string>();
     const grades = new Set<string>();
-    const locs = new Set<string>();
     cohorts.forEach(c => {
       [...c.mentees, ...c.mentors].forEach(p => {
         if (p.department) depts.add(p.department);
         if (p.job_grade) grades.add(p.job_grade);
-        if (p.location_timezone) locs.add(p.location_timezone);
       });
     });
     return {
       departments: [...depts].sort(),
       grades: [...grades].sort(),
-      locations: [...locs].sort(),
     };
   }, [cohorts]);
 
-  const activeFilterCount = [deptFilter, gradeFilter, locationFilter].filter(Boolean).length;
+  const activeFilterCount = [deptFilter, gradeFilter].filter(Boolean).length;
 
   // Apply demographic filters to create filtered cohort views
   const filteredCohorts = useMemo(() => {
-    if (!deptFilter && !gradeFilter && !locationFilter) return cohorts;
+    if (!deptFilter && !gradeFilter) return cohorts;
     return cohorts.map(c => ({
       ...c,
       mentees: c.mentees.filter(m =>
         (!deptFilter || m.department === deptFilter) &&
-        (!gradeFilter || m.job_grade === gradeFilter) &&
-        (!locationFilter || m.location_timezone === locationFilter)
+        (!gradeFilter || m.job_grade === gradeFilter)
       ),
       mentors: c.mentors.filter(m =>
         (!deptFilter || m.department === deptFilter) &&
-        (!gradeFilter || m.job_grade === gradeFilter) &&
-        (!locationFilter || m.location_timezone === locationFilter)
+        (!gradeFilter || m.job_grade === gradeFilter)
       ),
     }));
-  }, [cohorts, deptFilter, gradeFilter, locationFilter]);
+  }, [cohorts, deptFilter, gradeFilter]);
 
   // Organisation distribution data (always uses unfiltered cohorts)
   const orgData = useMemo(() => {
     const deptMap = new Map<string, { department: string; mentees: number; mentors: number }>();
     const gradeMap = new Map<string, { grade: string; mentees: number; mentors: number }>();
-    const locMap = new Map<string, { location: string; mentees: number; mentors: number }>();
 
     cohorts.forEach(c => {
       c.mentees.forEach(m => {
@@ -169,11 +163,6 @@ export default function PeopleAnalytics() {
           e.mentees++;
           gradeMap.set(m.job_grade, e);
         }
-        if (m.location_timezone) {
-          const e = locMap.get(m.location_timezone) || { location: m.location_timezone, mentees: 0, mentors: 0 };
-          e.mentees++;
-          locMap.set(m.location_timezone, e);
-        }
       });
       c.mentors.forEach(m => {
         if (m.department) {
@@ -186,18 +175,12 @@ export default function PeopleAnalytics() {
           e.mentors++;
           gradeMap.set(m.job_grade, e);
         }
-        if (m.location_timezone) {
-          const e = locMap.get(m.location_timezone) || { location: m.location_timezone, mentees: 0, mentors: 0 };
-          e.mentors++;
-          locMap.set(m.location_timezone, e);
-        }
       });
     });
 
     return {
       departments: [...deptMap.values()].sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors)),
       grades: [...gradeMap.values()].sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors)),
-      locations: [...locMap.values()].sort((a, b) => (b.mentees + b.mentors) - (a.mentees + a.mentors)),
     };
   }, [cohorts]);
 
@@ -288,7 +271,7 @@ export default function PeopleAnalytics() {
       </div>
 
       {/* Demographic Filters */}
-      {(filterOptions.departments.length > 1 || filterOptions.grades.length > 1 || filterOptions.locations.length > 1) && (
+      {(filterOptions.departments.length > 1 || filterOptions.grades.length > 1) && (
         <Card className="p-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -321,25 +304,12 @@ export default function PeopleAnalytics() {
                 </SelectContent>
               </Select>
             )}
-            {filterOptions.locations.length > 1 && (
-              <Select value={locationFilter} onValueChange={v => setLocationFilter(v === '_all' ? '' : v)}>
-                <SelectTrigger className="w-44 h-9 text-sm">
-                  <SelectValue placeholder="All Locations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_all">All Locations</SelectItem>
-                  {filterOptions.locations.map(l => (
-                    <SelectItem key={l} value={l}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             {activeFilterCount > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-9 text-sm"
-                onClick={() => { setDeptFilter(''); setGradeFilter(''); setLocationFilter(''); }}
+                onClick={() => { setDeptFilter(''); setGradeFilter(''); }}
               >
                 <X className="w-4 h-4 mr-1" /> Clear ({activeFilterCount})
               </Button>
@@ -524,30 +494,6 @@ export default function PeopleAnalytics() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Location Distribution</CardTitle>
-                <CardDescription>Mentee and mentor counts by location</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {orgData.locations.length > 0 ? (
-                  <ChartContainer config={orgChartConfig} className="h-[300px] w-full">
-                    <BarChart data={orgData.locations} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" allowDecimals={false} fontSize={12} />
-                      <YAxis type="category" dataKey="location" width={140} fontSize={11} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="mentees" fill="var(--color-mentees)" radius={[0, 4, 4, 0]} />
-                      <Bar dataKey="mentors" fill="var(--color-mentors)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                    No location data available
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 

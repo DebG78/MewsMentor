@@ -47,6 +47,7 @@ import {
   Edit,
   UserCheck,
   UserX,
+  Calculator,
 } from 'lucide-react';
 import {
   PieChart,
@@ -82,6 +83,7 @@ import {
   deleteVIPRule,
 } from '@/lib/vipService';
 import { getAllCohorts } from '@/lib/supabaseService';
+import { computeAndStoreVIPScores } from '@/lib/vipComputeService';
 import { cn } from '@/lib/utils';
 import { PageHeader } from "@/components/admin/PageHeader";
 
@@ -112,12 +114,13 @@ export default function VIPManagement() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isApplyingRules, setIsApplyingRules] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   // Filter
   const [filterType, setFilterType] = useState<'all' | 'vip' | 'non_vip'>('all');
 
   // Selected participant for radar chart
-  const [selectedParticipant, setSelectedParticipant] = useState<string>('');
+  const [selectedParticipant, setSelectedParticipant] = useState<string>('__none__');
 
   // Rule dialog
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -168,7 +171,7 @@ export default function VIPManagement() {
     const avgResponse = scores.reduce((s, sc) => s + sc.response_score, 0) / scores.length;
     const avgFeedback = scores.reduce((s, sc) => s + sc.feedback_score, 0) / scores.length;
 
-    const selected = selectedParticipant
+    const selected = selectedParticipant !== '__none__'
       ? scores.find(s => s.id === selectedParticipant)
       : null;
 
@@ -257,10 +260,13 @@ export default function VIPManagement() {
 
     setIsApplyingRules(true);
     try {
-      await applyVIPRules(selectedCohort);
+      const results = await applyVIPRules(selectedCohort);
+      const totalEvaluated = results.length;
+      const vipCount = results.filter(s => s.is_vip).length;
+      const manualOverrides = results.filter(s => s.manual_vip_override).length;
       toast({
-        title: 'Success',
-        description: 'VIP rules applied successfully',
+        title: 'VIP Rules Applied',
+        description: `${totalEvaluated} participants evaluated: ${vipCount} flagged as VIP, ${totalEvaluated - vipCount} not VIP. ${manualOverrides > 0 ? `${manualOverrides} manual override(s) preserved.` : ''}`,
       });
       loadData();
     } catch (error) {
@@ -271,6 +277,28 @@ export default function VIPManagement() {
       });
     } finally {
       setIsApplyingRules(false);
+    }
+  };
+
+  const handleRecalculateScores = async () => {
+    if (!selectedCohort) return;
+
+    setIsRecalculating(true);
+    try {
+      const result = await computeAndStoreVIPScores(selectedCohort);
+      toast({
+        title: 'Scores Recalculated',
+        description: `${result.computed} participant scores computed from live data (sessions, check-ins, surveys).${result.errors.length > 0 ? ` ${result.errors.length} error(s).` : ''}`,
+      });
+      loadData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to recalculate VIP scores',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRecalculating(false);
     }
   };
 
@@ -410,14 +438,24 @@ export default function VIPManagement() {
         title="VIP Management"
         description="Track engagement scores and manage VIP status"
         actions={
-          <Button onClick={handleApplyRules} disabled={isApplyingRules}>
-            {isApplyingRules ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            Apply VIP Rules
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleRecalculateScores} disabled={isRecalculating || !selectedCohort}>
+              {isRecalculating ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Calculator className="w-4 h-4 mr-2" />
+              )}
+              Recalculate Scores
+            </Button>
+            <Button onClick={handleApplyRules} disabled={isApplyingRules || !selectedCohort}>
+              {isApplyingRules ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Apply VIP Rules
+            </Button>
+          </div>
         }
       />
 
@@ -579,7 +617,7 @@ export default function VIPManagement() {
                   <CardHeader>
                     <CardTitle className="text-base">Score Components</CardTitle>
                     <CardDescription>
-                      {selectedParticipant ? 'Participant vs cohort average' : 'Cohort average across components'}
+                      {selectedParticipant !== '__none__' ? 'Participant vs cohort average' : 'Cohort average across components'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -589,7 +627,7 @@ export default function VIPManagement() {
                           <SelectValue placeholder="Select participant to compare" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Cohort Average Only</SelectItem>
+                          <SelectItem value="__none__">Cohort Average Only</SelectItem>
                           {scores.slice(0, 20).map(s => (
                             <SelectItem key={s.id} value={s.id}>
                               {s.person_id.slice(0, 8)}... ({s.person_type}) - {s.total_score.toFixed(0)}pts
@@ -610,7 +648,7 @@ export default function VIPManagement() {
                           fill="var(--color-average)"
                           fillOpacity={0.2}
                         />
-                        {selectedParticipant && (
+                        {selectedParticipant !== '__none__' && (
                           <Radar
                             name="Participant"
                             dataKey="participant"
