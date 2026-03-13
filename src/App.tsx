@@ -10,7 +10,6 @@ import MentoringCohorts from "./pages/admin/MentoringCohorts";
 import CohortDetail from "./pages/admin/CohortDetail";
 import MentoringUnassigned from "./pages/admin/MentoringUnassigned";
 import MentoringSessions from "./pages/admin/MentoringSessions";
-import MatchingModelManager from "./pages/admin/MatchingModelManager";
 import CohortRunbook from "./pages/admin/CohortRunbook";
 import SuccessMetricsDashboard from "./pages/admin/SuccessMetricsDashboard";
 import VIPManagement from "./pages/admin/VIPManagement";
@@ -18,6 +17,7 @@ import PeopleProfiles from "./pages/admin/PeopleProfiles";
 import PeopleAnalytics from "./pages/admin/PeopleAnalytics";
 import CohortComparison from "./pages/admin/CohortComparison";
 import MatchQualityAnalytics from "./pages/admin/MatchQualityAnalytics";
+import SessionAnalytics from "./pages/admin/SessionAnalytics";
 
 import NotFound from "./pages/NotFound";
 import { UserProvider } from "./contexts/UserContext";
@@ -102,16 +102,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/admin/mentoring/matching-models"
-                element={
-                  <ProtectedRoute>
-                    <AdminLayout>
-                      <MatchingModelManager />
-                    </AdminLayout>
-                  </ProtectedRoute>
-                }
-              />
+              {/* Matching Models moved to Settings ?tab=matching-models */}
               <Route
                 path="/admin/mentoring/runbook/:cohortId?"
                 element={
@@ -160,6 +151,17 @@ const App = () => (
                   <ProtectedRoute>
                     <AdminLayout>
                       <MatchQualityAnalytics />
+                    </AdminLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/admin/analytics/sessions"
+                element={
+                  <ProtectedRoute>
+                    <AdminLayout>
+                      <SessionAnalytics />
                     </AdminLayout>
                   </ProtectedRoute>
                 }

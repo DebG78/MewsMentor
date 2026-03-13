@@ -52,7 +52,7 @@ import {
 } from '@/lib/matchingModelService';
 import { PageHeader } from '@/components/admin/PageHeader';
 
-export default function MatchingModelManager() {
+export default function MatchingModelManager({ embedded = false }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
   const [models, setModels] = useState<MatchingModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -269,54 +269,56 @@ export default function MatchingModelManager() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Matching Models"
-        description="Configure matching algorithms with versioned criteria and rules"
-        actions={
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                New Model
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Matching Model</DialogTitle>
-                <DialogDescription>
-                  Create a new matching model with default weights and filters
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Model Name</Label>
-                  <Input
-                    id="name"
-                    value={newModelName}
-                    onChange={(e) => setNewModelName(e.target.value)}
-                    placeholder="e.g., Q2 2026 Matching Model"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={newModelDescription}
-                    onChange={(e) => setNewModelDescription(e.target.value)}
-                    placeholder="Describe the purpose of this matching model..."
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  Cancel
+      {!embedded && (
+        <PageHeader
+          title="Matching Models"
+          description="Configure matching algorithms with versioned criteria and rules"
+          actions={
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Model
                 </Button>
-                <Button onClick={handleCreateModel}>Create</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        }
-      />
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Matching Model</DialogTitle>
+                  <DialogDescription>
+                    Create a new matching model with default weights and filters
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Model Name</Label>
+                    <Input
+                      id="name"
+                      value={newModelName}
+                      onChange={(e) => setNewModelName(e.target.value)}
+                      placeholder="e.g., Q2 2026 Matching Model"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={newModelDescription}
+                      onChange={(e) => setNewModelDescription(e.target.value)}
+                      placeholder="Describe the purpose of this matching model..."
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateModel}>Create</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          }
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -327,21 +329,67 @@ export default function MatchingModelManager() {
                 Manage matching models and their versions
               </CardDescription>
             </div>
-            {models.some((m) => m.status === 'archived') && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowArchived(!showArchived)}
-                className="text-muted-foreground"
-              >
-                {showArchived ? (
-                  <EyeOff className="w-4 h-4 mr-2" />
-                ) : (
-                  <Eye className="w-4 h-4 mr-2" />
-                )}
-                {showArchived ? 'Hide' : 'Show'} archived ({models.filter((m) => m.status === 'archived').length})
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {models.some((m) => m.status === 'archived') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowArchived(!showArchived)}
+                  className="text-muted-foreground"
+                >
+                  {showArchived ? (
+                    <EyeOff className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Eye className="w-4 h-4 mr-2" />
+                  )}
+                  {showArchived ? 'Hide' : 'Show'} archived ({models.filter((m) => m.status === 'archived').length})
+                </Button>
+              )}
+              {embedded && (
+                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      New Model
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create Matching Model</DialogTitle>
+                      <DialogDescription>
+                        Create a new matching model with default weights and filters
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Model Name</Label>
+                        <Input
+                          id="name"
+                          value={newModelName}
+                          onChange={(e) => setNewModelName(e.target.value)}
+                          placeholder="e.g., Q2 2026 Matching Model"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="description">Description</Label>
+                        <Textarea
+                          id="description"
+                          value={newModelDescription}
+                          onChange={(e) => setNewModelDescription(e.target.value)}
+                          placeholder="Describe the purpose of this matching model..."
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleCreateModel}>Create</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>

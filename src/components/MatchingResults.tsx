@@ -324,7 +324,7 @@ export function MatchingResults({ importedData, cohort, onMatchesApproved, onCoh
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription className="text-sm">
                 No active models.{" "}
-                <a href="/admin/mentoring/matching-models" className="underline font-medium">
+                <a href="/admin/settings?tab=matching-models" className="underline font-medium">
                   Configure one
                 </a>
               </AlertDescription>

@@ -20,6 +20,7 @@ export interface SessionRow {
   mentee_rating: number | null;
   mentor_feedback: string | null;
   mentee_feedback: string | null;
+  journey_phase: string | null;
   logged_by: string | null;
   created_at: string;
   updated_at: string;
@@ -336,4 +337,117 @@ export function computeRatingDistribution(sessions: SessionRow[]): { rating: str
   }
 
   return dist;
+}
+
+// ============================================================================
+// SESSION ANALYTICS BY JOURNEY STAGE
+// ============================================================================
+
+export async function getAllSessions(): Promise<SessionRow[]> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*')
+    .order('scheduled_datetime', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching all sessions:', error);
+    throw error;
+  }
+  return data || [];
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  getting_started: 'Getting Started',
+  building: 'Building',
+  midpoint: 'Midpoint',
+  wrapping_up: 'Wrapping Up',
+};
+
+export interface RatingByStage {
+  phase: string;
+  label: string;
+  avgRating: number | null;
+  sessionCount: number;
+}
+
+export function computeRatingsByJourneyStage(sessions: SessionRow[]): RatingByStage[] {
+  const phaseMap = new Map<string, { ratings: number[]; count: number }>();
+
+  for (const s of sessions) {
+    const phase = s.journey_phase || 'unknown';
+    if (!phaseMap.has(phase)) phaseMap.set(phase, { ratings: [], count: 0 });
+    const entry = phaseMap.get(phase)!;
+    entry.count++;
+    // Use mentee_rating (from log-session form) or mentor_rating
+    if (s.mentee_rating !== null) entry.ratings.push(s.mentee_rating);
+    if (s.mentor_rating !== null) entry.ratings.push(s.mentor_rating);
+  }
+
+  return Array.from(phaseMap.entries()).map(([phase, data]) => ({
+    phase,
+    label: PHASE_LABELS[phase] || 'Not Specified',
+    avgRating: data.ratings.length > 0
+      ? Math.round((data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length) * 10) / 10
+      : null,
+    sessionCount: data.count,
+  }));
+}
+
+export interface FeedbackByStage {
+  phase: string;
+  label: string;
+  totalSessions: number;
+  withFeedback: number;
+  feedbackRate: number;
+  recentFeedback: string[];
+}
+
+export function computeFeedbackByStage(sessions: SessionRow[]): FeedbackByStage[] {
+  const phaseMap = new Map<string, { total: number; withFeedback: number; feedback: string[] }>();
+
+  for (const s of sessions) {
+    const phase = s.journey_phase || 'unknown';
+    if (!phaseMap.has(phase)) phaseMap.set(phase, { total: 0, withFeedback: 0, feedback: [] });
+    const entry = phaseMap.get(phase)!;
+    entry.total++;
+    const fb = s.mentee_feedback || s.mentor_feedback;
+    if (fb && fb.trim().length > 0) {
+      entry.withFeedback++;
+      entry.feedback.push(fb);
+    }
+  }
+
+  return Array.from(phaseMap.entries()).map(([phase, data]) => ({
+    phase,
+    label: PHASE_LABELS[phase] || 'Not Specified',
+    totalSessions: data.total,
+    withFeedback: data.withFeedback,
+    feedbackRate: data.total > 0 ? Math.round((data.withFeedback / data.total) * 100) : 0,
+    recentFeedback: data.feedback.slice(0, 5),
+  }));
+}
+
+export interface ResponseRates {
+  totalSessions: number;
+  withRating: number;
+  withFeedback: number;
+  ratingRate: number;
+  feedbackRate: number;
+}
+
+export function computeResponseRates(sessions: SessionRow[]): ResponseRates {
+  const total = sessions.length;
+  const withRating = sessions.filter(s => s.mentee_rating !== null || s.mentor_rating !== null).length;
+  const withFeedback = sessions.filter(s =>
+    (s.mentee_feedback && s.mentee_feedback.trim().length > 0) ||
+    (s.mentor_feedback && s.mentor_feedback.trim().length > 0)
+  ).length;
+
+  return {
+    totalSessions: total,
+    withRating,
+    withFeedback,
+    ratingRate: total > 0 ? Math.round((withRating / total) * 100) : 0,
+    feedbackRate: total > 0 ? Math.round((withFeedback / total) * 100) : 0,
+  };
 }

@@ -11,6 +11,7 @@ import {
   BarChart3,
   MessageSquare,
   Download,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadUploadTemplate } from "@/lib/templateDownload";
@@ -19,12 +20,13 @@ import { SurveyMigrationHelper } from "@/components/SurveyMigrationHelper";
 import { HelpGuide } from "@/components/HelpGuide";
 import { AnalyticsHelpGuide } from "@/components/AnalyticsHelpGuide";
 import MessageTemplates from "./admin/MessageTemplates";
+import MatchingModelManager from "./admin/MatchingModelManager";
 import { PageHeader } from "@/components/admin/PageHeader";
 
 const Settings = () => {
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(tabFromUrl || "survey-templates");
+  const [activeTab, setActiveTab] = useState(tabFromUrl || "matching-models");
 
   useEffect(() => {
     if (tabFromUrl) {
@@ -33,6 +35,12 @@ const Settings = () => {
   }, [tabFromUrl]);
 
   const settingsCategories = [
+    {
+      id: "matching-models",
+      title: "Matching Models",
+      icon: Settings2,
+      description: "Configure matching algorithms and scoring weights"
+    },
     {
       id: "survey-templates",
       title: "Survey Templates",
@@ -90,7 +98,7 @@ const Settings = () => {
 
       {/* Settings Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-auto p-1">
+            <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 h-auto p-1">
               {settingsCategories.map((category) => (
                 <TabsTrigger
                   key={category.id}
@@ -110,6 +118,11 @@ const Settings = () => {
                 </TabsTrigger>
               ))}
             </TabsList>
+
+            {/* Matching Models */}
+            <TabsContent value="matching-models" className="space-y-6">
+              <MatchingModelManager embedded />
+            </TabsContent>
 
             {/* Survey Templates */}
             <TabsContent value="survey-templates" className="space-y-6">
