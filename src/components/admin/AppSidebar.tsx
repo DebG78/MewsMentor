@@ -142,9 +142,9 @@ export function AppSidebar() {
             >
               <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip="Mentoring Program">
+                  <SidebarMenuButton tooltip="Mentoring Programs">
                     <Target />
-                    <span>Mentoring Program</span>
+                    <span>Mentoring Programs</span>
                     <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/mentoring:rotate-90" />
                   </SidebarMenuButton>
                 </CollapsibleTrigger>
