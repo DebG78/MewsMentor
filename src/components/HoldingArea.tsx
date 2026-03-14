@@ -201,10 +201,7 @@ export function HoldingArea() {
     });
   };
 
-  const formatTopics = (topics: string[]) => {
-    if (topics.length <= 2) return topics.join(', ');
-    return `${topics.slice(0, 2).join(', ')} +${topics.length - 2} more`;
-  };
+
 
   const term = searchTerm.toLowerCase();
   const filteredMentees = term
@@ -344,7 +341,6 @@ export function HoldingArea() {
                       <TableHead>Role</TableHead>
                       <TableHead>Experience</TableHead>
                       <TableHead>Location</TableHead>
-                      <TableHead>Topics</TableHead>
                       <TableHead>Signed Up</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -367,9 +363,6 @@ export function HoldingArea() {
                         <TableCell>{mentee.role}</TableCell>
                         <TableCell>{mentee.experience_years} years</TableCell>
                         <TableCell className="max-w-32 truncate">{mentee.location_timezone}</TableCell>
-                        <TableCell className="max-w-48">
-                          <div className="text-sm">{formatTopics(mentee.topics_to_learn)}</div>
-                        </TableCell>
                         <TableCell>{formatDate(mentee.created_at)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -466,7 +459,6 @@ export function HoldingArea() {
                       <TableHead>Role</TableHead>
                       <TableHead>Experience</TableHead>
                       <TableHead>Location</TableHead>
-                      <TableHead>Topics</TableHead>
                       <TableHead>Capacity</TableHead>
                       <TableHead>Signed Up</TableHead>
                       <TableHead>Actions</TableHead>
@@ -490,9 +482,6 @@ export function HoldingArea() {
                         <TableCell>{mentor.role}</TableCell>
                         <TableCell>{mentor.experience_years} years</TableCell>
                         <TableCell className="max-w-32 truncate">{mentor.location_timezone}</TableCell>
-                        <TableCell className="max-w-48">
-                          <div className="text-sm">{formatTopics(mentor.topics_to_mentor)}</div>
-                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">{mentor.capacity_remaining} slots</Badge>
                         </TableCell>

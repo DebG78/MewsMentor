@@ -906,7 +906,7 @@ export default function CohortRunbook() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Timeline visualization */}
           <Card>
             <CardHeader className="pb-2">

@@ -1184,7 +1184,8 @@ export default function CohortDetail() {
                     return (
                       <TableRow
                         key={index}
-                        className={isAtCapacity ? "opacity-50 bg-gray-50" : ""}
+                        className={`cursor-pointer hover:bg-muted/50 ${isAtCapacity ? "opacity-50 bg-gray-50" : ""}`}
+                        onClick={() => setViewingProfile({ profile: mentor, type: 'mentor' })}
                       >
                         <TableCell className="font-medium">
                           {toDisplayName(mentor.name || mentor.id)}
@@ -1209,7 +1210,7 @@ export default function CohortDetail() {
                             {remaining}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
@@ -1217,10 +1218,6 @@ export default function CohortDetail() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setViewingProfile({ profile: mentor, type: 'mentor' })}>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Profile
-                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setEditingProfile({ profile: mentor, type: 'mentor' })}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit Profile
@@ -1270,7 +1267,11 @@ export default function CohortDetail() {
                     .map((mentee, index) => {
                     const hasMatch = matchedMenteeIds.has(mentee.id);
                     return (
-                      <TableRow key={index}>
+                      <TableRow
+                        key={index}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setViewingProfile({ profile: mentee, type: 'mentee' })}
+                      >
                         <TableCell className="font-medium">{toDisplayName(mentee.name || mentee.id)}</TableCell>
                         <TableCell>{mentee.role}</TableCell>
                         <TableCell>{mentee.location_timezone}</TableCell>
@@ -1284,7 +1285,7 @@ export default function CohortDetail() {
                             <Badge variant="secondary">Unmatched</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
@@ -1292,10 +1293,6 @@ export default function CohortDetail() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setViewingProfile({ profile: mentee, type: 'mentee' })}>
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Profile
-                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setEditingProfile({ profile: mentee, type: 'mentee' })}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit Profile

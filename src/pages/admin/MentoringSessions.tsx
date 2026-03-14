@@ -14,14 +14,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Table,
   TableBody,
   TableCell,
@@ -32,7 +24,6 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Plus,
   Loader2,
   Calendar,
   CheckCircle,
@@ -42,6 +33,7 @@ import {
   Users,
   TrendingUp,
   BarChart3,
+  AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from "@/components/admin/PageHeader";
 import {
@@ -53,7 +45,6 @@ import {
 } from 'recharts';
 import {
   getSessionsByCohort,
-  createSession,
   updateSession,
   completeSession,
   getSessionStats,
@@ -98,14 +89,6 @@ export default function MentoringSessions() {
   const [gradeFilter, setGradeFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
 
-  // Create dialog
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [formMentorId, setFormMentorId] = useState('');
-  const [formMenteeId, setFormMenteeId] = useState('');
-  const [formTitle, setFormTitle] = useState('');
-  const [formDate, setFormDate] = useState('');
-  const [formDuration, setFormDuration] = useState('60');
-  const [formNotes, setFormNotes] = useState('');
 
   // Person lookup for demographic filtering and name display
   const personLookup = useMemo(() => {
@@ -159,6 +142,42 @@ export default function MentoringSessions() {
     return list;
   }, [sessions, filterStatus, deptFilter, gradeFilter, locationFilter, personLookup]);
 
+  // Pairs on track: pairs with 4+ completed sessions
+  const pairsOnTrack = useMemo(() => {
+    const allPairs = computePairSessionSummaries(sessions);
+    const onTrack = allPairs.filter(p => p.completedCount >= 4).length;
+    return { onTrack, total: allPairs.length };
+  }, [sessions]);
+
+  // Matched pairs with no sessions logged
+  const noSessionPairs = useMemo(() => {
+    const cohort = cohorts.find(c => c.id === selectedCohort);
+    if (!cohort) return [];
+
+    // Get all matched pairs from cohort
+    const matchedPairs: Array<{ mentee_id: string; mentor_id: string }> = [];
+    if (cohort.matches?.results) {
+      for (const result of cohort.matches.results) {
+        if (result.proposed_assignment?.mentor_id) {
+          matchedPairs.push({ mentee_id: result.mentee_id, mentor_id: result.proposed_assignment.mentor_id });
+        }
+      }
+    }
+    if (cohort.manual_matches?.matches) {
+      const existing = new Set(matchedPairs.map(p => `${p.mentee_id}:${p.mentor_id}`));
+      for (const match of cohort.manual_matches.matches) {
+        const key = `${match.mentee_id}:${match.mentor_id}`;
+        if (!existing.has(key)) {
+          matchedPairs.push({ mentee_id: match.mentee_id, mentor_id: match.mentor_id });
+        }
+      }
+    }
+
+    // Find pairs with zero sessions
+    const sessionPairKeys = new Set(sessions.map(s => `${s.mentor_id}:${s.mentee_id}`));
+    return matchedPairs.filter(p => !sessionPairKeys.has(`${p.mentor_id}:${p.mentee_id}`));
+  }, [cohorts, selectedCohort, sessions]);
+
   // Computed chart data (from filtered sessions)
   const volumeData = useMemo(() => computeSessionVolume(filteredSessions), [filteredSessions]);
   const pairSummaries = useMemo(() => computePairSessionSummaries(filteredSessions), [filteredSessions]);
@@ -210,29 +229,6 @@ export default function MentoringSessions() {
     }
   };
 
-  const handleCreate = async () => {
-    if (!formMentorId || !formMenteeId || !formTitle || !formDate) {
-      toast({ title: 'Error', description: 'Fill in all required fields', variant: 'destructive' });
-      return;
-    }
-    try {
-      await createSession({
-        cohort_id: selectedCohort,
-        mentor_id: formMentorId,
-        mentee_id: formMenteeId,
-        title: formTitle,
-        scheduled_datetime: formDate,
-        duration_minutes: parseInt(formDuration) || 60,
-        notes: formNotes || undefined,
-      });
-      toast({ title: 'Session created' });
-      setIsCreateOpen(false);
-      resetForm();
-      loadData();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to create session', variant: 'destructive' });
-    }
-  };
 
   const handleComplete = async (session: SessionRow) => {
     try {
@@ -254,14 +250,6 @@ export default function MentoringSessions() {
     }
   };
 
-  const resetForm = () => {
-    setFormMentorId('');
-    setFormMenteeId('');
-    setFormTitle('');
-    setFormDate('');
-    setFormDuration('60');
-    setFormNotes('');
-  };
 
   const getStatusBadge = (status: SessionStatus) => {
     switch (status) {
@@ -290,13 +278,7 @@ export default function MentoringSessions() {
         title="Mentoring Sessions"
         description="Track and analyze mentoring sessions across cohorts"
         actions={
-          <div className="flex gap-2">
-            <SessionLogImport onImported={loadData} />
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Session
-            </Button>
-          </div>
+          <SessionLogImport onImported={loadData} />
         }
       />
 
@@ -325,7 +307,7 @@ export default function MentoringSessions() {
         <>
           {/* Summary Cards */}
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
@@ -341,21 +323,11 @@ export default function MentoringSessions() {
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">Completed</p>
-                      <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+                      <p className="text-sm text-muted-foreground">Pairs on Track</p>
+                      <p className="text-3xl font-bold text-green-600">{pairsOnTrack.onTrack}<span className="text-base font-normal text-muted-foreground">/{pairsOnTrack.total}</span></p>
+                      <p className="text-xs text-muted-foreground">4+ sessions completed</p>
                     </div>
-                    <CheckCircle className="w-8 h-8 text-green-500 opacity-50" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Completion Rate</p>
-                      <p className="text-3xl font-bold">{stats.completionRate.toFixed(0)}%</p>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-blue-500 opacity-50" />
+                    <Users className="w-8 h-8 text-green-500 opacity-50" />
                   </div>
                 </CardContent>
               </Card>
@@ -384,6 +356,12 @@ export default function MentoringSessions() {
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="sessions">All Sessions</TabsTrigger>
               <TabsTrigger value="pairs">Pair Analysis</TabsTrigger>
+              <TabsTrigger value="no-sessions">
+                No Sessions
+                {noSessionPairs.length > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-xs">{noSessionPairs.length}</Badge>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -683,82 +661,47 @@ export default function MentoringSessions() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* No Sessions Tab */}
+            <TabsContent value="no-sessions">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    Pairs with No Sessions
+                  </CardTitle>
+                  <CardDescription>
+                    Matched pairs that have not logged any sessions yet and may need follow-up
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {noSessionPairs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">All pairs have logged at least one session.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mentor</TableHead>
+                          <TableHead>Mentee</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {noSessionPairs.map((pair, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{personLookup.get(pair.mentor_id)?.name || pair.mentor_id}</TableCell>
+                            <TableCell>{personLookup.get(pair.mentee_id)?.name || pair.mentee_id}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </>
       )}
 
-      {/* Create Session Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Schedule Session</DialogTitle>
-            <DialogDescription>
-              Create a new mentoring session
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Title</Label>
-              <Input
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="e.g., Weekly session"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Mentor ID</Label>
-                <Input
-                  value={formMentorId}
-                  onChange={(e) => setFormMentorId(e.target.value)}
-                  placeholder="Enter mentor ID"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Mentee ID</Label>
-                <Input
-                  value={formMenteeId}
-                  onChange={(e) => setFormMenteeId(e.target.value)}
-                  placeholder="Enter mentee ID"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Date & Time</Label>
-                <Input
-                  type="datetime-local"
-                  value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Duration (minutes)</Label>
-                <Input
-                  type="number"
-                  value={formDuration}
-                  onChange={(e) => setFormDuration(e.target.value)}
-                  placeholder="60"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Notes (optional)</Label>
-              <Textarea
-                value={formNotes}
-                onChange={(e) => setFormNotes(e.target.value)}
-                placeholder="Session notes..."
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreate}>Create Session</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
