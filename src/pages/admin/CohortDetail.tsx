@@ -2074,17 +2074,25 @@ export default function CohortDetail() {
                         {!mentee?.primary_capability && mentee?.topics_to_learn && mentee.topics_to_learn.length > 0 && (
                           <div>
                             <div className="text-xs font-medium text-muted-foreground mb-1">Wants to learn:</div>
-                            <div className="flex flex-wrap gap-1">
-                              {mentee.topics_to_learn.map((t, i) => (
-                                <Badge
-                                  key={i}
-                                  variant={sharedTopics.some(st => st.toLowerCase() === t.toLowerCase()) ? "default" : "secondary"}
-                                  className="text-[10px] px-1.5 py-0"
-                                >
-                                  {t}
-                                </Badge>
-                              ))}
-                            </div>
+                            {mentee.topics_to_learn.some(t => t.length > 80) ? (
+                              <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                                {mentee.topics_to_learn.map((t, i) => (
+                                  <li key={i}>{t}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {mentee.topics_to_learn.map((t, i) => (
+                                  <Badge
+                                    key={i}
+                                    variant={sharedTopics.some(st => st.toLowerCase() === t.toLowerCase()) ? "default" : "secondary"}
+                                    className="text-[10px] px-1.5 py-0"
+                                  >
+                                    {t}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {mentee?.preferred_mentor_style && (
@@ -2149,17 +2157,25 @@ export default function CohortDetail() {
                         {!mentor?.primary_capability && mentor?.topics_to_mentor && mentor.topics_to_mentor.length > 0 && (
                           <div>
                             <div className="text-xs font-medium text-muted-foreground mb-1">Can mentor in:</div>
-                            <div className="flex flex-wrap gap-1">
-                              {mentor.topics_to_mentor.map((t, i) => (
-                                <Badge
-                                  key={i}
-                                  variant={sharedTopics.some(st => st.toLowerCase() === t.toLowerCase()) ? "default" : "secondary"}
-                                  className="text-[10px] px-1.5 py-0"
-                                >
-                                  {t}
-                                </Badge>
-                              ))}
-                            </div>
+                            {mentor.topics_to_mentor.some(t => t.length > 80) ? (
+                              <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                                {mentor.topics_to_mentor.map((t, i) => (
+                                  <li key={i}>{t}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {mentor.topics_to_mentor.map((t, i) => (
+                                  <Badge
+                                    key={i}
+                                    variant={sharedTopics.some(st => st.toLowerCase() === t.toLowerCase()) ? "default" : "secondary"}
+                                    className="text-[10px] px-1.5 py-0"
+                                  >
+                                    {t}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {mentor?.mentoring_style && (
@@ -2242,6 +2258,13 @@ export default function CohortDetail() {
                         <CheckCircle className="w-3.5 h-3.5" />
                         {sharedTopics.length} Shared Topic{sharedTopics.length > 1 ? 's' : ''}
                       </div>
+                      {sharedTopics.some(t => t.length > 80) ? (
+                        <ul className="text-xs text-green-800 space-y-1 list-disc list-inside">
+                          {sharedTopics.map((t, i) => (
+                            <li key={i}>{t}</li>
+                          ))}
+                        </ul>
+                      ) : (
                       <div className="flex flex-wrap gap-1">
                         {sharedTopics.map((t, i) => (
                           <Badge key={i} variant="default" className="text-xs bg-green-600">
@@ -2249,6 +2272,7 @@ export default function CohortDetail() {
                           </Badge>
                         ))}
                       </div>
+                      )}
                     </div>
                   )}
 
