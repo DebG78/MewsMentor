@@ -68,9 +68,6 @@ export function AnalyticsTab({ personId, personType }: AnalyticsTabProps) {
 
   // Compute session stats
   const completed = sessions.filter((s) => s.status === "completed");
-  const cancelled = sessions.filter((s) => s.status === "cancelled");
-  const noShow = sessions.filter((s) => s.status === "no_show");
-  const scheduled = sessions.filter((s) => s.status === "scheduled");
 
   const ratingField = personType === "mentee" ? "mentee_rating" : "mentor_rating";
   const partnerRatingField = personType === "mentee" ? "mentor_rating" : "mentee_rating";
@@ -178,28 +175,11 @@ export function AnalyticsTab({ personId, personType }: AnalyticsTabProps) {
             </p>
           ) : (
             <>
-              {/* Status counts */}
-              <div className="grid grid-cols-4 gap-2 mb-4">
-                <StatCard
-                  icon={<CheckCircle className="w-3.5 h-3.5 text-green-500" />}
-                  label="Completed"
-                  value={completed.length}
-                />
-                <StatCard
-                  icon={<Clock className="w-3.5 h-3.5 text-blue-500" />}
-                  label="Scheduled"
-                  value={scheduled.length}
-                />
-                <StatCard
-                  icon={<XCircle className="w-3.5 h-3.5 text-red-500" />}
-                  label="Cancelled"
-                  value={cancelled.length}
-                />
-                <StatCard
-                  icon={<AlertCircle className="w-3.5 h-3.5 text-amber-500" />}
-                  label="No-show"
-                  value={noShow.length}
-                />
+              {/* Session count */}
+              <div className="flex items-center gap-1.5 mb-4 text-sm">
+                <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                <span className="font-medium">{completed.length}</span>
+                <span className="text-muted-foreground">sessions logged</span>
               </div>
 
               {/* Rating averages */}
@@ -277,23 +257,6 @@ function ScoreBar({
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="text-center p-2 rounded-lg bg-muted/50">
-      <div className="flex items-center justify-center mb-1">{icon}</div>
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-[10px] text-muted-foreground">{label}</div>
-    </div>
-  );
-}
 
 function SessionItem({
   session,
