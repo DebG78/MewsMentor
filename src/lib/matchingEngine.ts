@@ -53,6 +53,21 @@ function extractTopicWords(text: string): string[] {
   )];
 }
 
+/**
+ * Check if a mentee and mentor are the same person (dual-role "Both" signup).
+ * Uses slack_user_id (most reliable) then normalized name as fallback.
+ */
+export function isSamePerson(mentee: MenteeData, mentor: MentorData): boolean {
+  if (mentee.slack_user_id && mentor.slack_user_id) {
+    return mentee.slack_user_id === mentor.slack_user_id;
+  }
+  if (mentee.name && mentor.name) {
+    const normalize = (n: string) => n.trim().toLowerCase();
+    return normalize(mentee.name) === normalize(mentor.name);
+  }
+  return false;
+}
+
 // Hard filters implementation
 export function applyHardFilters(
   mentee: MenteeData,
@@ -62,6 +77,11 @@ export function applyHardFilters(
     require_available_capacity: true
   }
 ): boolean {
+  // Self-match prevention: block if mentee and mentor are the same person
+  if (isSamePerson(mentee, mentor)) {
+    return false;
+  }
+
   // Timezone difference filter (>6h = hard block)
   if (mentee.location_timezone && mentor.location_timezone) {
     const timezoneDistance = calculateTimezoneDistance(
@@ -134,6 +154,10 @@ export function applyHardFiltersWithDiagnostics(
   filters: MatchingFilters = { max_timezone_difference: 6, require_available_capacity: true }
 ): { pass: boolean; blockedBy: string[] } {
   const blockedBy: string[] = [];
+
+  if (isSamePerson(mentee, mentor)) {
+    blockedBy.push('Self-match: same person is both mentee and mentor');
+  }
 
   if (mentee.location_timezone && mentor.location_timezone) {
     const dist = calculateTimezoneDistance(mentee.location_timezone, mentor.location_timezone);

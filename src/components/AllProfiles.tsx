@@ -170,14 +170,42 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
     }
   };
 
+  // Detect dual-role participants: same person appears in both mentees and mentors
+  const dualRoleIds = useMemo(() => {
+    const normalize = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+    const menteeIdentifiers = new Set<string>();
+    for (const m of groupedMentees) {
+      if (m.slack_user_id) menteeIdentifiers.add(normalize(m.slack_user_id));
+      if (m.full_name) menteeIdentifiers.add(normalize(m.full_name));
+    }
+    // Map: normalized identifier -> mentor person_id (for cross-referencing in profile detail)
+    const dualMentorIds = new Set<string>();
+    const dualMenteeIds = new Set<string>();
+    for (const m of groupedMentors) {
+      const ids = [normalize(m.slack_user_id), normalize(m.full_name)].filter(Boolean);
+      if (ids.some(id => menteeIdentifiers.has(id))) {
+        dualMentorIds.add(m.person_id);
+        // Find matching mentee
+        for (const mentee of groupedMentees) {
+          const menteeIds = [normalize(mentee.slack_user_id), normalize(mentee.full_name)].filter(Boolean);
+          if (menteeIds.some(id => ids.includes(id))) {
+            dualMenteeIds.add(mentee.person_id);
+            break;
+          }
+        }
+      }
+    }
+    return { menteeIds: dualMenteeIds, mentorIds: dualMentorIds };
+  }, [groupedMentees, groupedMentors]);
+
   // Combined and filtered list
   const allProfiles = useMemo(() => {
-    const mentees: Array<GroupedProfile & { _type: "mentee" | "mentor" }> =
-      groupedMentees.map((p) => ({ ...p, _type: "mentee" as const }));
-    const mentors: Array<GroupedProfile & { _type: "mentee" | "mentor" }> =
-      groupedMentors.map((p) => ({ ...p, _type: "mentor" as const }));
+    const mentees: Array<GroupedProfile & { _type: "mentee" | "mentor"; _isDualRole: boolean }> =
+      groupedMentees.map((p) => ({ ...p, _type: "mentee" as const, _isDualRole: dualRoleIds.menteeIds.has(p.person_id) }));
+    const mentors: Array<GroupedProfile & { _type: "mentee" | "mentor"; _isDualRole: boolean }> =
+      groupedMentors.map((p) => ({ ...p, _type: "mentor" as const, _isDualRole: dualRoleIds.mentorIds.has(p.person_id) }));
     return [...mentees, ...mentors];
-  }, [groupedMentees, groupedMentors]);
+  }, [groupedMentees, groupedMentors, dualRoleIds]);
 
   const searchResults = useMemo(() => {
     if (!searchTerm) return [];
@@ -238,6 +266,23 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
     ? selectedProfile[isMentee ? "mentee_id" : "mentor_id"] || selectedProfile.person_id
     : null;
 
+  // For dual-role profiles, find the other role's person_id for session aggregation
+  const selectedIsDualRole = selectedProfile
+    ? (isMentee ? dualRoleIds.menteeIds.has(selectedProfile.person_id) : dualRoleIds.mentorIds.has(selectedProfile.person_id))
+    : false;
+
+  const dualRoleOtherId = useMemo(() => {
+    if (!selectedProfile || !selectedIsDualRole) return undefined;
+    const normalize = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+    const keys = [normalize(selectedProfile.slack_user_id), normalize(selectedProfile.full_name)].filter(Boolean);
+    const otherList = isMentee ? groupedMentors : groupedMentees;
+    for (const other of otherList) {
+      const otherKeys = [normalize(other.slack_user_id), normalize(other.full_name)].filter(Boolean);
+      if (otherKeys.some(k => keys.includes(k))) return other.person_id;
+    }
+    return undefined;
+  }, [selectedProfile, selectedIsDualRole, isMentee, groupedMentees, groupedMentors]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -267,8 +312,8 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
         </Card>
         <Card>
           <CardContent className="pt-4 text-center">
-            <div className="text-2xl font-bold">{groupedMentees.length + groupedMentors.length}</div>
-            <div className="text-xs text-muted-foreground">Total Profiles</div>
+            <div className="text-2xl font-bold">{groupedMentees.length + groupedMentors.length - dualRoleIds.menteeIds.size}</div>
+            <div className="text-xs text-muted-foreground">Unique People</div>
           </CardContent>
         </Card>
         <Card>
@@ -354,6 +399,11 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                         >
                           {profile._type}
                         </Badge>
+                        {profile._isDualRole && (
+                          <Badge variant="outline" className="text-[10px] shrink-0 border-purple-200 text-purple-700 bg-purple-50">
+                            Both Roles
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground truncate">
                         {profile.business_title || profile.role}
@@ -447,6 +497,11 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
                         <Badge variant={isMentee ? "secondary" : "default"} className="shrink-0">
                           {isMentee ? "Mentee" : "Mentor"}
                         </Badge>
+                        {selectedIsDualRole && (
+                          <Badge variant="outline" className="shrink-0 border-purple-200 text-purple-700 bg-purple-50">
+                            Both Roles
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-0.5 truncate">
                         {selectedProfile.business_title || selectedProfile.role}
@@ -551,7 +606,7 @@ export function AllProfiles({ selectedCohort }: AllProfilesProps) {
             </TabsContent>
 
             <TabsContent value="analytics" className="space-y-4">
-              <AnalyticsTab personId={personId} personType={selectedType} />
+              <AnalyticsTab personId={personId} personType={selectedType} dualRoleId={dualRoleOtherId} />
             </TabsContent>
           </Tabs>
         </>

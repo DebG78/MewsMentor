@@ -106,6 +106,41 @@ export async function getSessionsForPerson(
   return data || [];
 }
 
+/**
+ * Get all sessions for a dual-role person across both their mentee and mentor IDs.
+ * Returns sessions tagged with which role the person held in each session.
+ */
+export async function getAllSessionsForPerson(
+  menteeId: string | null,
+  mentorId: string | null
+): Promise<Array<SessionRow & { role_in_session: 'mentee' | 'mentor' }>> {
+  const results: Array<SessionRow & { role_in_session: 'mentee' | 'mentor' }> = [];
+
+  if (menteeId) {
+    const { data } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('mentee_id', menteeId)
+      .order('scheduled_datetime', { ascending: false });
+    results.push(...(data || []).map(s => ({ ...s, role_in_session: 'mentee' as const })));
+  }
+
+  if (mentorId) {
+    const { data } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('mentor_id', mentorId)
+      .order('scheduled_datetime', { ascending: false });
+    results.push(...(data || []).map(s => ({ ...s, role_in_session: 'mentor' as const })));
+  }
+
+  // Sort combined results by date descending, deduplicate by session id
+  const seen = new Set<string>();
+  return results
+    .sort((a, b) => new Date(b.scheduled_datetime).getTime() - new Date(a.scheduled_datetime).getTime())
+    .filter(s => { if (seen.has(s.id)) return false; seen.add(s.id); return true; });
+}
+
 export async function getSessionsByCohort(cohortId: string): Promise<SessionRow[]> {
   const { data, error } = await supabase
     .from('sessions')

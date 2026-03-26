@@ -164,6 +164,29 @@ Deno.serve(async (req) => {
     const menteeMap = new Map(mentees.map(m => [m.mentee_id, m]));
     const mentorMap = new Map(mentors.map(m => [m.mentor_id, m]));
 
+    // Detect dual-role participants: same slack_user_id appears as both mentee and mentor
+    const menteeSlackIds = new Set(mentees.map(m => m.slack_user_id).filter(Boolean));
+    const mentorSlackIds = new Set(mentors.map(m => m.slack_user_id).filter(Boolean));
+    const dualRoleSlackIds = new Set([...menteeSlackIds].filter(id => mentorSlackIds.has(id)));
+
+    // For dual-role users, build cross-role pair lookups so templates can reference both pairings
+    // e.g. mentee welcome can say "You'll also be mentoring [name]"
+    const dualRoleMentorPairName = new Map<string, string>(); // slack_user_id -> their mentee's name (when acting as mentor)
+    const dualRoleMenteePairName = new Map<string, string>(); // slack_user_id -> their mentor's name (when acting as mentee)
+    if (dualRoleSlackIds.size > 0) {
+      for (const pair of pairs) {
+        const mentee = menteeMap.get(pair.mentee_id);
+        const mentor = mentorMap.get(pair.mentor_id);
+        if (!mentee || !mentor) continue;
+        if (mentee.slack_user_id && dualRoleSlackIds.has(mentee.slack_user_id)) {
+          dualRoleMenteePairName.set(mentee.slack_user_id, mentor.full_name || mentor.first_name || '');
+        }
+        if (mentor.slack_user_id && dualRoleSlackIds.has(mentor.slack_user_id)) {
+          dualRoleMentorPairName.set(mentor.slack_user_id, mentee.full_name || mentee.first_name || '');
+        }
+      }
+    }
+
     // Load already-sent welcome messages for deduplication
     const { data: alreadySent } = await supabaseAdmin
       .from('message_log')
@@ -234,6 +257,9 @@ Deno.serve(async (req) => {
           HARD_EARNED_LESSON: mentor.hard_earned_lesson_summary || mentor.hard_earned_lesson || mentor.meaningful_impact || '',
           MENTOR_MOTIVATION: mentor.mentor_motivation_summary || mentor.mentor_motivation || '',
           MENTORING_EXPERIENCE: mentor.mentoring_experience_summary || mentor.mentoring_experience || '',
+          // Dual-role context: available for templates to acknowledge both roles
+          IS_DUAL_ROLE: mentee.slack_user_id && dualRoleSlackIds.has(mentee.slack_user_id) ? 'true' : '',
+          OTHER_ROLE_PAIR_NAME: mentee.slack_user_id ? (dualRoleMentorPairName.get(mentee.slack_user_id) || '') : '',
         };
 
         const messageText = renderTemplate(menteeTemplate, menteeContext);
@@ -296,6 +322,9 @@ Deno.serve(async (req) => {
           // Include mentee fields so templates can cross-reference
           MENTORING_GOAL: mentee.mentoring_goal_summary || mentee.mentoring_goal || '',
           SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
+          // Dual-role context: available for templates to acknowledge both roles
+          IS_DUAL_ROLE: mentor.slack_user_id && dualRoleSlackIds.has(mentor.slack_user_id) ? 'true' : '',
+          OTHER_ROLE_PAIR_NAME: mentor.slack_user_id ? (dualRoleMenteePairName.get(mentor.slack_user_id) || '') : '',
         };
 
         const messageText = renderTemplate(mentorTemplate, mentorContext);

@@ -30,9 +30,10 @@ interface ProfileModalProps {
   type: 'mentee' | 'mentor';
   isOpen: boolean;
   onClose: () => void;
+  isDualRole?: boolean;
 }
 
-export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalProps) {
+export function ProfileModal({ profile, type, isOpen, onClose, isDualRole }: ProfileModalProps) {
   const [otherCohorts, setOtherCohorts] = useState<OtherCohortInfo[]>([]);
 
   const isMentee = type === 'mentee';
@@ -50,22 +51,40 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
       const table = isMentee ? 'mentees' : 'mentors';
       const idColumn = isMentee ? 'mentee_id' : 'mentor_id';
 
+      // Query the current role's table
       const { data: rows } = await supabase
         .from(table)
         .select('cohort_id')
         .eq(idColumn, personId)
         .neq('cohort_id', currentCohortId || '');
 
-      if (!rows || rows.length === 0) {
+      const cohortIdSet = new Set((rows || []).map((r: any) => r.cohort_id));
+
+      // For dual-role users, also check the other role's table by name/slack_user_id
+      if (isDualRole && profile) {
+        const otherTable = isMentee ? 'mentors' : 'mentees';
+        const lookupField = profile.slack_user_id ? 'slack_user_id' : 'full_name';
+        const lookupValue = profile.slack_user_id || profile.full_name;
+        if (lookupValue) {
+          const { data: otherRows } = await supabase
+            .from(otherTable)
+            .select('cohort_id')
+            .eq(lookupField, lookupValue);
+          for (const r of (otherRows || [])) {
+            if (r.cohort_id !== currentCohortId) cohortIdSet.add(r.cohort_id);
+          }
+        }
+      }
+
+      if (cohortIdSet.size === 0) {
         setOtherCohorts([]);
         return;
       }
 
-      const cohortIds = rows.map((r: any) => r.cohort_id);
       const { data: cohorts } = await supabase
         .from('cohorts')
         .select('id, name, status')
-        .in('id', cohortIds);
+        .in('id', [...cohortIdSet]);
 
       if (cohorts) {
         setOtherCohorts(cohorts.map((c: any) => ({
@@ -77,7 +96,7 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
     };
 
     fetchOtherCohorts();
-  }, [isOpen, personId, currentCohortId, isMentee]);
+  }, [isOpen, personId, currentCohortId, isMentee, isDualRole, profile]);
 
   if (!profile) return null;
 
@@ -112,6 +131,11 @@ export function ProfileModal({ profile, type, isOpen, onClose }: ProfileModalPro
                 <Badge variant={isMentee ? "secondary" : "default"} className="shrink-0">
                   {isMentee ? 'Mentee' : 'Mentor'}
                 </Badge>
+                {isDualRole && (
+                  <Badge variant="outline" className="shrink-0 border-purple-200 text-purple-700 bg-purple-50">
+                    Both Roles
+                  </Badge>
+                )}
               </div>
               <p className="text-muted-foreground mt-0.5">{profile.business_title || profile.role}</p>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">

@@ -22,6 +22,30 @@ export interface ComputeResult {
 }
 
 // ============================================================================
+// UTILITIES
+// ============================================================================
+
+/**
+ * Count unique participants across mentees and mentors, deduplicating dual-role users.
+ * Uses slack_user_id (most reliable) or full_name as the identity key.
+ */
+export function countUniqueParticipants(
+  mentees: Array<{ slack_user_id?: string; full_name?: string; mentee_id?: string }>,
+  mentors: Array<{ slack_user_id?: string; full_name?: string; mentor_id?: string }>,
+): number {
+  const seen = new Set<string>();
+  const normalize = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+  for (const m of mentees) {
+    seen.add(normalize(m.slack_user_id) || normalize(m.full_name) || m.mentee_id || '');
+  }
+  for (const m of mentors) {
+    seen.add(normalize(m.slack_user_id) || normalize(m.full_name) || m.mentor_id || '');
+  }
+  seen.delete('');
+  return seen.size;
+}
+
+// ============================================================================
 // INDIVIDUAL METRIC COMPUTATIONS
 // ============================================================================
 

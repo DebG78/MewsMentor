@@ -123,6 +123,11 @@ Deno.serve(async (req) => {
     const menteeMap = new Map(mentees.map(m => [m.mentee_id, m]));
     const mentorMap = new Map(mentors.map(m => [m.mentor_id, m]));
 
+    // Detect dual-role participants for template context
+    const menteeSlackIds = new Set(mentees.map(m => m.slack_user_id).filter(Boolean));
+    const mentorSlackIds = new Set(mentors.map(m => m.slack_user_id).filter(Boolean));
+    const dualRoleSlackIds = new Set([...menteeSlackIds].filter(id => mentorSlackIds.has(id)));
+
     let sentCount = 0;
     let failedCount = 0;
     let skippedCount = 0;
@@ -160,6 +165,7 @@ Deno.serve(async (req) => {
             NATURAL_STRENGTHS: (mentor.natural_strengths || []).join(', '),
             HARD_EARNED_LESSON: mentor.hard_earned_lesson_summary || mentor.hard_earned_lesson || mentor.meaningful_impact || '',
             MENTOR_MOTIVATION: mentor.mentor_motivation_summary || mentor.mentor_motivation || '',
+            IS_DUAL_ROLE: mentee.slack_user_id && dualRoleSlackIds.has(mentee.slack_user_id) ? 'true' : '',
           },
         },
         {
@@ -178,6 +184,7 @@ Deno.serve(async (req) => {
             // Cross-reference: mentee fields available in mentor templates
             MENTORING_GOAL: mentee.mentoring_goal_summary || mentee.mentoring_goal || '',
             SECONDARY_CAPABILITY: mentee.secondary_capability || mentee.role_specific_area || '',
+            IS_DUAL_ROLE: mentor.slack_user_id && dualRoleSlackIds.has(mentor.slack_user_id) ? 'true' : '',
           },
         },
       ];
@@ -196,12 +203,14 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Dedup check: has this person already received ANY next_steps message for this phase?
+        // Dedup check: has this person already received this specific role's next_steps message for this phase?
+        // Uses the specific template_type (not all next_steps* types) so dual-role users
+        // receive both their mentee and mentor messages.
         const { data: existing } = await supabaseAdmin
           .from('message_log')
           .select('id')
           .eq('cohort_id', cohortId)
-          .in('template_type', ['next_steps', 'next_steps_mentee', 'next_steps_mentor'])
+          .eq('template_type', recipientTemplate.template_type)
           .eq('journey_phase', journeyPhase)
           .eq('slack_user_id', recipient.slack_user_id)
           .eq('delivery_status', 'sent')
@@ -209,7 +218,7 @@ Deno.serve(async (req) => {
 
         if (existing && existing.length > 0) {
           skippedCount++;
-          console.log(`[send-stage-messages] Skipping ${recipient.slack_user_id}: already received next_steps for ${journeyPhase}`);
+          console.log(`[send-stage-messages] Skipping ${recipient.slack_user_id}: already received ${recipientTemplate.template_type} for ${journeyPhase}`);
           continue;
         }
 

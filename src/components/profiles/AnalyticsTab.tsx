@@ -13,7 +13,7 @@ import {
   MessageSquare,
   AlertCircle,
 } from "lucide-react";
-import { getSessionsForPerson, type SessionRow } from "@/lib/sessionService";
+import { getSessionsForPerson, getAllSessionsForPerson, type SessionRow } from "@/lib/sessionService";
 import { getVIPScoresForPerson } from "@/lib/vipService";
 import type { VIPScore } from "@/types/vip";
 import { toDisplayName } from "@/lib/displayName";
@@ -21,9 +21,10 @@ import { toDisplayName } from "@/lib/displayName";
 interface AnalyticsTabProps {
   personId: string;
   personType: "mentee" | "mentor";
+  dualRoleId?: string; // The person's ID in the other role, if they are dual-role
 }
 
-export function AnalyticsTab({ personId, personType }: AnalyticsTabProps) {
+export function AnalyticsTab({ personId, personType, dualRoleId }: AnalyticsTabProps) {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [vipScores, setVipScores] = useState<VIPScore[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,8 +35,15 @@ export function AnalyticsTab({ personId, personType }: AnalyticsTabProps) {
     setLoading(true);
     setError(null);
 
+    const sessionsFetch = dualRoleId
+      ? getAllSessionsForPerson(
+          personType === 'mentee' ? personId : dualRoleId,
+          personType === 'mentor' ? personId : dualRoleId,
+        )
+      : getSessionsForPerson(personId, personType);
+
     Promise.all([
-      getSessionsForPerson(personId, personType),
+      sessionsFetch,
       getVIPScoresForPerson(personId),
     ])
       .then(([sessionsData, vipData]) => {
@@ -52,7 +60,7 @@ export function AnalyticsTab({ personId, personType }: AnalyticsTabProps) {
       });
 
     return () => { cancelled = true; };
-  }, [personId, personType]);
+  }, [personId, personType, dualRoleId]);
 
   if (loading) {
     return <LoadingState />;
