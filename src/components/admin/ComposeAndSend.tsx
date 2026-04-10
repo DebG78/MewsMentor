@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,17 +15,18 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Send, Eye, Users, AlertTriangle } from 'lucide-react';
 import {
   getCohortParticipants, getUnmatchedInCohort, getHoldingAreaParticipants,
-  getMessageTemplates, sendBulkMessages, buildParticipantContext,
-  type Participant, type MessageTemplate,
+  getMatchedPairsWithPhase, sendBulkMessages, buildParticipantContext,
+  type Participant, type MessageTemplate, type MatchedPairWithPhase,
 } from '@/lib/messageService';
 import { getAllCohorts } from '@/lib/supabaseService';
 import type { Cohort } from '@/types/mentoring';
 
-type AudienceSource = 'cohort_all' | 'cohort_unmatched' | 'holding_area';
+type AudienceSource = 'cohort_all' | 'cohort_unmatched' | 'cohort_pairs' | 'holding_area';
 
 const AUDIENCE_SOURCES: { value: AudienceSource; label: string; description: string }[] = [
   { value: 'cohort_all', label: 'All in cohort', description: 'Every mentee and mentor in a cohort' },
   { value: 'cohort_unmatched', label: 'Unmatched in cohort', description: 'Mentees who were not matched with a mentor' },
+  { value: 'cohort_pairs', label: 'Matched pairs in cohort', description: 'Send to both people in selected pairs' },
   { value: 'holding_area', label: 'Holding area', description: 'People waiting for cohort assignment' },
 ];
 
@@ -43,13 +45,26 @@ interface ComposeAndSendProps {
 
 export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: ComposeAndSendProps) {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL param pre-selection (from MatchBoard "Message Pair" button)
+  const preSelectMenteeId = searchParams.get('pairMenteeId');
+  const preSelectMentorId = searchParams.get('pairMentorId');
+  const preSelectCohortId = searchParams.get('cohortId');
 
   // Step state
-  const [audienceSource, setAudienceSource] = useState<AudienceSource>('cohort_unmatched');
-  const [selectedCohortId, setSelectedCohortId] = useState<string>('');
+  const [audienceSource, setAudienceSource] = useState<AudienceSource>(
+    preSelectMenteeId ? 'cohort_pairs' : 'cohort_unmatched'
+  );
+  const [selectedCohortId, setSelectedCohortId] = useState<string>(preSelectCohortId || '');
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loadingParticipants, setLoadingParticipants] = useState(false);
+
+  // Pairs state (for cohort_pairs audience)
+  const [matchedPairs, setMatchedPairs] = useState<MatchedPairWithPhase[]>([]);
+  const [selectedPairKeys, setSelectedPairKeys] = useState<Set<string>>(new Set());
+  const [preSelectApplied, setPreSelectApplied] = useState(false);
 
   // Template / message
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('_adhoc');
@@ -63,6 +78,11 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
 
   // Load participants when audience source or cohort changes
   useEffect(() => {
+    if (audienceSource === 'cohort_pairs') {
+      if (selectedCohortId) loadPairs();
+      else { setMatchedPairs([]); setSelectedPairKeys(new Set()); }
+      return;
+    }
     if (audienceSource === 'holding_area') {
       loadParticipants();
     } else if (selectedCohortId) {
@@ -101,6 +121,62 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
     }
   }
 
+  async function loadPairs() {
+    setLoadingParticipants(true);
+    try {
+      const pairs = await getMatchedPairsWithPhase(selectedCohortId);
+      setMatchedPairs(pairs);
+      // Auto-select all pairs where both people have Slack IDs
+      const keys = new Set(
+        pairs
+          .filter(p => p.mentee.slack_user_id && p.mentor.slack_user_id)
+          .map(p => pairKey(p))
+      );
+      // Apply URL pre-selection if present
+      if (preSelectMenteeId && preSelectMentorId && !preSelectApplied) {
+        const targetKey = `${preSelectMenteeId}:${preSelectMentorId}`;
+        if (pairs.some(p => pairKey(p) === targetKey)) {
+          keys.clear();
+          keys.add(targetKey);
+        }
+        setPreSelectApplied(true);
+        // Clean URL params after applying
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('pairMenteeId');
+        newParams.delete('pairMentorId');
+        newParams.delete('cohortId');
+        setSearchParams(newParams, { replace: true });
+      }
+      setSelectedPairKeys(keys);
+    } catch (err: any) {
+      toast({ title: 'Error loading matched pairs', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoadingParticipants(false);
+    }
+  }
+
+  function pairKey(pair: MatchedPairWithPhase): string {
+    return `${pair.mentee.id}:${pair.mentor.id}`;
+  }
+
+  function togglePair(key: string) {
+    setSelectedPairKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAllPairs() {
+    const sendable = matchedPairs.filter(p => p.mentee.slack_user_id && p.mentor.slack_user_id);
+    if (selectedPairKeys.size === sendable.length) {
+      setSelectedPairKeys(new Set());
+    } else {
+      setSelectedPairKeys(new Set(sendable.map(p => pairKey(p))));
+    }
+  }
+
   function toggleParticipant(id: string) {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -121,12 +197,24 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
 
   const selectedParticipants = participants.filter(p => selectedIds.has(p.id) && p.slack_user_id);
   const cohortName = cohorts.find(c => c.id === selectedCohortId)?.name || '';
-  const noSlackCount = participants.filter(p => !p.slack_user_id).length;
+  const noSlackCount = audienceSource === 'cohort_pairs'
+    ? matchedPairs.filter(p => !p.mentee.slack_user_id || !p.mentor.slack_user_id).length
+    : participants.filter(p => !p.slack_user_id).length;
 
-  // Preview context from first selected participant
-  const previewContext = selectedParticipants.length > 0
-    ? buildParticipantContext(selectedParticipants[0], cohortName)
-    : { FIRST_NAME: 'Alice', FULL_NAME: 'Alice Johnson', COHORT_NAME: cohortName || 'Q2 2026' };
+  // For pairs: flatten selected pairs into recipients
+  const selectedPairs = matchedPairs.filter(p => selectedPairKeys.has(pairKey(p)));
+  const pairRecipientCount = selectedPairs.length * 2;
+
+  // Preview context from first selected participant/pair
+  const previewContext = (() => {
+    if (audienceSource === 'cohort_pairs' && selectedPairs.length > 0) {
+      return buildParticipantContext(selectedPairs[0].mentee, cohortName);
+    }
+    if (selectedParticipants.length > 0) {
+      return buildParticipantContext(selectedParticipants[0], cohortName);
+    }
+    return { FIRST_NAME: 'Alice', FULL_NAME: 'Alice Johnson', COHORT_NAME: cohortName || 'Q2 2026' } as Record<string, string>;
+  })();
 
   const resolvedTemplateType = (() => {
     if (selectedTemplateId === '_adhoc') return 'bulk_message';
@@ -134,16 +222,30 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
     return tpl?.template_type || 'bulk_message';
   })();
 
-  const canSend = messageBody.trim() && selectedParticipants.length > 0 && (audienceSource === 'holding_area' || selectedCohortId);
+  const canSend = messageBody.trim() && (
+    audienceSource === 'cohort_pairs'
+      ? selectedPairs.length > 0 && selectedCohortId
+      : selectedParticipants.length > 0 && (audienceSource === 'holding_area' || selectedCohortId)
+  );
 
   async function handleSend() {
     if (!canSend) return;
     setSending(true);
     try {
-      const recipients = selectedParticipants.map(p => ({
-        slack_user_id: p.slack_user_id!,
-        context: buildParticipantContext(p, cohortName),
-      }));
+      let recipients: { slack_user_id: string; context: Record<string, string> }[];
+
+      if (audienceSource === 'cohort_pairs') {
+        // Flatten pairs: two recipients per pair
+        recipients = selectedPairs.flatMap(pair => [
+          { slack_user_id: pair.mentee.slack_user_id!, context: buildParticipantContext(pair.mentee, cohortName) },
+          { slack_user_id: pair.mentor.slack_user_id!, context: buildParticipantContext(pair.mentor, cohortName) },
+        ]);
+      } else {
+        recipients = selectedParticipants.map(p => ({
+          slack_user_id: p.slack_user_id!,
+          context: buildParticipantContext(p, cohortName),
+        }));
+      }
 
       const effectiveCohortId = audienceSource === 'holding_area' ? 'unassigned' : selectedCohortId;
 
@@ -181,7 +283,7 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Source</Label>
-            <Select value={audienceSource} onValueChange={(v) => { setAudienceSource(v as AudienceSource); setSelectedCohortId(''); }}>
+            <Select value={audienceSource} onValueChange={(v) => { setAudienceSource(v as AudienceSource); setSelectedCohortId(''); setMatchedPairs([]); setSelectedPairKeys(new Set()); }}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -218,6 +320,71 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
+          ) : audienceSource === 'cohort_pairs' ? (
+            // Matched pairs list
+            matchedPairs.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                {selectedCohortId
+                  ? 'No matched pairs found in this cohort.'
+                  : 'Select a cohort to see matched pairs.'}
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <Button variant="ghost" size="sm" onClick={toggleAllPairs} className="h-7 text-xs">
+                    {selectedPairKeys.size === matchedPairs.filter(p => p.mentee.slack_user_id && p.mentor.slack_user_id).length ? 'Deselect all' : 'Select all'}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedPairs.length} pair{selectedPairs.length !== 1 ? 's' : ''} ({pairRecipientCount} recipients)
+                  </span>
+                </div>
+
+                {noSlackCount > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-3 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {noSlackCount} pair{noSlackCount !== 1 ? 's' : ''} with missing Slack ID (cannot receive DMs)
+                  </div>
+                )}
+
+                <ScrollArea className="h-[350px] border rounded-md">
+                  <div className="divide-y">
+                    {matchedPairs.map(pair => {
+                      const key = pairKey(pair);
+                      const hasBothSlack = !!pair.mentee.slack_user_id && !!pair.mentor.slack_user_id;
+                      return (
+                        <label
+                          key={key}
+                          className={`flex items-center gap-3 px-3 py-2.5 hover:bg-accent/50 cursor-pointer ${
+                            !hasBothSlack ? 'opacity-50' : ''
+                          }`}
+                        >
+                          <Checkbox
+                            checked={selectedPairKeys.has(key)}
+                            onCheckedChange={() => togglePair(key)}
+                            disabled={!hasBothSlack}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="font-medium truncate">{pair.mentee.full_name}</span>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">mentee</Badge>
+                              <span className="text-muted-foreground">+</span>
+                              <span className="font-medium truncate">{pair.mentor.full_name}</span>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">mentor</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate mt-0.5">
+                              {pair.journeyPhase.replace(/_/g, ' ')} · {pair.sessionCount} session{pair.sessionCount !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                          {!hasBothSlack && (
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">Missing Slack</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </>
+            )
           ) : participants.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
               {audienceSource === 'holding_area' || selectedCohortId
@@ -341,7 +508,7 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
               ) : (
                 <Send className="w-4 h-4 mr-2" />
               )}
-              Send to {selectedParticipants.length} recipient{selectedParticipants.length !== 1 ? 's' : ''}
+              Send to {audienceSource === 'cohort_pairs' ? pairRecipientCount : selectedParticipants.length} recipient{(audienceSource === 'cohort_pairs' ? pairRecipientCount : selectedParticipants.length) !== 1 ? 's' : ''}
             </Button>
           </div>
         </CardContent>
@@ -353,9 +520,11 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
           <DialogHeader>
             <DialogTitle>Message Preview</DialogTitle>
             <DialogDescription>
-              {selectedParticipants.length > 0
-                ? `Rendered for ${selectedParticipants[0].full_name}. Each recipient gets personalized placeholders.`
-                : 'Rendered with sample data.'}
+              {audienceSource === 'cohort_pairs' && selectedPairs.length > 0
+                ? `Rendered for ${selectedPairs[0].mentee.full_name}. Each recipient gets personalized placeholders.`
+                : selectedParticipants.length > 0
+                  ? `Rendered for ${selectedParticipants[0].full_name}. Each recipient gets personalized placeholders.`
+                  : 'Rendered with sample data.'}
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted p-4 rounded-md whitespace-pre-wrap text-sm max-h-[50vh] overflow-y-auto">

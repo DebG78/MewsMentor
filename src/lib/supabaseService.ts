@@ -1057,10 +1057,23 @@ export async function deletePair(cohortId: string, menteeId: string): Promise<Co
 
   console.log('Updated matches after deletion:', updatedMatches);
 
+  // Also remove from manual_matches if present
+  const updateData: Record<string, unknown> = { matches: updatedMatches };
+  if (currentCohort.manual_matches?.matches) {
+    const filteredManual = currentCohort.manual_matches.matches.filter(
+      (m: { mentee_id: string }) => m.mentee_id !== menteeId
+    );
+    if (filteredManual.length !== currentCohort.manual_matches.matches.length) {
+      updateData.manual_matches = {
+        ...currentCohort.manual_matches,
+        matches: filteredManual,
+        updated_at: new Date().toISOString(),
+      };
+    }
+  }
+
   try {
-    const result = await updateCohort(cohortId, {
-      matches: updatedMatches
-    });
+    const result = await updateCohort(cohortId, updateData);
 
     console.log('Delete pair result:', result);
     return result;

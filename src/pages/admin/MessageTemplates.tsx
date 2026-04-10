@@ -143,7 +143,9 @@ export default function MessageTemplates() {
   // Filters — initialise from URL params if present
   const subtabParam = searchParams.get('subtab');
   const logCohortParam = searchParams.get('logCohort');
-  const [activeTab, setActiveTab] = useState(subtabParam === 'log' ? 'log' : 'templates');
+  const [activeTab, setActiveTab] = useState(
+    subtabParam === 'log' ? 'log' : subtabParam === 'compose' ? 'compose' : 'templates'
+  );
   const [logCohortId, setLogCohortId] = useState<string>(logCohortParam || '');
 
   const [seeding, setSeeding] = useState(false);

@@ -35,6 +35,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -69,6 +74,7 @@ import {
   Download,
   Loader2,
   UserX,
+  Unlink,
 } from "lucide-react";
 import {
   getCohortById,
@@ -80,7 +86,7 @@ import {
   saveMatchesToCohort,
   saveManualMatches,
 } from "@/lib/cohortManager";
-import { updateMenteeProfile, updateMentorProfile, removeFromCohort, markDropout } from "@/lib/supabaseService";
+import { updateMenteeProfile, updateMentorProfile, removeFromCohort, markDropout, deletePair } from "@/lib/supabaseService";
 import {
   getMessageTemplates, sendBulkMessages,
   buildParticipantContext, type MessageTemplate, type Participant,
@@ -1726,6 +1732,7 @@ export default function CohortDetail() {
                             <TableHead>Status</TableHead>
                             <TableHead>Top Reasons</TableHead>
                             <TableHead>Notes</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1778,6 +1785,23 @@ export default function CohortDetail() {
                                         {assignedMatch.comment}
                                       </span>
                                     )}
+                                  </TableCell>
+                                  <TableCell onClick={(e) => e.stopPropagation()}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0"
+                                          onClick={() => navigate(
+                                            `/admin/settings?tab=messages&subtab=compose&cohortId=${cohort.id}&pairMenteeId=${result.mentee_id}&pairMentorId=${assignedMatch.mentor_id}`
+                                          )}
+                                        >
+                                          <MessageSquare className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Message this pair</TooltipContent>
+                                    </Tooltip>
                                   </TableCell>
                                 </TableRow>
                               );
@@ -2368,9 +2392,35 @@ export default function CohortDetail() {
                     </div>
                   )}
 
-                  {/* Dropout Action */}
+                  {/* Unmatch / Dropout Actions */}
                   {assignment?.mentor_id && (
-                    <div className="border-t pt-4">
+                    <div className="border-t pt-4 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                        onClick={async () => {
+                          if (!cohort || !selectedMatch) return;
+                          const result = await deletePair(cohort.id, selectedMatch.mentee_id);
+                          if (result) {
+                            setCohort(result);
+                            setSelectedMatch(null);
+                            toast({
+                              title: 'Pair unmatched',
+                              description: `${toDisplayName(selectedMatch.mentee_name || selectedMatch.mentee_id)} has been returned to the unmatched pool.`,
+                            });
+                          } else {
+                            toast({
+                              variant: 'destructive',
+                              title: 'Error',
+                              description: 'Failed to unmatch pair. Please try again.',
+                            });
+                          }
+                        }}
+                      >
+                        <Unlink className="w-3.5 h-3.5 mr-1.5" />
+                        Unmatch
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
