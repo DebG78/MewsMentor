@@ -900,10 +900,9 @@ export default function CohortDetail() {
                       body: { cohort_id: cohort.id, force: false },
                     });
                     if (error) throw error;
-                    console.log('[summarize-profiles] response:', JSON.stringify(data));
                     toast({
                       title: "Summaries Generated",
-                      description: `Updated ${data.fields_updated} field(s) across ${data.profiles_updated} profile(s) out of ${data.total_participants}. ${data.errors?.length ? 'Errors: ' + data.errors.join('; ') : ''}`,
+                      description: `Updated ${data.fields_updated} field(s) across ${data.profiles_updated} profile(s) out of ${data.total_participants}.`,
                     });
                   } catch (err: any) {
                     toast({

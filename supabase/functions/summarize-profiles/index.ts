@@ -55,15 +55,6 @@ Deno.serve(async (req) => {
     const mentors = mentorsRes.data || [];
     console.log(`[summarize-profiles] cohort=${cohortId} mentees=${mentees.length} mentors=${mentors.length} force=${force}`);
 
-    if (menteesRes.error) console.error('[summarize-profiles] mentees query error:', menteesRes.error);
-    if (mentorsRes.error) console.error('[summarize-profiles] mentors query error:', mentorsRes.error);
-
-    // Debug: log first mentee's summarizable field lengths
-    if (mentees.length > 0) {
-      const m = mentees[0];
-      console.log(`[summarize-profiles] sample mentee ${m.full_name}: mentoring_goal=${m.mentoring_goal?.length || 0}, bio=${m.bio?.length || 0}, mentoring_goal_summary=${m.mentoring_goal_summary ? 'exists' : 'null'}`);
-    }
-
     let profilesUpdated = 0;
     let fieldsUpdated = 0;
     const errors: string[] = [];
@@ -134,13 +125,6 @@ Deno.serve(async (req) => {
         profiles_updated: profilesUpdated,
         fields_updated: fieldsUpdated,
         total_participants: mentees.length + mentors.length,
-        debug: {
-          mentees_found: mentees.length,
-          mentors_found: mentors.length,
-          cohort_id_received: cohortId,
-          mentees_query_error: menteesRes.error?.message || null,
-          mentors_query_error: mentorsRes.error?.message || null,
-        },
         ...(errors.length > 0 ? { errors } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
