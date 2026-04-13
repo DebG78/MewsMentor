@@ -80,7 +80,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
   getMessageTemplates, getMessageLogSummary, sendWelcomeMessages, sendStageMessages,
-  sendBulkMessages, getMatchedPairsWithPhase, buildParticipantContext,
+  sendBulkMessages, getMatchedPairsWithPhase, buildParticipantContext, buildPairContext,
   seedDefaultTemplatesForStage, STAGE_DEFAULT_TEMPLATE_TYPES,
   TEMPLATE_TYPES,
   type MessageTemplate, type MessageLogSummary,
@@ -567,12 +567,7 @@ export default function CohortRunbook() {
 
           const recipients: Array<{ slack_user_id: string; context: Record<string, string> }> = [];
           for (const pair of matchedPairs) {
-            const pairContext = {
-              MENTEE_FIRST_NAME: pair.mentee.first_name,
-              MENTEE_FULL_NAME: pair.mentee.full_name,
-              MENTOR_FIRST_NAME: pair.mentor.first_name,
-              MENTOR_FULL_NAME: pair.mentor.full_name,
-            };
+            const pairContext = buildPairContext(pair.mentee, pair.mentor);
 
             if (!isMentorTemplate && pair.mentee.slack_user_id) {
               recipients.push({

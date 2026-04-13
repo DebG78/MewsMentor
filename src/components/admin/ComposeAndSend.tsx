@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Send, Eye, Users, AlertTriangle } from 'lucide-react';
 import {
   getCohortParticipants, getUnmatchedInCohort, getHoldingAreaParticipants,
-  getMatchedPairsWithPhase, sendBulkMessages, buildParticipantContext,
+  getMatchedPairsWithPhase, sendBulkMessages, buildParticipantContext, buildPairContext,
   type Participant, type MessageTemplate, type MatchedPairWithPhase,
 } from '@/lib/messageService';
 import { getAllCohorts } from '@/lib/supabaseService';
@@ -235,11 +235,14 @@ export default function ComposeAndSend({ cohorts, templates, onMessagesSent }: C
       let recipients: { slack_user_id: string; context: Record<string, string> }[];
 
       if (audienceSource === 'cohort_pairs') {
-        // Flatten pairs: two recipients per pair
-        recipients = selectedPairs.flatMap(pair => [
-          { slack_user_id: pair.mentee.slack_user_id!, context: buildParticipantContext(pair.mentee, cohortName) },
-          { slack_user_id: pair.mentor.slack_user_id!, context: buildParticipantContext(pair.mentor, cohortName) },
-        ]);
+        // Flatten pairs: two recipients per pair, with pair-specific placeholders
+        recipients = selectedPairs.flatMap(pair => {
+          const pairContext = buildPairContext(pair.mentee, pair.mentor);
+          return [
+            { slack_user_id: pair.mentee.slack_user_id!, context: { ...buildParticipantContext(pair.mentee, cohortName), ...pairContext } },
+            { slack_user_id: pair.mentor.slack_user_id!, context: { ...buildParticipantContext(pair.mentor, cohortName), ...pairContext } },
+          ];
+        });
       } else {
         recipients = selectedParticipants.map(p => ({
           slack_user_id: p.slack_user_id!,

@@ -654,6 +654,30 @@ export function buildParticipantContext(
   };
 }
 
+/**
+ * Build pair-specific template context (partner names + shared capability).
+ * Merge this with buildParticipantContext() for each recipient.
+ */
+export function buildPairContext(
+  mentee: Participant,
+  mentor: Participant,
+): Record<string, string> {
+  const menteeCapabilities = [mentee.primary_capability, mentee.secondary_capability]
+    .filter(Boolean).map(c => c!.toLowerCase());
+  const mentorCapabilities = [mentor.primary_capability, mentor.secondary_capability]
+    .filter(Boolean).map(c => c!.toLowerCase());
+  const sharedCap = menteeCapabilities.find(c => mentorCapabilities.includes(c))
+    || mentee.primary_capability || '';
+
+  return {
+    MENTEE_FIRST_NAME: mentee.first_name,
+    MENTEE_FULL_NAME: mentee.full_name,
+    MENTOR_FIRST_NAME: mentor.first_name,
+    MENTOR_FULL_NAME: mentor.full_name,
+    SHARED_CAPABILITY: sharedCap,
+  };
+}
+
 // ============================================================================
 // DEFAULT STARTER TEMPLATES
 // ============================================================================
