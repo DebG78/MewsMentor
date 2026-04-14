@@ -205,6 +205,7 @@ Deno.serve(async (req) => {
     let skippedNoSlack = 0;
     let skippedAlreadySent = 0;
     const errors: string[] = [];
+    const skippedDetails: string[] = [];
 
     // Send welcome DMs for each pair
     for (const pair of pairs) {
@@ -212,9 +213,9 @@ Deno.serve(async (req) => {
       const mentor = mentorMap.get(pair.mentor_id);
       if (!mentee || !mentor) {
         skippedNoLookup++;
-        console.log('[send-welcome-messages] pair skipped: mentee_id=', pair.mentee_id, 'found=', !!mentee, 'mentor_id=', pair.mentor_id, 'found=', !!mentor);
-        console.log('[send-welcome-messages] menteeMap keys:', [...menteeMap.keys()]);
-        console.log('[send-welcome-messages] mentorMap keys:', [...mentorMap.keys()]);
+        const detail = `pair skipped: mentee_id=${pair.mentee_id} (${mentee ? 'found' : 'NOT FOUND'}), mentor_id=${pair.mentor_id} (${mentor ? 'found' : 'NOT FOUND'})`;
+        skippedDetails.push(detail);
+        console.log('[send-welcome-messages]', detail);
         continue;
       }
       if (!mentee.slack_user_id && !mentor.slack_user_id) {
@@ -410,12 +411,20 @@ Deno.serve(async (req) => {
 
     console.log('[send-welcome-messages] done: pairs=', pairs.length, 'sent=', sentCount, 'failed=', failedCount, 'skippedNoLookup=', skippedNoLookup, 'skippedNoSlack=', skippedNoSlack, 'skippedAlreadySent=', skippedAlreadySent);
 
-    // Build diagnostic hints when nothing was sent
+    // Detect mentees not included in any pair
+    const pairedMenteeIds = new Set(pairs.map(p => p.mentee_id));
+    const unmatchedMentees = mentees.filter(m => !pairedMenteeIds.has(m.mentee_id));
+
+    // Build diagnostic hints — always report skipped/unmatched info
     const diagnostics: string[] = [];
     if (skippedAlreadySent > 0) diagnostics.push(`${skippedAlreadySent} message(s) skipped: already sent to those recipients`);
+    if (skippedNoLookup > 0) diagnostics.push(`${skippedNoLookup} pair(s) skipped: mentee/mentor ID not found in database`);
+    if (skippedNoSlack > 0) diagnostics.push(`${skippedNoSlack} pair(s) have no Slack user IDs`);
+    if (unmatchedMentees.length > 0) {
+      const names = unmatchedMentees.map(m => m.full_name || m.first_name || m.mentee_id).join(', ');
+      diagnostics.push(`${unmatchedMentees.length} mentee(s) not in any pair and received no message: ${names}`);
+    }
     if (sentCount === 0 && failedCount === 0) {
-      if (skippedNoLookup > 0) diagnostics.push(`${skippedNoLookup} pair(s) skipped: mentee/mentor ID not found in database`);
-      if (skippedNoSlack > 0) diagnostics.push(`${skippedNoSlack} pair(s) have no Slack user IDs`);
       if (!menteeTemplate && !mentorTemplate) diagnostics.push('No welcome_mentee or welcome_mentor templates found');
     }
 
@@ -423,11 +432,14 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         cohort: cohort.name,
+        totalMentees: mentees.length,
         pairs: pairs.length,
         sent: sentCount,
         failed: failedCount,
         skipped: skippedAlreadySent,
+        ...(unmatchedMentees.length > 0 ? { unmatchedMentees: unmatchedMentees.length } : {}),
         ...(errors.length > 0 ? { errors } : {}),
+        ...(skippedDetails.length > 0 ? { skippedDetails } : {}),
         ...(diagnostics.length > 0 ? { diagnostics } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

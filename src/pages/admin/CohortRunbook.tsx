@@ -633,9 +633,12 @@ export default function CohortRunbook() {
             variant: 'destructive',
           });
         } else {
+          const desc = `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`;
+          const warnings = result.diagnostics || [];
           toast({
             title: 'Welcome messages sent',
-            description: `${result.sent} sent, ${result.failed} failed out of ${result.pairs} pairs`,
+            description: warnings.length > 0 ? `${desc}. Warning: ${warnings.join('; ')}` : desc,
+            variant: warnings.length > 0 ? 'destructive' : 'default',
           });
         }
       }

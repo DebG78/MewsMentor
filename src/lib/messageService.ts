@@ -193,10 +193,14 @@ export async function getMessageLogSummary(
 
 export interface SendWelcomeResult {
   success: boolean;
+  totalMentees?: number;
   pairs: number;
   sent: number;
   failed: number;
+  skipped?: number;
+  unmatchedMentees?: number;
   errors?: string[];
+  skippedDetails?: string[];
   diagnostics?: string[];
 }
 
